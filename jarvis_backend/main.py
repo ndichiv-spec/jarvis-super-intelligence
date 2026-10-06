@@ -334,7 +334,7 @@ def build_app():
     return app
 
 
-# Build eagerly so `python -m jarvis_backend.main:app` and imports work.
+# Build eagerly so `uvicorn jarvis_backend.main:app` and imports work.
 build_app()
 
 

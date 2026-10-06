@@ -114,7 +114,7 @@ export default function FileStructureDisplay({ className }: FileStructureDisplay
         icon: ICON_MAP['api'],
         status: 'active',
         children: [
-          { name: 'main.py', type: 'file', path: 'core/api/main.py', description: 'Main FastAPI application' },
+          { name: 'main.py', type: 'file', path: 'jarvis_backend/main.py', description: 'Main FastAPI application' },
           { name: 'routers', type: 'directory', path: 'core/api/routers', description: 'API route handlers' },
           { name: 'middleware', type: 'directory', path: 'core/api/middleware', description: 'Middleware components' },
         ]

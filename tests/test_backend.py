@@ -1,7 +1,7 @@
 """Backend smoke tests for the jarvis_backend application.
 
-Replaces the previous test_backend.py which imported the legacy ``api.main``
-stack and spawned a Flask server (``No module named 'flask'``).  This version
+Replaces the previous test_backend.py which imported a separate legacy API
+stack and spawned a Flask server (``No module named 'flask'``). This version
 targets the real runnable backend and asserts the integration points that
 Phase 1 depends on.
 """

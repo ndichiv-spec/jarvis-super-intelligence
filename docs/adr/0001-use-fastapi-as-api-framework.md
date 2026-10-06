@@ -55,4 +55,4 @@ Not chosen because the project requires Python for AI/ML library integration.
 
 ## Compliance
 
-All new API endpoints must use FastAPI route decorators. The `core/api/main.py` factory function is the single entry point. Middleware must be added via the standard FastAPI middleware pattern.
+All new API endpoints must use FastAPI route decorators. The `jarvis_backend.main:app` singleton is the single entry point; `build_app()` wires middleware and routers onto that same application. Middleware must be added via the standard FastAPI middleware pattern.

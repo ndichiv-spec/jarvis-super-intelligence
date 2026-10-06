@@ -36,7 +36,7 @@ Code analysis confirms that all claimed functionality exists in the source tree.
 
 **Real Backend Process**: None currently running (process timeout in agent environment)
 
-**Real Entry Point**: `jarvis_api.py` → `jarvis_backend.main:build_app()`
+**Canonical Application**: `jarvis_backend.main:app` (also re-exported by the environment/bootstrap launcher `jarvis_api.py`)
 
 **Real App Module**: `jarvis_backend.main`
 

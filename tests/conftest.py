@@ -41,7 +41,7 @@ def mock_config():
 async def test_client():
     """Create test HTTP client."""
     from httpx import AsyncClient, ASGITransport
-    from api.main import app
+    from jarvis_backend.main import app
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

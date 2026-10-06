@@ -52,7 +52,7 @@ pre-commit run --all-files
 mypy infrastructure/ core/
 
 # Start the development server
-uvicorn core.api.main:app --reload --port 8000
+python -m uvicorn jarvis_backend.main:app --reload --port 8000
 ```
 
 ## Code Quality Checks
@@ -142,7 +142,7 @@ locust -f tests/performance/locustfile.py --headless -u 10 -r 1
       "type": "python",
       "request": "launch",
       "module": "uvicorn",
-      "args": ["core.api.main:app", "--reload", "--port", "8000"],
+      "args": ["jarvis_backend.main:app", "--reload", "--port", "8000"],
       "jinja": true
     },
     {

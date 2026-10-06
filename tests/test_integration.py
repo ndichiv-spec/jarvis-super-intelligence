@@ -157,9 +157,8 @@ class TestAPIEndpoints:
     async def test_health_endpoint(self):
         """Test health check endpoint"""
         from fastapi.testclient import TestClient
-        from core.api.main import create_application
-        
-        app = create_application()
+        from jarvis_backend.main import app
+
         client = TestClient(app)
         
         response = client.get("/api/v1/health/status")
@@ -170,9 +169,8 @@ class TestAPIEndpoints:
     async def test_omega_endpoint(self):
         """Test OMEGA endpoint"""
         from fastapi.testclient import TestClient
-        from core.api.main import create_application
-        
-        app = create_application()
+        from jarvis_backend.main import app
+
         client = TestClient(app)
         
         response = client.get("/api/v1/omega/status")

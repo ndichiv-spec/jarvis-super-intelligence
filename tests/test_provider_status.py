@@ -57,22 +57,22 @@ def _matrix(client, headers, monkeypatch):
     return resp.json()
 
 
-def test_endpoint_is_admin_gated_401_without_auth(test_client):
-    resp = test_client.get("/api/v1/integrations/providers")
+def test_endpoint_is_admin_gated_401_without_auth(client):
+    resp = client.get("/api/v1/integrations/providers")
     assert resp.status_code == 401
 
 
-def test_endpoint_rejects_non_admin(test_client, auth_user):
-    # auth_user is a normal user (roles=["user"])
-    resp = test_client.get(
+def test_endpoint_rejects_non_admin(client, auth_headers):
+    # The shared test identity is a normal user (roles=["user"]).
+    resp = client.get(
         "/api/v1/integrations/providers",
-        headers={"Authorization": f"Bearer {auth_user['token']}"},
+        headers=auth_headers,
     )
     assert resp.status_code == 403
 
 
-def test_matrix_reports_real_state_when_nothing_configured(test_client, admin_headers, monkeypatch):
-    body = _matrix(test_client, admin_headers, monkeypatch)
+def test_matrix_reports_real_state_when_nothing_configured(client, admin_headers, monkeypatch):
+    body = _matrix(client, admin_headers, monkeypatch)
     by_id = {p["id"]: p for p in body["providers"]}
 
     # All API-key providers are NOT_CONFIGURED (no keys in env).
@@ -95,10 +95,10 @@ def test_matrix_reports_real_state_when_nothing_configured(test_client, admin_he
     assert by_id["github_copilot"]["status"] == "NOT_IMPLEMENTED"
 
 
-def test_matrix_marks_openai_configured_when_key_present(test_client, admin_headers, monkeypatch):
+def test_matrix_marks_openai_configured_when_key_present(client, admin_headers, monkeypatch):
     _scrub(monkeypatch)
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
-    resp = _get(test_client, admin_headers)
+    resp = _get(client, admin_headers)
     assert resp.status_code == 200
     by_id = {p["id"]: p for p in resp.json()["providers"]}
     assert by_id["openai"]["configured"] is True
@@ -107,24 +107,24 @@ def test_matrix_marks_openai_configured_when_key_present(test_client, admin_head
     assert by_id["gemini"]["status"] == "NOT_CONFIGURED"
 
 
-def test_matrix_live_probe_reports_invalid_key_without_network(test_client, admin_headers, monkeypatch):
+def test_matrix_live_probe_reports_invalid_key_without_network(client, admin_headers, monkeypatch):
     _scrub(monkeypatch)
     from jarvis_backend.routers import extensions as ext
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
     # Bypass the real HTTP probe to stay deterministic + network-free.
     monkeypatch.setattr(ext, "_validate_api_key", lambda ext_id, key: (False, "invalid key"))
-    resp = _get(test_client, admin_headers, probe=True)
+    resp = _get(client, admin_headers, probe=True)
     assert resp.status_code == 200
     by_id = {p["id"]: p for p in resp.json()["providers"]}
     assert by_id["openai"]["status"] == "INVALID_KEY"
     assert by_id["openai"]["validator_result"]["verified"] is False
 
 
-def test_matrix_never_leaks_secret_values(test_client, admin_headers, monkeypatch):
+def test_matrix_never_leaks_secret_values(client, admin_headers, monkeypatch):
     _scrub(monkeypatch)
     secret_value = "test-secret-value"
     monkeypatch.setenv("OPENAI_API_KEY", secret_value)
-    resp = test_client.get("/api/v1/integrations/providers", headers=admin_headers)
+    resp = client.get("/api/v1/integrations/providers", headers=admin_headers)
     text = resp.text
     # Env var NAMES are fine to expose; VALUES must never appear.
     assert secret_value not in text
@@ -137,8 +137,8 @@ def test_matrix_never_leaks_secret_values(test_client, admin_headers, monkeypatc
             assert secret_value not in str(vr)
 
 
-def test_matrix_covers_expected_providers(test_client, admin_headers, monkeypatch):
-    body = _matrix(test_client, admin_headers, monkeypatch)
+def test_matrix_covers_expected_providers(client, admin_headers, monkeypatch):
+    body = _matrix(client, admin_headers, monkeypatch)
     ids = {p["id"] for p in body["providers"]}
     # Fabric API-key providers + OAuth mail + audited gaps.
     assert {"openai", "claude", "gemini", "whisper", "stablediffusion", "codemuse",
@@ -169,7 +169,7 @@ def test_canonical_backend_base_no_localhost_fragmentation(monkeypatch):
     assert "http://localhost:8000" not in src
 
 
-def test_openai_healthy_when_key_present_and_validator_passes(test_client, admin_headers, monkeypatch):
+def test_openai_healthy_when_key_present_and_validator_passes(client, admin_headers, monkeypatch):
     # spec section 62: a provider is HEALTHY only when its real capability was
     # exercised -- i.e. the live validator returned verified=True. probe=true
     # triggers the validator; here we drive it deterministically (no network).
@@ -177,7 +177,7 @@ def test_openai_healthy_when_key_present_and_validator_passes(test_client, admin
     from jarvis_backend.routers import extensions as ext
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
     monkeypatch.setattr(ext, "_validate_api_key", lambda ext_id, key: (True, None))
-    resp = _get(test_client, admin_headers, probe=True)
+    resp = _get(client, admin_headers, probe=True)
     assert resp.status_code == 200
     by_id = {p["id"]: p for p in resp.json()["providers"]}
     assert by_id["openai"]["status"] == "HEALTHY"
@@ -186,7 +186,7 @@ def test_openai_healthy_when_key_present_and_validator_passes(test_client, admin
     assert by_id["gemini"]["status"] == "NOT_CONFIGURED"
 
 
-def test_gemini_recognizes_all_canonical_key_names(test_client, admin_headers, monkeypatch):
+def test_gemini_recognizes_all_canonical_key_names(client, admin_headers, monkeypatch):
     # §54 fragmentation repair: any canonical Gemini key name activates the
     # provider (CONFIGURED at probe=false). We never fake a key -- we only
     # assert the alias set the fabric actually reads.
@@ -197,18 +197,18 @@ def test_gemini_recognizes_all_canonical_key_names(test_client, admin_headers, m
     for alias in ("GEMINI_API_KEY", "GOOGLE_GEMINI_API_KEY"):
         _scrub(monkeypatch)
         monkeypatch.setenv(alias, "fake-key-only-for-presence-test")
-        resp = _get(test_client, admin_headers)
+        resp = _get(client, admin_headers)
         by_id = {p["id"]: p for p in resp.json()["providers"]}
         assert by_id["gemini"]["configured"] is True, alias
         assert by_id["gemini"]["status"] == "CONFIGURED", alias
     # And with none present, it stays NOT_CONFIGURED (honest).
     _scrub(monkeypatch)
-    resp = _get(test_client, admin_headers)
+    resp = _get(client, admin_headers)
     by_id = {p["id"]: p for p in resp.json()["providers"]}
     assert by_id["gemini"]["status"] == "NOT_CONFIGURED"
 
 
-def test_openai_invoke_runs_real_provider_path(test_client, admin_headers, monkeypatch):
+def test_openai_invoke_runs_real_provider_path(client, admin_headers, monkeypatch):
     # Proves the Browser-AI path actually reaches the provider's real API:
     # install+enable OpenAI (admin), resolve the key from env, and exercise the
     # chat handler. The network call is swapped for a deterministic fake so the
@@ -219,7 +219,7 @@ def test_openai_invoke_runs_real_provider_path(test_client, admin_headers, monke
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
 
     # 1) Install + enable the OpenAI extension (admin-only).
-    r = test_client.post("/api/v1/extensions/install",
+    r = client.post("/api/v1/extensions/install",
                          headers=admin_headers, json={"extension_id": "openai"})
     assert r.status_code == 200, r.text
 
@@ -237,7 +237,7 @@ def test_openai_invoke_runs_real_provider_path(test_client, admin_headers, monke
     monkeypatch.setattr(ext, "_openai_json_post", _fake_openai_json_post)
 
     # 3) Invoke openai.chat -- the exact capability the Browser routes to.
-    resp = test_client.post(
+    resp = client.post(
         "/api/v1/extensions/openai/invoke",
         headers=admin_headers,
         json={"capability": "openai.chat",
@@ -254,17 +254,17 @@ def test_openai_invoke_runs_real_provider_path(test_client, admin_headers, monke
     assert body["result"]["model"] == "gpt-4o-mini"
 
 
-def test_gemini_invoke_not_configured_without_key(test_client, admin_headers, monkeypatch):
+def test_gemini_invoke_not_configured_without_key(client, admin_headers, monkeypatch):
     # §62: never reach the provider without a configured key. Gemini's invoke
     # must be rejected (400) when no GOOGLE_API_KEY / alias is present.
     _scrub(monkeypatch)
-    r = test_client.post("/api/v1/extensions/install",
+    r = client.post("/api/v1/extensions/install",
                          headers=admin_headers, json={"extension_id": "gemini"})
     assert r.status_code == 200, r.text
-    resp = test_client.post(
+    resp = client.post(
         "/api/v1/extensions/gemini/invoke",
         headers=admin_headers,
         json={"capability": "gemini.chat", "params": {"messages": []}},
     )
     assert resp.status_code == 400
-    assert "API key" in resp.json()["detail"]
+    assert "API key" in resp.json()["error"]["message"]

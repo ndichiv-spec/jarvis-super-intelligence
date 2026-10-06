@@ -1,72 +1,46 @@
-"""
-Tests for Health Endpoints
-===========================
-"""
+"""Health endpoint tests for the canonical JARVIS FastAPI application."""
 
-import pytest
-from httpx import AsyncClient, ASGITransport
-from api.main import app
-
-
-@pytest.fixture
-def client(event_loop):
-    """Test client fixture."""
-    async def _create_client():
-        transport = ASGITransport(app=app)
-        client = AsyncClient(transport=transport, base_url="http://test")
-        await client.__aenter__()
-        return client
-
-    client = event_loop.run_until_complete(_create_client())
-    try:
-        yield client
-    finally:
-        event_loop.run_until_complete(client.__aexit__(None, None, None))
+from jarvis_backend.main import app
 
 
 class TestHealthEndpoints:
     """Test health check endpoints."""
 
-    @pytest.mark.asyncio
-    async def test_root_endpoint(self, client):
-        """Test root endpoint returns app info."""
-        response = await client.get("/")
+    def test_root_endpoint(self, client, monkeypatch):
+        monkeypatch.delenv("JARVIS_BRAIN_ENDPOINT", raising=False)
+        assert client.app is app
+        response = client.get("/")
         assert response.status_code == 200
         data = response.json()
-        assert data["name"] == "JARVIS Super AI"
-        assert data["status"] == "online"
-        assert "docs" in data
-        assert "health" in data
+        assert data["service"] == "JARVIS API"
+        assert data["component"] == "control-plane"
+        assert data["status"] == "degraded"
+        assert data["documentation"]["swagger"] == "/docs"
+        assert data["documentation"]["openapi"] == "/openapi.json"
 
-    @pytest.mark.asyncio
-    async def test_health_status(self, client):
-        """Test health status endpoint."""
-        response = await client.get("/api/v1/health/status")
+    def test_health_status(self, client):
+        response = client.get("/api/v1/health/status")
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "healthy"
+        assert data["service_readiness"] == "ready"
+        assert "uptime_seconds" in data
+
+    def test_health_live(self, client):
+        response = client.get("/health/live")
+        assert response.status_code == 200
+        assert response.json()["status"] == "alive"
+
+    def test_health_ready(self, client):
+        response = client.get("/health/ready")
+        assert response.status_code == 200
+        assert response.json()["status"] == "ready"
+        assert response.json()["service_readiness"] == "ready"
+
+    def test_health_metrics(self, client):
+        response = client.get("/api/v1/metrics")
+        assert response.status_code == 200
+        data = response.json()
         assert "timestamp" in data
-
-    @pytest.mark.asyncio
-    async def test_health_live(self, client):
-        """Test liveness probe."""
-        response = await client.get("/api/v1/health/live")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "alive"
-
-    @pytest.mark.asyncio
-    async def test_health_ready(self, client):
-        """Test readiness probe."""
-        response = await client.get("/api/v1/health/ready")
-        assert response.status_code == 200
-        data = response.json()
-        assert "status" in data
-
-    @pytest.mark.asyncio
-    async def test_health_metrics(self, client):
-        """Test health metrics endpoint."""
-        response = await client.get("/api/v1/health/metrics")
-        assert response.status_code == 200
-        data = response.json()
-        assert "cpu_percent" in data or "metrics" in data
+        assert "system" in data
+        assert "active_sessions" in data

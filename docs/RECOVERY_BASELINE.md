@@ -40,9 +40,10 @@
 ## Entry Points
 
 ### Backend Entrypoint
-- **Primary**: `jarvis_api.py` (root directory)
+- **Canonical application**: `jarvis_backend.main:app`
+- **Environment/bootstrap launcher**: `jarvis_api.py` (re-exports the canonical application)
 - **Alternative**: `start_all.py` (unified launcher)
-- **App Factory**: `jarvis_backend.main:build_app()`
+- **Canonical Application**: `jarvis_backend.main:app` (singleton; `build_app()` wires and returns the same instance)
 
 ### Frontend Entrypoint
 - **Dev**: `frontend/web/package.json` → `npm run dev`

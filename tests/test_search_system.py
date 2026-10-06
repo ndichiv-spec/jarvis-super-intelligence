@@ -102,7 +102,7 @@ async def test_system():
     else:
         print("SUCCESS - All tests passed!")
         print("\nTo use the search system:")
-        print("  1. Run: python -m uvicorn api.main:app --reload")
+        print("  1. Run: python -m uvicorn jarvis_backend.main:app --reload")
         print("  2. Visit: http://localhost:8000/api/v1/search/docs")
         print("  3. API: POST /api/v1/search with {'query': 'your search'}")
         return 0

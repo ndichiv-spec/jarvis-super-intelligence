@@ -1,8 +1,5 @@
-import sys
+from jarvis_backend.main import app
 
-sys.path.insert(0, "C:/Users/Administrator/Jarvis")
 
-from api.main import app
-
-print("Import successful")
-print("App:", app.title)
+def test_backend_imports_canonical_application():
+    assert app.title == "JARVIS Unified System"

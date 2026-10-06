@@ -62,7 +62,7 @@ echo ========================================
 echo.
 echo Next steps:
 echo 1. Edit .env with your configuration (optional)
-echo 2. Start the server: uvicorn api.main:app --reload --port 8000
+echo 2. Start the server: python -m uvicorn jarvis_backend.main:app --reload --port 8000
 echo 3. Open browser: http://localhost:8000/api/v1/docs
 echo.
 echo For detailed setup instructions, see BACKEND_SETUP.md

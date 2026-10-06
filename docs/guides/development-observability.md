@@ -39,7 +39,7 @@ logger.audit("user_login", "auth", user_id=user.id, details={"ip": client_ip})
 
 | Metric | Source | Location |
 |--------|--------|----------|
-| Request duration | FastAPI middleware | `core/api/main.py` (MetricsMiddleware) |
+| Request duration | FastAPI middleware | `jarvis_backend/main.py` (observability middleware registration) |
 | Cache hit rate | CacheManager | `performance/cache_manager.py` |
 | Circuit breaker state | CircuitBreaker | `infrastructure/resilience/circuit_breaker.py` |
 | Worker pool depth | WorkerPool | `performance/task_queue.py` |
