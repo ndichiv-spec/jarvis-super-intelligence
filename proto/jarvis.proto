@@ -1,0 +1,184 @@
+syntax = "proto3";
+
+package jarvis.core;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/poolside/jarvis/proto/jarvispb";
+option java_package = "com.jarvis.proto";
+
+// ============================================================================
+// Common types used across all services
+// ============================================================================
+
+// Timestamp wraps google.protobuf.Timestamp
+message Timestamp {
+  int64 seconds = 1;
+  int32 nanos = 2;
+}
+
+// Correlation context — propagated across all service boundaries so traces
+// can be followed end-to-end (matches Codex's otel-trace-websocket pattern).
+message CorrelationContext {
+  string correlation_id = 1;
+  string trace_id = 2;
+  string span_id = 3;
+  string request_id = 4;
+  string session_id = 5;
+  string user_id = 6;
+  map<string, string> baggage = 7;
+}
+
+// Result status for all operations
+enum Status {
+  STATUS_UNSPECIFIED = 0;
+  STATUS_OK = 1;
+  STATUS_ERROR = 2;
+  STATUS_UNAVAILABLE = 3;
+  STATUS_TIMEOUT = 4;
+  STATUS_UNAUTHORIZED = 5;
+}
+
+// ============================================================================
+// Capability execution
+// ============================================================================
+
+message ExecuteRequest {
+  string capability_name = 1;
+  string action = 2;
+  bytes params = 3;        // JSON-serialized params (flexible schema)
+  CorrelationContext ctx = 4;
+  float timeout_seconds = 5;
+}
+
+message ExecuteResponse {
+  Status status = 1;
+  string capability = 2;
+  bool success = 3;
+  bytes data = 4;          // JSON-serialized result data
+  string error = 5;
+  string error_type = 6;
+  float latency_ms = 7;
+  string correlation_id = 8;
+  repeated bytes artifacts = 9;
+  map<string, string> metrics = 10;
+  Timestamp timestamp = 11;
+}
+
+message HealthCheckRequest {
+  string capability_name = 1;
+  CorrelationContext ctx = 2;
+}
+
+message HealthCheckResponse {
+  Status status = 1;
+  string capability = 2;
+  bool healthy = 3;
+  float latency_ms = 4;
+  string error = 5;
+  map<string, string> details = 6;
+  Timestamp last_checked = 7;
+}
+
+message CapabilityInfo {
+  string name = 1;
+  string version = 2;
+  string category = 3;
+  string description = 4;
+  Status status = 5;
+}
+
+message ListCapabilitiesResponse {
+  repeated CapabilityInfo capabilities = 1;
+}
+
+// ============================================================================
+// Tool execution (MCP bridge)
+// ============================================================================
+
+message ToolCall {
+  string tool_name = 1;
+  string action = 2;
+  bytes arguments = 3;      // JSON-serialized arguments
+  CorrelationContext ctx = 4;
+}
+
+message ToolResult {
+  Status status = 1;
+  bool success = 2;
+  bytes content = 3;        // JSON-serialized result
+  string error = 4;
+  float latency_ms = 5;
+  string correlation_id = 6;
+}
+
+message ListToolsResponse {
+  repeated ToolInfo tools = 1;
+}
+
+message ToolInfo {
+  string name = 1;
+  string description = 2;
+  bytes input_schema = 3;   // JSON Schema
+  string version = 4;
+  string category = 5;
+}
+
+// ============================================================================
+// Event fabric
+// ============================================================================
+
+message Event {
+  string event_id = 1;
+  string event_type = 2;
+  string source = 3;
+  string capability = 4;
+  string status = 5;
+  string correlation_id = 6;
+  string session_id = 7;
+  string user_id = 8;
+  bytes payload = 9;         // JSON-serialized
+  map<string, string> metrics = 10;
+  Timestamp timestamp = 11;
+}
+
+message EmitEventRequest {
+  Event event = 1;
+}
+
+message EmitEventResponse {
+  Status status = 1;
+  string event_id = 2;
+}
+
+message GetEventsRequest {
+  string event_type = 1;
+  int32 limit = 2;
+  CorrelationContext ctx = 3;
+}
+
+message GetEventsResponse {
+  repeated Event events = 1;
+}
+
+// ============================================================================
+// Service definitions
+// ============================================================================
+
+service CapabilityService {
+  rpc Execute(ExecuteRequest) returns (ExecuteResponse);
+  rpc Health(HealthCheckRequest) returns (HealthCheckResponse);
+  rpc ListCapabilities(google.protobuf.Empty) returns (ListCapabilitiesResponse);
+}
+
+service ToolService {
+  rpc CallTool(ToolCall) returns (ToolResult);
+  rpc ListTools(google.protobuf.Empty) returns (ListToolsResponse);
+}
+
+service EventService {
+  rpc EmitEvent(EmitEventRequest) returns (EmitEventResponse);
+  rpc GetEvents(GetEventsRequest) returns (GetEventsResponse);
+  rpc SubscribeEvents(google.protobuf.Empty) returns (stream Event);
+}

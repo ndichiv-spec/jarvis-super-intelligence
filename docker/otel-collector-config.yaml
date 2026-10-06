@@ -1,0 +1,38 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+exporters:
+  # Send traces to Tempo for storage and querying
+  otlp:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+  # Export metrics to Prometheus
+  prometheus:
+    endpoint: 0.0.0.0:9464
+
+processors:
+  batch:
+    send_batch_size: 1000
+    timeout: 5s
+  attributes:
+    actions:
+      - key: service.name
+        value: "jarvis-backend"
+        action: upsert
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus]

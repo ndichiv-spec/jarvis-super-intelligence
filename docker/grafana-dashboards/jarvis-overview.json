@@ -1,0 +1,74 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "jarvis-overview",
+    "title": "JARVIS Platform Overview",
+    "timezone": "browser",
+    "schemaVersion": 39,
+    "version": 1,
+    "refresh": "15s",
+    "panels": [
+      {
+        "id": 1,
+        "type": "stat",
+        "title": "HTTP Request Rate",
+        "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
+        "targets": [
+          {"expr": "rate(jarvis_requests_total[1m])", "legendFormat": "{{method}} {{path}}"}
+        ],
+        "fieldConfig": {"defaults": {"unit": "reqps"}}
+      },
+      {
+        "id": 2,
+        "type": "stat",
+        "title": "Active Requests",
+        "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
+        "targets": [
+          {"expr": "jarvis_active_requests"}
+        ]
+      },
+      {
+        "id": 3,
+        "type": "stat",
+        "title": "Error Rate",
+        "gridPos": {"x": 8, "y": 0, "w": 4, "h": 4},
+        "targets": [
+          {"expr": "rate(jarvis_errors_total[1m])"}
+        ],
+        "fieldConfig": {"defaults": {"unit": "errps"}}
+      },
+      {
+        "id": 4,
+        "type": "stat",
+        "title": "P50 Latency",
+        "gridPos": {"x": 12, "y": 0, "w": 4, "h": 4},
+        "targets": [
+          {"expr": "histogram_quantile(0.5, sum(rate(jarvis_request_duration_seconds_bucket[5m])) by (le))"}
+        ],
+        "fieldConfig": {"defaults": {"unit": "s"}}
+      },
+      {
+        "id": 5,
+        "type": "stat",
+        "title": "P99 Latency",
+        "gridPos": {"x": 16, "y": 0, "w": 4, "h": 4},
+        "targets": [
+          {"expr": "histogram_quantile(0.99, sum(rate(jarvis_request_duration_seconds_bucket[5m])) by (le))"}
+        ],
+        "fieldConfig": {"defaults": {"unit": "s"}}
+      },
+      {
+        "id": 6,
+        "type": "graph",
+        "title": "Requests Over Time",
+        "gridPos": {"x": 0, "y": 4, "w": 24, "h": 8},
+        "targets": [
+          {"expr": "rate(jarvis_requests_total[1m])", "legendFormat": "{{method}} {{path}} {{status}}"}
+        ]
+      }
+    ]
+  },
+  "folderId": 0,
+  "folderUid": "",
+  "links": []
+}

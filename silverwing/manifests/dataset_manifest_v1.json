@@ -1,0 +1,15 @@
+{
+  "sources": {
+    "pride_prejudice": "https://www.gutenberg.org/files/1342/1342-0.txt",
+    "frankenstein": "https://www.gutenberg.org/files/84/84-0.txt",
+    "sherlock_holmes": "https://www.gutenberg.org/files/1661/1661-0.txt",
+    "alice_wonderland": "https://www.gutenberg.org/files/11/11-0.txt"
+  },
+  "train_file": "silverwing\\local_run\\data\\splits\\train.txt",
+  "val_file": "silverwing\\local_run\\data\\splits\\val.txt",
+  "train_hash": "01efe782aef6dc2481b5e11b764b8364660023b12acdb744f4a32f2f9a3a6dab",
+  "val_hash": "398237c8a1bdd003cee95c1cd1fb26e2b034653d0057de4424ec8d58ccf2d188",
+  "train_size_chars": 1884002,
+  "val_size_chars": 40091,
+  "estimated_tokens": 481022
+}

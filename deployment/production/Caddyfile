@@ -1,0 +1,31 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$JARVIS_DOMAIN} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+	}
+
+	@backend path_regexp backend ^({$JARVIS_CADDY_BASE_PATH_REGEX})?(/(?:api|health|ws|mcp|silverwing)(?:/.*)?)$
+	handle @backend {
+		rewrite * {re.backend.2}
+		reverse_proxy jarvis:8000 {
+			flush_interval -1
+			transport http {
+				dial_timeout 10s
+				response_header_timeout 300s
+				keepalive 30s
+				versions h1 h2c
+			}
+		}
+	}
+
+	handle {
+		reverse_proxy frontend:3000
+	}
+}

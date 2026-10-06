@@ -1,0 +1,268 @@
+[project]
+name = "jarvis-ai"
+version = "0.1.0"
+description = "JARVIS Super AI - Production-ready AI Assistant Platform"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [
+    {name = "JARVIS Team"}
+]
+
+dependencies = [
+    # Web Server
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "python-multipart==0.0.20",
+    "argon2-cffi>=23.1.0",
+    
+    # System
+    "psutil>=6.1.0",
+    
+    # Database
+    "sqlalchemy>=2.0.36",
+    "aiosqlite>=0.20.0",
+    "asyncpg>=0.30.0",
+    "psycopg2-binary>=2.9.10",
+    "alembic>=1.14.0",
+    
+    # Caching & Vector
+    "redis>=5.2.0",
+    "hiredis>=2.4.0",
+    "pinecone-client>=4.1.0",
+    "weaviate-client>=4.8.0",
+    
+    # AI/ML - Embeddings & Vector
+    "sentence-transformers>=3.3.0",
+    "chromadb>=0.5.15",
+    "faiss-cpu>=1.8.0",
+    "numpy>=1.26.0",
+    
+    # AI/ML - External APIs
+    "openai>=1.54.0",
+    "google-generativeai>=0.8.3",
+    "anthropic==0.42.0",
+    "replicate>=1.0.0",
+    
+    # Advanced AI Frameworks
+    "langchain==0.3.14",
+    "langchain-openai==0.2.14",
+    "langchain-anthropic>=0.2.0",
+    "langchain-community==0.3.14",
+    "llama-index==0.12.2",
+    "llama-index-llms-openai>=0.3.0",
+    "llama-index-llms-anthropic>=0.3.0",
+    
+    # Serverless & Distributed
+    "modal>=0.64.0",
+    "ray[default]==2.40.0",
+    "accelerate>=1.1.0",
+    "bitsandbytes>=0.44.0",
+    "peft>=0.13.0",
+    
+    # AI/ML - Vision
+    "opencv-python>=4.10.0",
+    "Pillow==10.4.0",
+    "transformers==4.46.3",
+    "torch==2.5.1",
+    "torchvision==0.20.1",
+    
+    # AI/ML - Audio/Speech
+    "openai-whisper>=20240930",
+    "pyttsx3>=2.98",
+    "SpeechRecognition>=3.10.8",
+    "pyaudio>=0.2.14; platform_system == 'Windows'",
+    "librosa>=0.11.0",
+    "soundfile>=0.12.1",
+    
+    # Document Processing
+    "pypdf>=5.1.0",
+    "pdfplumber>=0.9.0",
+    "pdf2image>=1.16.0",
+    "openpyxl>=3.1.5",
+    "pandas>=2.2.3",
+    "python-pptx>=1.0.2",
+    "python-docx>=1.1.2",
+    
+    # Web Search & Scraping
+    "duckduckgo-search>=6.3.0",
+    "aiohttp>=3.11.0",
+    "httpx>=0.28.0",
+    "requests>=2.32.3",
+    "beautifulsoup4>=4.12.3",
+    "lxml>=5.3.0",
+    "selenium>=4.26.0",
+    "playwright>=1.48.0",
+    
+    # Computer Control
+    "playwright>=1.48.0",
+    "pyautogui>=0.9.54",
+    "mss>=9.0.1",
+    "pywin32>=308; platform_system == 'Windows'",
+    
+    # Code Execution
+    "docker>=7.1.0",
+    "RestrictedPython>=7.0",
+    "podman>=5.3.0",
+    "jupyter>=1.1.1",
+    "nbformat>=5.10.0",
+    
+    # File Generation
+    "reportlab>=4.2.5",
+    "matplotlib>=3.9.2",
+    "jinja2>=3.1.4",
+    "plotly>=5.24.0",
+    "seaborn>=0.13.0",
+    
+    # Math & Science
+    "sympy>=1.13.0",
+    "scipy>=1.14.0",
+    "networkx>=3.4.0",
+    "numba>=0.60.0",
+    "cupy>=13.3.0",
+    
+    # Utilities
+    "python-dateutil>=2.9.0",
+    "pytz>=2024.2",
+    "regex>=2024.9.11",
+    "tiktoken>=0.8.0",
+    "python-dotenv>=1.0.1",
+    "websockets>=13.1",
+    "typer>=0.12.5",
+    "rich>=13.9.0",
+    "click>=8.1.7",
+    
+    # Auth
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "PyJWT>=2.9.0",
+    "email-validator>=2.2.0",
+    "bcrypt>=4.2.0",
+    "authlib>=1.4.0",
+    
+    # Rate Limiting
+    "slowapi>=0.1.9",
+    
+    # Logging & Monitoring
+    "structlog>=24.4.0",
+    "sentry-sdk[fastapi]>=2.18.0",
+    "python-json-logger>=2.0.7",
+    "prometheus-client>=0.21.0",
+    "grafana-api>=3.6.0",
+    "datadog>=0.50.0",
+    
+    # Plugin System
+    "importlib-metadata>=7.0.0",
+    "pluggy>=1.4.0",
+    
+    # Performance
+    "uvloop>=0.21.0",
+    "aiofiles>=24.1.0",
+    "asyncio-mqtt>=0.16.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "pytest-mock>=3.14.0",
+    "pytest-xdist>=3.6.0",
+    "pytest-benchmark>=4.0.0",
+    "locust>=2.31.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+    "pre-commit>=4.1.0",
+    "radon>=6.0.0",
+    "bandit>=1.8.0",
+    "safety>=3.2.0",
+    "pip-licenses>=5.0.0",
+    "commitizen>=4.4.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = "test_*.py"
+minrequiredcoverage = 70
+
+[tool.coverage.run]
+source = ["infrastructure", "performance"]
+omit = ["*/test_*", "*/tests/*", "*/.git/*", "*/venv/*", "*/__pycache__/*", "*.pyc"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == \"__main__\":",
+    "raise NotImplementedError",
+    "pass",
+    "def __repr__",
+    "@abc.abstractmethod",
+    "@abstractmethod",
+]
+fail_under = 70
+
+[tool.coverage.html]
+directory = "coverage_html"
+
+[tool.coverage.xml]
+output = "coverage.xml"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "ARG", # flake8-unused-arguments
+    "RUF", # ruff-specific
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "B904",  # raise without from inside except
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["N802", "N803", "N806", "ARG001", "ARG002"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+no_strict_optional = true
+exclude = [
+    "venv/",
+    ".venv/",
+    "tests/",
+]
+
+[tool.bandit]
+exclude_dirs = ["tests", "venv", ".venv"]
+skips = ["B101"]
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "0.1.0"
+tag_format = "v$version"
+version_scheme = "semver"
+version_provider = "scm"
+major_version_zero = true

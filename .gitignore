@@ -1,0 +1,164 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env*.local
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# --- JARVIS repository hygiene (recursive) ---
+# Dependencies & build caches (root-level rules above don't catch nested dirs)
+**/node_modules/
+**/.next/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.tsbuildinfo
+.venv/
+venv/
+**/.idea/
+**/.vscode/
+*.iml
+.agents/memory/
+
+# Python tooling caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Local environment / secrets
+.env
+.env.local
+.env.*.local
+kaggle.json
+_kaggle_auth.txt
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+memory/data/*.key
+memory/data/user_profiles/
+memory/data/skills.json
+
+# Data & temp artifacts (never commit runtime data)
+*.db
+*.sqlite
+*.sqlite3
+*.log
+*.tsv
+*.db-journal
+*.sqlite-journal
+*.safetensors
+*.gguf
+*.onnx
+*.bin
+*.h5
+*.npz
+*.npy
+/jarvis_data/
+/jarvis_uploads/
+/jarvis_platform_probe_report.json
+jarvis_data/
+jarvis_uploads/
+postgres_data/
+redis_data/
+mongo_data/
+volumes/
+.jarvis/
+.ollama/
+.lmstudio/
+**/.cache/huggingface/
+silverwing/local_run/
+silverwing/data_pipeline/raw/
+silverwing/data_pipeline/processed/
+*.pt
+*.pth
+*.ckpt
+.jarvis/
+.kaggle/
+kaggle_download/
+kaggle_kernel/
+kaggle_output/
+kaggle_datasets/
+staging/jarvis-sft-skills/sft_skills.jsonl
+silverwing/kaggle/silverwing/data/
+
+# Local diagnostics, generated reports, and pre-fix backups
+/_*.py
+/_*.json
+/_*.txt
+/analyze_file.py
+/check_*.py
+/debug_*.py
+/evaluate_*.py
+/final_report.py
+/final_verification.py
+/fix_*.py
+/inspect_*.py
+/investigate_*.py
+/list_*.py
+/read_*.py
+/retry_*.py
+/test_*.py
+/verify_*.py
+/50
+/Clean-JARVIS-Repository.ps1
+/complete_migration.py
+/create_remaining_tables.py
+/find_secrets.py
+/jarvis_runtime_investigation.ps1
+/phase1_freeze_baseline.py
+/run_baseline_suite.py
+/run_suite_chunked.py
+/temp_chat_service.py
+/frontend/tsc_output.txt
+/frontend/web/baseline-errors.json
+/frontend/web/src/_temp*.txt
+tests/test_output.html
+lib/**/tsconfig.tsbuildinfo
+_logs_platform.log
+_logs_platform_err.log
+pipeline_output.txt
+test_output.txt
+test_import_log.txt
+test_output.html
+wiki_download_output.txt
+wiki_retry_output.txt
+*.before-*
+*.pre-*
+*.corrupted-backup-*

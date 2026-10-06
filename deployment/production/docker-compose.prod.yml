@@ -1,0 +1,413 @@
+name: jarvis-production
+
+x-backend-image: &backend-image
+  image: ${JARVIS_IMAGE_PREFIX:-ghcr.io/ndichiv-spec/jarvis-super-intelligence-}/backend:${JARVIS_VERSION:?Set JARVIS_VERSION to an immutable image tag}
+
+services:
+  postgres:
+    image: postgres:16.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-jarvis_db}
+      POSTGRES_USER: ${POSTGRES_USER:-jarvis}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+    shm_size: 256mb
+
+  redis-cache:
+    image: redis:7.4.2-alpine
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/usr/local/bin/redis-entrypoint.sh"]
+    command: ["256mb", "allkeys-lru", "/run/secrets/redis_cache_password"]
+    secrets: [redis_cache_password]
+    volumes:
+      - redis_cache_data:/data
+      - ./redis-entrypoint.sh:/usr/local/bin/redis-entrypoint.sh:ro
+    networks: [data]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$(cat /run/secrets/redis_cache_password)\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+
+  redis-queue:
+    image: redis:7.4.2-alpine
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/usr/local/bin/redis-entrypoint.sh"]
+    command: ["512mb", "noeviction", "/run/secrets/redis_queue_password"]
+    secrets: [redis_queue_password]
+    volumes:
+      - redis_queue_data:/data
+      - ./redis-entrypoint.sh:/usr/local/bin/redis-entrypoint.sh:ro
+    networks: [data]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$(cat /run/secrets/redis_queue_password)\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+
+  migrate:
+    <<: *backend-image
+    restart: "no"
+    command: ["python", "scripts/migrate_persistence.py", "--seed"]
+    environment:
+      JARVIS_ENV: production
+      JARVIS_PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?Derive public URLs with public_urls.py}
+      JARVIS_API_BASE_URL: ${API_BASE_URL:?Derive public URLs with public_urls.py}
+      JARVIS_WS_BASE_URL: ${WS_BASE_URL:?Derive public URLs with public_urls.py}
+      JARVIS_SECRET_KEY_FILE: /run/secrets/jarvis_secret_key
+      JARVIS_ADMIN_EMAIL: ${JARVIS_ADMIN_EMAIL:?Set JARVIS_ADMIN_EMAIL}
+      JARVIS_ADMIN_PASSWORD_FILE: /run/secrets/jarvis_admin_password
+      DATABASE_URL_FILE: /run/secrets/database_url
+      JARVIS_CORS_ORIGINS: ${JARVIS_PUBLIC_ORIGIN:?Derive public URLs with public_urls.py}
+      JARVIS_REQUIRE_PREMIGRATED_SCHEMA: "0"
+    secrets:
+      - jarvis_secret_key
+      - jarvis_admin_password
+      - database_url
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [data]
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+
+  jarvis:
+    <<: *backend-image
+    restart: unless-stopped
+    init: true
+    environment:
+      JARVIS_ENV: production
+      JARVIS_PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?Derive public URLs with public_urls.py}
+      JARVIS_API_BASE_URL: ${API_BASE_URL:?Derive public URLs with public_urls.py}
+      JARVIS_WS_BASE_URL: ${WS_BASE_URL:?Derive public URLs with public_urls.py}
+      JARVIS_ALERT_STATE_FILE: /app/jarvis_data/alert_state.json
+      JARVIS_ALERT_WEBHOOK_URL: ${JARVIS_ALERT_WEBHOOK_URL:-}
+      JARVIS_ALERT_WEBHOOK_SECRET_FILE: /run/secrets/alert_webhook_secret
+      JARVIS_SECRET_KEY_FILE: /run/secrets/jarvis_secret_key
+      JARVIS_ADMIN_EMAIL: ${JARVIS_ADMIN_EMAIL:?Set JARVIS_ADMIN_EMAIL}
+      JARVIS_ADMIN_PASSWORD_FILE: /run/secrets/jarvis_admin_password
+      OPENAI_API_KEY_FILE: /run/secrets/openai_api_key
+      JARVIS_OAUTH_CLIENTS_FILE: /run/secrets/oauth_clients
+      JARVIS_APP_URL: ${PUBLIC_BASE_URL:?Derive public URLs with public_urls.py}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_USE_SSL: ${SMTP_USE_SSL:-false}
+      SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+      DATABASE_URL_FILE: /run/secrets/database_url
+      REDIS_URL_FILE: /run/secrets/redis_cache_url
+      CELERY_BROKER_URL_FILE: /run/secrets/celery_broker_url
+      JARVIS_CORS_ORIGINS: ${JARVIS_PUBLIC_ORIGIN:?Derive public URLs with public_urls.py}
+      JARVIS_REQUIRE_PREMIGRATED_SCHEMA: "1"
+      JARVIS_BIO_GROWTH_WORKER_ENABLED: "true"
+      JARVIS_BIO_GROWTH_WORKER_MODE: celery
+      JARVIS_BIO_GROWTH_POLL_SECONDS: "3600"
+      JARVIS_VERSION: ${JARVIS_VERSION}
+      GIT_SHA: ${GIT_SHA:-unknown}
+      BUILD_TIME: ${BUILD_TIME:-unknown}
+      ENVIRONMENT: production
+      DEPLOYMENT_ID: ${DEPLOYMENT_ID:-manual}
+      GRPC_HOST: 0.0.0.0
+      GRPC_PORT: "50051"
+    secrets:
+      - jarvis_secret_key
+      - jarvis_admin_password
+      - openai_api_key
+      - oauth_clients
+      - database_url
+      - redis_cache_url
+      - celery_broker_url
+      - alert_webhook_secret
+      - smtp_password
+    volumes:
+      - jarvis_data:/app/jarvis_data
+      - jarvis_uploads:/app/jarvis_uploads
+    networks: [edge, data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      redis-queue:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      # Loopback is intentional here: this probe runs inside the API container,
+      # not as a public or cross-service endpoint.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=3)"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+    read_only: true
+    tmpfs: ["/tmp:size=128m,mode=1777"]
+    mem_limit: 3g
+    cpus: 2.0
+    stop_grace_period: 40s
+
+  worker:
+    <<: *backend-image
+    restart: unless-stopped
+    init: true
+    command:
+      - celery
+      - -A
+      - jarvis_backend.celery_app:celery_app
+      - worker
+      - --loglevel=INFO
+      - --queues=research,commands
+      - --concurrency=1
+      - --max-tasks-per-child=50
+    environment:
+      JARVIS_ENV: production
+      JARVIS_PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?Derive public URLs with public_urls.py}
+      JARVIS_API_BASE_URL: ${API_BASE_URL:?Derive public URLs with public_urls.py}
+      JARVIS_WS_BASE_URL: ${WS_BASE_URL:?Derive public URLs with public_urls.py}
+      JARVIS_SECRET_KEY_FILE: /run/secrets/jarvis_secret_key
+      JARVIS_ADMIN_EMAIL: ${JARVIS_ADMIN_EMAIL:?Set JARVIS_ADMIN_EMAIL}
+      JARVIS_ADMIN_PASSWORD_FILE: /run/secrets/jarvis_admin_password
+      OPENAI_API_KEY_FILE: /run/secrets/openai_api_key
+      DATABASE_URL_FILE: /run/secrets/database_url
+      REDIS_URL_FILE: /run/secrets/redis_cache_url
+      CELERY_BROKER_URL_FILE: /run/secrets/celery_broker_url
+      JARVIS_CORS_ORIGINS: ${JARVIS_PUBLIC_ORIGIN:?Derive public URLs with public_urls.py}
+      JARVIS_REQUIRE_PREMIGRATED_SCHEMA: "1"
+      JARVIS_BIO_GROWTH_WORKER_ENABLED: "true"
+      JARVIS_BIO_GROWTH_WORKER_MODE: celery
+      JARVIS_BIO_GROWTH_POLL_SECONDS: "3600"
+    secrets:
+      - jarvis_secret_key
+      - jarvis_admin_password
+      - openai_api_key
+      - database_url
+      - redis_cache_url
+      - celery_broker_url
+    volumes:
+      - jarvis_data:/app/jarvis_data
+      - jarvis_uploads:/app/jarvis_uploads
+    networks: [data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis-queue:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A jarvis_backend.celery_app:celery_app inspect ping --timeout=3 | grep -q pong && celery -A jarvis_backend.celery_app:celery_app inspect active_queues --timeout=3 | grep -q commands"]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+      start_period: 60s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+    read_only: true
+    tmpfs: ["/tmp:size=128m,mode=1777"]
+    mem_limit: 2g
+    cpus: 1.5
+    stop_grace_period: 60s
+
+  beat:
+    <<: *backend-image
+    restart: unless-stopped
+    init: true
+    command:
+      - celery
+      - -A
+      - jarvis_backend.celery_app:celery_app
+      - beat
+      - --loglevel=INFO
+      - --schedule=/app/jarvis_data/celerybeat-schedule
+    environment:
+      JARVIS_ENV: production
+      JARVIS_PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?Derive public URLs with public_urls.py}
+      JARVIS_API_BASE_URL: ${API_BASE_URL:?Derive public URLs with public_urls.py}
+      JARVIS_WS_BASE_URL: ${WS_BASE_URL:?Derive public URLs with public_urls.py}
+      JARVIS_SECRET_KEY_FILE: /run/secrets/jarvis_secret_key
+      JARVIS_ADMIN_EMAIL: ${JARVIS_ADMIN_EMAIL:?Set JARVIS_ADMIN_EMAIL}
+      JARVIS_ADMIN_PASSWORD_FILE: /run/secrets/jarvis_admin_password
+      DATABASE_URL_FILE: /run/secrets/database_url
+      REDIS_URL_FILE: /run/secrets/redis_cache_url
+      CELERY_BROKER_URL_FILE: /run/secrets/celery_broker_url
+      JARVIS_CORS_ORIGINS: ${JARVIS_PUBLIC_ORIGIN:?Derive public URLs with public_urls.py}
+      JARVIS_REQUIRE_PREMIGRATED_SCHEMA: "1"
+      JARVIS_BIO_GROWTH_WORKER_ENABLED: "true"
+      JARVIS_BIO_GROWTH_WORKER_MODE: celery
+      JARVIS_BIO_GROWTH_POLL_SECONDS: "3600"
+    secrets:
+      - jarvis_secret_key
+      - jarvis_admin_password
+      - database_url
+      - redis_cache_url
+      - celery_broker_url
+    volumes:
+      - jarvis_data:/app/jarvis_data
+    networks: [data]
+    depends_on:
+      redis-queue:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+    read_only: true
+    tmpfs: ["/tmp:size=128m,mode=1777"]
+    mem_limit: 512m
+    cpus: 0.5
+    stop_grace_period: 30s
+
+  frontend:
+    image: ${JARVIS_IMAGE_PREFIX:-ghcr.io/ndichiv-spec/jarvis-super-intelligence-}/frontend:${JARVIS_VERSION:?Set JARVIS_VERSION}
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+      JARVIS_PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?Derive public URLs with public_urls.py}
+    networks: [edge]
+    volumes:
+      - next_cache:/app/.next/cache
+    healthcheck:
+      # Loopback is intentional here: this probe runs inside the frontend container.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+    read_only: true
+    tmpfs: ["/tmp:size=128m,mode=1777"]
+    mem_limit: 1g
+    cpus: 1.0
+    stop_grace_period: 30s
+
+  caddy:
+    image: caddy:2.10.0-alpine
+    restart: unless-stopped
+    environment:
+      JARVIS_DOMAIN: ${JARVIS_DOMAIN:?Set JARVIS_DOMAIN}
+      JARVIS_CADDY_BASE_PATH_REGEX: ${JARVIS_CADDY_BASE_PATH_REGEX-}
+      JARVIS_SCHEME: ${JARVIS_SCHEME:-https}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL}
+    ports:
+      - "${JARVIS_HTTP_PORT:-80}:80"
+      - "${JARVIS_PUBLIC_PORT:-443}:443"
+      - "${JARVIS_PUBLIC_PORT:-443}:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [edge]
+    depends_on:
+      jarvis:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+    cap_add: ["NET_BIND_SERVICE"]
+    read_only: true
+    tmpfs: ["/tmp:size=64m,mode=1777"]
+    mem_limit: 256m
+    cpus: 0.5
+    stop_grace_period: 30s
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    networks: [data]
+    depends_on:
+      jarvis:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+    mem_limit: 512m
+    cpus: 0.5
+
+networks:
+  edge:
+    driver: bridge
+  data:
+    driver: bridge
+    internal: true
+
+volumes:
+  postgres_data:
+  redis_cache_data:
+  redis_queue_data:
+  jarvis_data:
+  jarvis_uploads:
+  caddy_data:
+  caddy_config:
+  next_cache:
+  prometheus_data:
+
+secrets:
+  postgres_password:
+    file: ${POSTGRES_PASSWORD_FILE_SOURCE:?Set POSTGRES_PASSWORD_FILE_SOURCE}
+  redis_cache_password:
+    file: ${REDIS_CACHE_PASSWORD_FILE_SOURCE:?Set REDIS_CACHE_PASSWORD_FILE_SOURCE}
+  redis_queue_password:
+    file: ${REDIS_QUEUE_PASSWORD_FILE_SOURCE:?Set REDIS_QUEUE_PASSWORD_FILE_SOURCE}
+  jarvis_secret_key:
+    file: ${JARVIS_SECRET_KEY_FILE_SOURCE:?Set JARVIS_SECRET_KEY_FILE_SOURCE}
+  jarvis_admin_password:
+    file: ${JARVIS_ADMIN_PASSWORD_FILE_SOURCE:?Set JARVIS_ADMIN_PASSWORD_FILE_SOURCE}
+  openai_api_key:
+    file: ${OPENAI_API_KEY_FILE_SOURCE:?Set OPENAI_API_KEY_FILE_SOURCE}
+  oauth_clients:
+    file: ${OAUTH_CLIENTS_FILE_SOURCE:?Set OAUTH_CLIENTS_FILE_SOURCE}
+  database_url:
+    file: ${DATABASE_URL_FILE_SOURCE:?Set DATABASE_URL_FILE_SOURCE}
+  redis_cache_url:
+    file: ${REDIS_CACHE_URL_FILE_SOURCE:?Set REDIS_CACHE_URL_FILE_SOURCE}
+  celery_broker_url:
+    file: ${CELERY_BROKER_URL_FILE_SOURCE:?Set CELERY_BROKER_URL_FILE_SOURCE}
+  alert_webhook_secret:
+    file: ${ALERT_WEBHOOK_SECRET_FILE_SOURCE:?Set ALERT_WEBHOOK_SECRET_FILE_SOURCE}
+  smtp_password:
+    file: ${SMTP_PASSWORD_FILE_SOURCE:?Set SMTP_PASSWORD_FILE_SOURCE}

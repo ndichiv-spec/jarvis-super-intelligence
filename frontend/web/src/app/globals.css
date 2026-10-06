@@ -1,0 +1,657 @@
+/* Tony Stark / JARVIS Holographic Theme */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Stark holographic color scheme - cyan/teal/blue on deep black */
+    --background: 210 40% 2%;
+    --foreground: 195 100% 90%;
+
+    --card: 210 30% 5%;
+    --card-foreground: 195 100% 90%;
+
+    --popover: 210 30% 5%;
+    --popover-foreground: 195 100% 90%;
+
+    --primary: 190 100% 50%;
+    --primary-foreground: 210 40% 5%;
+
+    --secondary: 210 30% 8%;
+    --secondary-foreground: 195 100% 90%;
+
+    --muted: 210 20% 15%;
+    --muted-foreground: 195 50% 65%;
+
+    --accent: 174 100% 45%;
+    --accent-foreground: 210 40% 5%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 195 100% 90%;
+
+    --border: 190 60% 20%;
+    --input: 190 60% 20%;
+    --ring: 190 100% 50%;
+
+    --success: 142 71% 45%;
+    --warning: 38 92% 50%;
+    --info: 190 100% 50%;
+
+    --gradient-primary: linear-gradient(135deg, #00d4ff, #00e5a0, #00d4ff);
+    --gradient-secondary: linear-gradient(135deg, #0078d4, #00d4ff);
+    --gradient-glow: linear-gradient(135deg, rgba(0, 212, 255, 0.3), rgba(0, 229, 160, 0.1));
+
+    --radius: 0.5rem;
+
+    --shadow-glow: 0 0 40px rgba(0, 212, 255, 0.2), 0 0 80px rgba(0, 212, 255, 0.1);
+    --shadow-card: 0 0 20px rgba(0, 212, 255, 0.1), 0 4px 16px rgba(0, 0, 0, 0.5);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    /* Prevent white flash - force dark background immediately */
+    background-color: #030712 !important;
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0, 212, 255, 0.08), transparent),
+      radial-gradient(ellipse 60% 40% at 80% 60%, rgba(0, 229, 160, 0.05), transparent),
+      #030712 !important;
+    color: #b3e5fc !important;
+    min-height: 100vh;
+  }
+
+  html {
+    background: #030712 !important;
+    background-color: #030712 !important;
+  }
+
+  /* Prevent FOUC (Flash of Unstyled Content) */
+  #__next,
+  main,
+  div[role="main"] {
+    background-color: #030712 !important;
+    min-height: 100vh;
+  }
+
+  /* Scrollbar - holographic style */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(0, 212, 255, 0.3);
+    border-radius: 2px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 212, 255, 0.5);
+  }
+}
+
+@layer components {
+  /* Holographic glass card - Stark style */
+  .glass {
+    @apply backdrop-blur-xl;
+    background: linear-gradient(135deg, rgba(0, 212, 255, 0.08), rgba(0, 229, 160, 0.04), rgba(0, 120, 212, 0.06));
+    border: 1px solid rgba(0, 212, 255, 0.2);
+    box-shadow: var(--shadow-card), var(--shadow-glow);
+  }
+
+  /* Holographic window - main desktop window */
+  .holo-window {
+    @apply backdrop-blur-2xl;
+    background: linear-gradient(180deg, rgba(3, 7, 18, 0.95), rgba(0, 20, 40, 0.9));
+    border: 1px solid rgba(0, 212, 255, 0.25);
+    box-shadow: 
+      0 0 30px rgba(0, 212, 255, 0.15),
+      0 0 60px rgba(0, 212, 255, 0.08),
+      0 8px 32px rgba(0, 0, 0, 0.6),
+      inset 0 1px 0 rgba(0, 212, 255, 0.1);
+  }
+
+  /* Window title bar - holographic */
+  .holo-titlebar {
+    @apply backdrop-blur-xl;
+    background: linear-gradient(90deg, rgba(0, 212, 255, 0.12), rgba(0, 229, 160, 0.06), rgba(0, 120, 212, 0.08));
+    border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+  }
+
+  /* Holographic grid overlay */
+  .holo-grid {
+    background-image:
+      linear-gradient(rgba(0, 212, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 212, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(rgba(0, 212, 255, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 212, 255, 0.04) 1px, transparent 1px);
+    background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+  }
+
+  /* Fine holographic grid - v3.0 dashboard backdrop */
+  .bg-grid {
+    background-image:
+      linear-gradient(rgba(0, 212, 255, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 212, 255, 0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  /* Scan line effect */
+  .scanlines::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 212, 255, 0.03) 2px,
+      rgba(0, 212, 255, 0.03) 4px
+    );
+    pointer-events: none;
+    animation: scanlines 0.1s linear infinite;
+  }
+
+  /* Holographic icon container */
+  .holo-icon {
+    @apply backdrop-blur-sm;
+    background: linear-gradient(135deg, rgba(0, 212, 255, 0.15), rgba(0, 229, 160, 0.1));
+    border: 1px solid rgba(0, 212, 255, 0.3);
+    box-shadow: 0 0 15px rgba(0, 212, 255, 0.2);
+  }
+
+  /* HUD element */
+  .hud-panel {
+    @apply backdrop-blur-xl;
+    background: linear-gradient(135deg, rgba(0, 212, 255, 0.06), rgba(0, 120, 212, 0.04));
+    border: 1px solid rgba(0, 212, 255, 0.25);
+    box-shadow: 0 0 20px rgba(0, 212, 255, 0.1), inset 0 0 20px rgba(0, 212, 255, 0.05);
+  }
+
+  /* HUD corner brackets */
+  .hud-corners {
+    position: relative;
+  }
+  .hud-corners::before,
+  .hud-corners::after {
+    content: "";
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border-color: rgba(0, 212, 255, 0.5);
+    border-style: solid;
+  }
+  .hud-corners::before {
+    top: -1px;
+    left: -1px;
+    border-width: 2px 0 0 2px;
+  }
+  .hud-corners::after {
+    bottom: -1px;
+    right: -1px;
+    border-width: 0 2px 2px 0;
+  }
+
+  /* Holographic button */
+  .holo-button {
+    @apply backdrop-blur-sm;
+    background: linear-gradient(135deg, rgba(0, 212, 255, 0.15), rgba(0, 229, 160, 0.1));
+    border: 1px solid rgba(0, 212, 255, 0.3);
+    box-shadow: 0 0 10px rgba(0, 212, 255, 0.15);
+    transition: all 0.2s ease;
+  }
+  .holo-button:hover {
+    background: linear-gradient(135deg, rgba(0, 212, 255, 0.25), rgba(0, 229, 160, 0.15));
+    border-color: rgba(0, 212, 255, 0.5);
+    box-shadow: 0 0 20px rgba(0, 212, 255, 0.25);
+  }
+
+  /* Taskbar - Stark style */
+  .holo-taskbar {
+    @apply backdrop-blur-2xl;
+    background: linear-gradient(180deg, rgba(3, 7, 18, 0.85), rgba(0, 15, 30, 0.9));
+    border-top: 1px solid rgba(0, 212, 255, 0.2);
+    box-shadow: 0 -4px 20px rgba(0, 212, 255, 0.1);
+  }
+
+  /* Start menu - holographic */
+  .holo-start-menu {
+    @apply backdrop-blur-2xl;
+    background: linear-gradient(135deg, rgba(3, 7, 18, 0.95), rgba(0, 20, 40, 0.9));
+    border: 1px solid rgba(0, 212, 255, 0.25);
+    box-shadow: 0 0 40px rgba(0, 212, 255, 0.15), 0 8px 32px rgba(0, 0, 0, 0.6);
+  }
+
+  /* Context menu - holographic */
+  .holo-context-menu {
+    @apply backdrop-blur-xl;
+    background: linear-gradient(135deg, rgba(3, 7, 18, 0.95), rgba(0, 15, 30, 0.9));
+    border: 1px solid rgba(0, 212, 255, 0.25);
+    box-shadow: 0 0 30px rgba(0, 212, 255, 0.15), 0 8px 24px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Holographic text */
+  .text-holo {
+    color: #00d4ff;
+    text-shadow: 0 0 10px rgba(0, 212, 255, 0.5), 0 0 20px rgba(0, 212, 255, 0.3);
+  }
+
+  /* Holographic border */
+  .border-holo {
+    border-color: rgba(0, 212, 255, 0.3);
+    box-shadow: 0 0 10px rgba(0, 212, 255, 0.1);
+  }
+
+  /* Holographic input */
+  .holo-input {
+    @apply backdrop-blur-sm;
+    background: rgba(0, 212, 255, 0.05);
+    border: 1px solid rgba(0, 212, 255, 0.2);
+    color: #00d4ff;
+    transition: all 0.2s ease;
+  }
+  .holo-input:focus {
+    border-color: rgba(0, 212, 255, 0.5);
+    box-shadow: 0 0 15px rgba(0, 212, 255, 0.2);
+    outline: none;
+  }
+
+  /* Chat message bubbles - Stark style */
+  .msg-user {
+    background: linear-gradient(135deg, rgba(0, 120, 212, 0.2), rgba(0, 212, 255, 0.15));
+    border: 1px solid rgba(0, 120, 212, 0.3);
+  }
+  .msg-assistant {
+    background: linear-gradient(135deg, rgba(0, 212, 255, 0.08), rgba(0, 229, 160, 0.05));
+    border: 1px solid rgba(0, 212, 255, 0.2);
+  }
+
+  /* Loading spinner - holographic */
+  .holo-spinner {
+    border: 2px solid rgba(0, 212, 255, 0.1);
+    border-top: 2px solid #00d4ff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    box-shadow: 0 0 10px rgba(0, 212, 255, 0.3);
+  }
+
+  /* Data bar / progress */
+  .holo-progress {
+    background: rgba(0, 212, 255, 0.1);
+    border: 1px solid rgba(0, 212, 255, 0.2);
+  }
+  .holo-progress-bar {
+    background: linear-gradient(90deg, #00d4ff, #00e5a0);
+    box-shadow: 0 0 10px rgba(0, 212, 255, 0.4);
+  }
+}
+
+@layer utilities {
+  /* Arc reactor glow */
+  .arc-glow {
+    filter: drop-shadow(0 0 20px rgba(0, 212, 255, 0.4)) drop-shadow(0 0 40px rgba(0, 212, 255, 0.2));
+  }
+
+  /* Holographic shimmer */
+  .holo-shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  .holo-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.1), transparent);
+    animation: shimmer 2s infinite;
+  }
+
+  /* Data stream effect */
+  .data-stream {
+    background: linear-gradient(180deg, transparent, rgba(0, 212, 255, 0.1), transparent);
+    animation: dataStream 3s linear infinite;
+  }
+}
+
+/* ===== ANIMATIONS ===== */
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes scanlines {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(4px); }
+}
+
+@keyframes dataStream {
+  0% { transform: translateY(-100%); opacity: 0; }
+  50% { opacity: 1; }
+  100% { transform: translateY(100%); opacity: 0; }
+}
+
+@keyframes pulse-holo {
+  0%, 100% { opacity: 0.6; filter: drop-shadow(0 0 10px rgba(0, 212, 255, 0.3)); }
+  50% { opacity: 1; filter: drop-shadow(0 0 20px rgba(0, 212, 255, 0.5)); }
+}
+
+.animate-pulse-holo {
+  animation: pulse-holo 2s ease-in-out infinite;
+}
+
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.95; }
+  25% { opacity: 0.98; }
+  75% { opacity: 0.97; }
+}
+
+.animate-flicker {
+  animation: flicker 4s ease-in-out infinite;
+}
+
+@keyframes holoFloat {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  25% { transform: translateY(-2px) translateX(1px); }
+  50% { transform: translateY(-4px) translateX(-1px); }
+  75% { transform: translateY(-2px) translateX(2px); }
+}
+
+.animate-holo-float {
+  animation: holoFloat 6s ease-in-out infinite;
+}
+
+/* Typing cursor - holographic */
+.typing-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: #00d4ff;
+  box-shadow: 0 0 8px rgba(0, 212, 255, 0.5);
+  animation: blink 1s step-end infinite;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* HUD data readout */
+.hud-readout {
+  font-family: 'Courier New', monospace;
+  color: #00d4ff;
+  text-shadow: 0 0 8px rgba(0, 212, 255, 0.4);
+  letter-spacing: 0.05em;
+}
+
+/* Circular HUD element */
+.hud-circle {
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  border-radius: 50%;
+  box-shadow: 0 0 15px rgba(0, 212, 255, 0.15), inset 0 0 15px rgba(0, 212, 255, 0.05);
+}
+
+/* Radar sweep */
+@keyframes radar-sweep {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.radar-sweep {
+  position: relative;
+}
+.radar-sweep::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 50%;
+  height: 50%;
+  background: conic-gradient(from 0deg, transparent, rgba(0, 212, 255, 0.3));
+  transform-origin: top left;
+  animation: radar-sweep 3s linear infinite;
+}
+
+/* Markdown styling - Stark theme */
+.prose pre {
+  @apply p-4 rounded-lg overflow-x-auto;
+  background: rgba(0, 212, 255, 0.05);
+  border: 1px solid rgba(0, 212, 255, 0.15);
+}
+
+.prose code {
+  @apply px-1.5 py-0.5 rounded text-sm;
+  background: rgba(0, 212, 255, 0.08);
+  border: 1px solid rgba(0, 212, 255, 0.15);
+  color: #00d4ff;
+}
+
+.prose pre code {
+  @apply bg-transparent p-0 text-sm border-none;
+  color: #00e5a0;
+}
+
+.prose ul { @apply list-disc pl-6; }
+.prose ol { @apply list-decimal pl-6; }
+
+.prose blockquote {
+  @apply pl-4 italic;
+  border-left: 3px solid rgba(0, 212, 255, 0.5);
+  color: rgba(0, 212, 255, 0.7);
+}
+
+.prose table {
+  @apply w-full border-collapse;
+}
+
+.prose th, .prose td {
+  @apply p-2 text-left;
+  border: 1px solid rgba(0, 212, 255, 0.15);
+}
+
+.prose th {
+  background: rgba(0, 212, 255, 0.08);
+  color: #00d4ff;
+}
+
+/* Waveform bars for audio visualization */
+.waveform-bar {
+  background: linear-gradient(to top, #00d4ff, #00e5a0);
+  box-shadow: 0 0 8px rgba(0, 212, 255, 0.4);
+  animation: waveform 0.8s ease-in-out infinite;
+}
+
+@keyframes waveform {
+  0%, 100% { height: 4px; }
+  50% { height: 24px; }
+}
+
+/* Holographic blob - animated gradient orbs */
+@keyframes blob {
+  0%, 100% { transform: translate(0px, 0px) scale(1); }
+  33% { transform: translate(30px, -50px) scale(1.1); }
+  66% { transform: translate(-20px, 20px) scale(0.9); }
+}
+
+.animate-blob { animation: blob 7s infinite; }
+.animation-delay-2000 { animation-delay: 2s; }
+.animation-delay-4000 { animation-delay: 4s; }
+
+/* ===== JARVIS MANSION TOKENS ===== */
+
+:root {
+  /* Mansion spatial colors */
+  --mansion-wall: 190 60% 6%;
+  --mansion-wall-accent: 190 60% 9%;
+  --mansion-wall-strong: 190 60% 12%;
+
+  /* Glass morphism layers */
+  --glass-1: rgba(0, 212, 255, 0.03);
+  --glass-2: rgba(0, 212, 255, 0.05);
+  --glass-3: rgba(0, 212, 255, 0.08);
+  --glass-border: rgba(0, 212, 255, 0.12);
+
+  /* Room accent colors — each room gets a distinct tint */
+  --room-accent-nexus: 190 100% 50%;      /* cyan */
+  --room-accent-chat: 197 93% 65%;        /* blue */
+  --room-accent-cognitive: 270 90% 60%;   /* violet */
+  --room-accent-agents: 260 90% 70%;      /* purple */
+  --room-accent-omega: 0 100% 50%;        /* red */
+  --room-accent-supreme: 270 90% 65%;     /* purple-pink */
+  --room-accent-system: 42 92% 50%;       /* amber */
+  --room-accent-command: 142 71% 45%;     /* emerald */
+  --room-accent-knowledge: 38 92% 50%;   /* amber */
+  --room-accent-network: 38 92% 60%;      /* orange */
+  --room-accent-voice: 330 100% 60%;      /* pink */
+  --room-accent-creative: 240 90% 60%;    /* indigo */
+  --room-accent-automation: 142 71% 55%;  /* emerald */
+  --room-accent-browser: 197 93% 65%;     /* blue-cyan */
+  --room-accent-holographic: 174 100% 45%; /* teal */
+  --room-accent-stark: 190 100% 50%;      /* cyan */
+  --room-accent-ide: 270 90% 60%;         /* violet */
+  --room-accent-extensions: 260 90% 70%;  /* purple */
+  --room-accent-admin: 0 84% 60%;         /* red */
+  --room-accent-settings: 195 50% 65%;    /* slate-cyan */
+}
+
+/* Glass morphism utilities for Mansion */
+.glass-1 {
+  background: rgba(0, 212, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.glass-2 {
+  background: rgba(0, 212, 255, 0.05);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.glass-3 {
+  background: rgba(0, 212, 255, 0.08);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.glass-card {
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.05), rgba(0, 229, 160, 0.03));
+  border: 1px solid rgba(0, 212, 255, 0.12);
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.1), 0 4px 16px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Room wall backgrounds */
+.room-wall-base {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0, 212, 255, 0.05), transparent),
+    #030712;
+}
+
+.room-wall-accent {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0, 212, 255, 0.03), transparent),
+    radial-gradient(ellipse 60% 40% at 80% 60%, rgba(0, 229, 160, 0.03), transparent),
+    #050a1a;
+}
+
+/* Panel stack spacing */
+.panel-stack > *:not([hidden]) ~ *:not([hidden]) {
+  margin-top: 1rem;
+}
+
+/* Strobe / pulse indicators */
+.indicator-pulse {
+  animation: pulse-holo 2s ease-in-out infinite;
+}
+
+/* Connection status dot */
+.status-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+}
+.status-dot-connected { box-shadow: 0 0 8px rgba(34, 197, 94, 0.6); }
+.status-dot-degraded { box-shadow: 0 0 8px rgba(245, 158, 11, 0.6); }
+.status-dot-offline { box-shadow: 0 0 8px rgba(239, 68, 68, 0.6); }
+
+/* ---------------------------------------------------------------------------
+   Reduced motion
+   The app leans heavily on continuous animation: 11 keyframe animations in this
+   file, `animate-pulse`/`animate-spin` throughout the tree, and framer-motion
+   transitions in over 100 components. None of it was gated behind a motion
+   preference, so a user with vestibular sensitivity had no way to reduce any of
+   it.
+
+   This block neutralises CSS animation and transition globally. It cannot reach
+   transforms applied by framer-motion's JS animation loop -- those are gated in
+   `components/motion-provider.tsx` via the MotionConfig `reducedMotion` setting.
+   --------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Loading and status indicators lose their motion cue, so give them a static
+     treatment that still reads as "live" rather than "stuck". */
+  .indicator-pulse {
+    animation: none !important;
+    opacity: 0.7;
+  }
+}
+
+/* Respect the preference for the WebGL/canvas visualizers too: the canvas loop
+   checks this query directly and renders a single static frame. */
+@media (prefers-reduced-motion: reduce) {
+  .jarvis-canvas-visualizer {
+    animation: none !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Focus visibility
+   Several surfaces set `outline: none` in their own class lists, which removes
+   the default keyboard focus ring. Restore a visible ring globally so keyboard
+   navigation is never silently ambiguous.
+   --------------------------------------------------------------------------- */
+
+:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+/* Screen-reader-only utility, used by the copy-button and meter announcements. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}

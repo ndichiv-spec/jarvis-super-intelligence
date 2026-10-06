@@ -1,0 +1,15 @@
+{
+    "id": "videlisndichi/silverwing-hardware-audit",
+    "title": "Silverwing Hardware Audit",
+    "resource_type": "script",
+    "raw_url": "https://www.kaggle.com/code/videlisndichi",
+    "source_path": "/silverwing/kaggle/hardware_audit.py",
+    "language": "python",
+    "kernel_sources": [],
+    "dataset_sources": [],
+    "keywords": ["silverwing", "hardware-audit", "gpu"],
+    "enable_gpu": true,
+    "enable_tpu": false,
+    "enable_internet": true,
+    "is_private": true
+}

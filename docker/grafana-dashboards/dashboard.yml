@@ -1,0 +1,9 @@
+[
+  {
+    "name": "jarvis-overview",
+    "options": {
+      "path": "/tmp/dashboards"
+    },
+    "type": "file"
+  }
+]

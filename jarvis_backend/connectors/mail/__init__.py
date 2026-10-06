@@ -1,0 +1,1 @@
+"""Mail (IMAP read + SMTP send) connector package."""

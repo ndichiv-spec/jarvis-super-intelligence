@@ -1,0 +1,629 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        .dark { background-color: #1a202a; color: #e2e8f0; }
+        .dark .bg-white { background-color: #374151; }
+        .dark .text-gray-900 { color: #f3f4f6; }
+        .dark .text-gray-600 { color: #d1d5db; }
+        .dark .border-gray-200 { border-color: #4b5563; }
+        .dark .bg-gray-50 { background-color: #374151; }
+        .architecture-container { height: 600px; border: 1px solid #e5e7eb; }
+        .dark .architecture-container { border-color: #4b5563; }
+    </style>
+</head>
+<body class="bg-gray-50" x-data="{ theme: 'auto' }" :class="{ 'dark' : theme === 'dark' }">
+    <div class="min-h-screen">
+        <!-- Header -->
+        <header class="bg-white shadow-sm border-b border-gray-200">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center h-16">
+                    <div class="flex items-center">
+                        <h1 class="text-2xl font-bold text-gray-900">{{ title }}</h1>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <button @click="scanCodebase()" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">
+                            Scan Codebase
+                        </button>
+                        <select x-model="theme" class="border border-gray-300 rounded-md px-3 py-2">
+                            <option value="auto">Auto</option>
+                            <option value="light">Light</option>
+                            <option value="dark">Dark</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+            <!-- Overview Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h3 class="text-lg font-medium text-gray-900">Components</h3>
+                    <p class="text-3xl font-bold text-blue-600" id="components-count">0</p>
+                    <p class="text-sm text-gray-600">Total components</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h3 class="text-lg font-medium text-gray-900">Scripts</h3>
+                    <p class="text-3xl font-bold text-green-600" id="scripts-count">0</p>
+                    <p class="text-sm text-gray-600">Total scripts</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h3 class="text-lg font-medium text-gray-900">Lines of Code</h3>
+                    <p class="text-3xl font-bold text-purple-600" id="lines-count">0</p>
+                    <p class="text-sm text-gray-600">Total lines</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h3 class="text-lg font-medium text-gray-900">Last Scan</h3>
+                    <p class="text-lg font-bold text-indigo-600" id="last-scan">Never</p>
+                    <p class="text-sm text-gray-600">Last scan time</p>
+                </div>
+            </div>
+
+            <!-- Navigation Tabs -->
+            <div class="border-b border-gray-200 mb-8">
+                <nav class="-mb-px flex space-x-8">
+                    <button @click="setView('architecture')" class="py-2 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600">
+                        Architecture
+                    </button>
+                    <button @click="setView('components')" class="py-2 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                        Components
+                    </button>
+                    <button @click="setView('scripts')" class="py-2 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                        Scripts
+                    </button>
+                    <button @click="setView('metrics')" class="py-2 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                        Metrics
+                    </button>
+                    <button @click="setView('search')" class="py-2 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                        Search
+                    </button>
+                </nav>
+            </div>
+
+            <!-- Content Area -->
+            <div id="content-area">
+                <!-- Architecture View -->
+                <div x-show="view === 'architecture'" class="space-y-6">
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <h2 class="text-xl font-bold text-gray-900 mb-4">Architecture Visualization</h2>
+                        <div id="architecture-network" class="architecture-container"></div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h3 class="text-lg font-medium text-gray-900 mb-4">Components by Type</h3>
+                            <div id="components-by-type"></div>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h3 class="text-lg font-medium text-gray-900 mb-4">Architecture Stats</h3>
+                            <div id="architecture-stats"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Components View -->
+                <div x-show="view === 'components'" class="space-y-6">
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-xl font-bold text-gray-900">Components</h2>
+                            <input type="text" x-model="searchQuery" placeholder="Search components..." 
+                                   class="border border-gray-300 rounded-md px-3 py-2">
+                        </div>
+                        <div id="components-list" class="space-y-4"></div>
+                    </div>
+                </div>
+
+                <!-- Scripts View -->
+                <div x-show="view === 'scripts'" class="space-y-6">
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <h2 class="text-xl font-bold text-gray-900 mb-4">Scripts</h2>
+                        <div id="scripts-list" class="space-y-4"></div>
+                    </div>
+                </div>
+
+                <!-- Metrics View -->
+                <div x-show="view === 'metrics'" class="space-y-6">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h3 class="text-lg font-medium text-gray-900 mb-4">Component Metrics</h3>
+                            <canvas id="component-chart"></canvas>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h3 class="text-lg font-medium text-gray-900 mb-4">Script Metrics</h3>
+                            <canvas id="script-chart"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-lg font-medium text-gray-900 mb-4">Performance Metrics</h3>
+                        <canvas id="performance-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Search View -->
+                <div x-show="view === 'search'" class="space-y-6">
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-xl font-bold text-gray-900">Search Codebase</h2>
+                            <input type="text" x-model="searchQuery" placeholder="Search..." 
+                                   class="border border-gray-300 rounded-md px-3 py-2">
+                        </div>
+                        <div id="search-results" class="space-y-4"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Global state
+        let view = 'architecture';
+        let searchQuery = '';
+        let dashboardData = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadDashboardData();
+            updateOverviewCards();
+            setView('architecture');
+            
+            // Auto-refresh
+            setInterval(async () => {
+                await loadDashboardData();
+                updateOverviewCards();
+                updateCurrentView();
+            }, 30000);
+        });
+
+        // Load dashboard data
+        async function loadDashboardData() {
+            try {
+                const response = await fetch('/api/dashboard');
+                dashboardData = await response.json();
+            } catch (error) {
+                console.error('Failed to load dashboard data:', error);
+            }
+        }
+
+        // Update overview cards
+        function updateOverviewCards() {
+            if (!dashboardData) return;
+
+            document.getElementById('components-count').textContent = dashboardData.overview.total_components;
+            document.getElementById('scripts-count').textContent = dashboardData.overview.total_scripts;
+            document.getElementById('lines-count').textContent = dashboardData.components.total_lines.toLocaleString();
+            document.getElementById('last-scan').textContent = dashboardData.overview.last_scan ? 
+                new Date(dashboardData.overview.last_scan).toLocaleString() : 'Never';
+        }
+
+        // Set view
+        function setView(newView) {
+            view = newView;
+            updateCurrentView();
+        }
+
+        // Update current view
+        async function updateCurrentView() {
+            if (!dashboardData) return;
+
+            switch (view) {
+                case 'architecture':
+                    await updateArchitectureView();
+                    break;
+                case 'components':
+                    await updateComponentsView();
+                    break;
+                case 'scripts':
+                    await updateScriptsView();
+                    break;
+                case 'metrics':
+                    await updateMetricsView();
+                    break;
+                case 'search':
+                    updateSearchView();
+                    break;
+            }
+        }
+
+        // Update architecture view
+        async function updateArchitectureView() {
+            const architectureData = await fetch('/api/architecture').then(r => r.json());
+            
+            // Create network visualization
+            const container = document.getElementById('architecture-network');
+            const nodes = new vis.DataSet();
+            const edges = new vis.DataSet();
+            
+            // Add nodes
+            Object.keys(architectureData.components_by_type).forEach(type => {
+                architectureData.components_by_type[type].forEach((node, index) => {
+                    nodes.add({
+                        id: node.id,
+                        label: node.name,
+                        color: getNodeColor(type),
+                        level: node.level || 3
+                    });
+                });
+            });
+            
+            // Add edges
+            architectureData.edges.forEach(edge => {
+                edges.add({
+                    from: edge.source,
+                    to: edge.target
+                });
+            });
+            
+            const data = { nodes, edges };
+            const options = {
+                nodes: {
+                    shape: 'dot',
+                    size: 20,
+                    font: {
+                        size: 14
+                    }
+                },
+                edges: {
+                    smooth: {
+                        type: 'cubicBezier'
+                    }
+                },
+                layout: {
+                    hierarchical: {
+                        direction: 'UD',
+                        sortMethod: 'directed'
+                    }
+                }
+            };
+            
+            new vis.Network(container, data, options);
+            
+            // Update stats
+            updateArchitectureStats(architectureData);
+        }
+
+        // Update components view
+        async function updateComponentsView() {
+            const response = await fetch('/api/components');
+            const data = await response.json();
+            
+            const container = document.getElementById('components-list');
+            container.innerHTML = '';
+            
+            Object.values(data.components).forEach(component => {
+                if (!searchQuery || component.name.toLowerCase().includes(searchQuery.toLowerCase()) {
+                    const componentEl = createComponentElement(component);
+                    container.appendChild(componentEl);
+                }
+            });
+        }
+
+        // Update scripts view
+        async function updateScriptsView() {
+            const response = await fetch('/api/scripts');
+            const data = await response.json();
+            
+            const container = document.getElementById('scripts-list');
+            container.innerHTML = '';
+            
+            Object.values(data.scripts).forEach(script => {
+                if (!searchQuery || script.name.toLowerCase().includes(searchQuery.toLowerCase())) {
+                    const scriptEl = createScriptElement(script);
+                    container.appendChild(scriptEl);
+                }
+            });
+        }
+
+        // Update metrics view
+        async function updateMetricsView() {
+            const response = await fetch('/api/metrics');
+            const data = await response.json();
+            
+            // Update component chart
+            updateComponentChart(data.components);
+            
+            // Update script chart
+            updateScriptChart(data.scripts);
+            
+            // Update performance chart
+            updatePerformanceChart(data);
+        }
+
+        // Update search view
+        function updateSearchView() {
+            if (!searchQuery) {
+                document.getElementById('search-results').innerHTML = '<p class="text-gray-500">Enter a search query to find components and scripts.</p>';
+                return;
+            }
+            
+            performSearch(searchQuery);
+        }
+
+        // Perform search
+        async function performSearch(query) {
+            try {
+                const response = await fetch(`/api/search?query=${encodeURIComponent(query)}&limit=20`);
+                const data = await response.json();
+                
+                const container = document.getElementById('search-results');
+                container.innerHTML = '';
+                
+                if (data.results.length === 0) {
+                    container.innerHTML = '<p class="text-gray-500">No results found.</p>';
+                    return;
+                }
+                
+                data.results.forEach(result => {
+                    const resultEl = createSearchResultElement(result);
+                    container.appendChild(resultEl);
+                });
+                
+            } catch (error) {
+                console.error('Search failed:', error);
+            }
+        }
+
+        // Helper functions
+        function getNodeColor(type) {
+            const colors = {
+                'core': '#e74c3c',
+                'api': '#3498db',
+                'web': '#2ecc71',
+                'mobile': '#f39c12',
+                'analytics': '#9b59b6',
+                'security': '#e67e22',
+                'performance': '#1abc9c',
+                'monitoring': '#34495e',
+                'ai': '#8e44ad',
+                'ml': '#e74c3c',
+                'neuromorphic': '#f39c12',
+                'quantum': '#9b59b6'
+            };
+            return colors[type] || '#95a5a6';
+        }
+
+        function createComponentElement(component) {
+            const div = document.createElement('div');
+            div.className = 'border border-gray-200 rounded-lg p-4 hover:bg-gray-50';
+            div.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-900">${component.name}</h3>
+                        <p class="text-sm text-gray-600">${component.description}</p>
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            <span class="px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">${component.type}</span>
+                            <span class="px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-800">${component.lines_of_code} lines</span>
+                            <span class="px-2 py-1 text-xs font-medium rounded bg-purple-100 text-purple-800">${component.complexity_score.toFixed(2)} complexity</span>
+                        </div>
+                    </div>
+                    <div class="text-sm text-gray-500">
+                        <p>${component.file_path}</p>
+                    </div>
+                </div>
+            `;
+            return div;
+        }
+
+        function createScriptElement(script) {
+            const div = document.createElement('div');
+            div.className = 'border border-gray-200 rounded-lg p-4 hover:bg-gray-50';
+            div.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-900">${script.name}</h3>
+                        <p class="text-sm text-gray-600">${script.description}</p>
+                        <p class="text-sm text-gray-500 mt-1">${script.purpose}</p>
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            <span class="px-2 py-1 text-xs font-medium rounded bg-orange-100 text-orange-800">${script.type}</span>
+                            <span class="px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">${script.usage_count} uses</span>
+                            <span class="px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-800">${(script.success_rate * 100).toFixed(1)}% success</span>
+                        </div>
+                    </div>
+                    <div class="text-sm text-gray-500">
+                        <p>${script.file_path}</p>
+                    </div>
+                </div>
+            `;
+            return div;
+        }
+
+        function createSearchResultElement(result) {
+            const div = document.createElement('div');
+            div.className = 'border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer';
+            div.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-900">${result.name}</h3>
+                        <p class="text-sm text-gray-600">${result.description}</p>
+                        <p class="text-sm text-gray-500 mt-1">${result.file_path}</p>
+                        <span class="px-2 py-1 text-xs font-medium rounded bg-indigo-100 text-indigo-800">${result.type}</span>
+                    </div>
+                </div>
+            `;
+            return div;
+        }
+
+        function updateArchitectureStats(architectureData) {
+            const container = document.getElementById('architecture-stats');
+            container.innerHTML = `
+                <div class="space-y-2">
+                    <div class="flex justify-between">
+                        <span class="text-sm font-medium text-gray-600">Total Nodes:</span>
+                        <span class="text-sm font-medium text-gray-900">${architectureData.total_nodes}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-sm font-medium text-gray-600">Total Edges:</span>
+                        <span class="text-sm font-medium text-gray-900">${architectureData.total_edges}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-sm font-medium text-gray-600">Graph Density:</span>
+                        <span class="text-sm font-medium text-gray-900">${(architectureData.graph_density * 100).toFixed(2)}%</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-sm font-medium text-gray-600">Connected:</span>
+                        <span class="text-sm font-medium text-gray-900">${architectureData.is_connected ? 'Yes' : 'No'}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function updateComponentChart(components) {
+            const ctx = document.getElementById('component-chart').getContext('2d');
+            const data = Object.values(components.by_type);
+            const labels = Object.keys(components.by_type);
+            
+            new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: [
+                            '#e74c3c', '#3498db', '#2ecc71', '#f39c12',
+                            '#9b59b6', '#e67e22', '#1abc9c', '#34495e',
+                            '#8e44ad', '#e74c3c', '#f39c12', '#9b59b6'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateScriptChart(scripts) {
+            const ctx = document.getElementById('script-chart').getContext('2d');
+            const data = Object.values(scripts.by_type);
+            const labels = Object.keys(scripts.by_type);
+            
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: [
+                            '#f59e0b', '#ef4444', '#10b981', '#3b82f6',
+                            '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        function updatePerformanceChart(metrics) {
+            const ctx = document.getElementById('performance-chart').getContext('2d');
+            
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Components', 'Scripts', 'Architecture'],
+                    datasets: [{
+                        label: 'Items Count',
+                        data: [
+                            metrics.components.total,
+                            metrics.scripts.total,
+                            metrics.architecture.total_nodes
+                        ],
+                        backgroundColor: [
+                            'rgba(59, 130, 246, 0.5)',
+                            'rgba(16, 185, 129, 0.5)',
+                            'rgba(245, 158, 11, 0.5)'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        // Scan codebase
+        async function scanCodebase() {
+            try {
+                const response = await fetch('/api/scan', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ force: false })
+                });
+                const result = await response.json();
+                
+                // Show notification
+                showNotification(result.status === 'completed' ? 'success' : 'error', 
+                             result.status === 'completed' ? 'Codebase scanned successfully' : 'Scan failed');
+                
+                // Reload data
+                await loadDashboardData();
+                updateOverviewCards();
+                updateCurrentView();
+                
+            } catch (error) {
+                console.error('Scan failed:', error);
+                showNotification('error', 'Scan failed');
+            }
+        }
+
+        // Show notification
+        function showNotification(type, message) {
+            const notification = document.createElement('div');
+            notification.className = `fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 ${
+                type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+            }`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                document.body.removeChild(notification);
+            }, 3000);
+        }
+
+        // WebSocket connection
+        const ws = new WebSocket('ws://localhost:8080/ws');
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            
+            if (data.type === 'scan_completed') {
+                showNotification('success', 'Codebase scan completed');
+                loadDashboardData();
+                updateOverviewCards();
+                updateCurrentView();
+            }
+        };
+    </script>
+</body>
+</html>
+        

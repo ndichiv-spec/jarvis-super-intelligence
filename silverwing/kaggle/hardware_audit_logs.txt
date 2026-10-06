@@ -1,0 +1,32 @@
+[{"stream_name":"stdout","time":6.228049948,"data":"==================================================\n"}
+,{"stream_name":"stdout","time":6.228921835,"data":"SILVERWING KAGGLE HARDWARE REPORT\n"}
+,{"stream_name":"stdout","time":6.228928765,"data":"==================================================\n"}
+,{"stream_name":"stdout","time":6.228939205,"data":"\n"}
+,{"stream_name":"stdout","time":6.228943297,"data":"GPU:\n"}
+,{"stream_name":"stdout","time":6.228960938,"data":"GPU COUNT: (P100 sm_60 � CUDA disabled, CPU fallback)\n"}
+,{"stream_name":"stdout","time":6.228966171,"data":"VRAM: N/A (CPU mode)\n"}
+,{"stream_name":"stdout","time":6.228970918,"data":"CUDA: NOT available (CPU fallback)\n"}
+,{"stream_name":"stdout","time":6.2289756,"data":"\n"}
+,{"stream_name":"stdout","time":6.228990605,"data":"PYTORCH: 2.10.0+cu128\n"}
+,{"stream_name":"stdout","time":6.228993904,"data":"PYTHON: 3.12.13\n"}
+,{"stream_name":"stdout","time":6.228997087,"data":"RAM: 0.0 GB\n"}
+,{"stream_name":"stdout","time":6.229000342,"data":"DISK: 1026.8 GB free\n"}
+,{"stream_name":"stdout","time":6.229003503,"data":"BF16: not supported\n"}
+,{"stream_name":"stdout","time":6.229006729,"data":"FP16: not supported\n"}
+,{"stream_name":"stdout","time":6.22900995,"data":"DEVICE: cpu\n"}
+,{"stream_name":"stdout","time":6.229013123,"data":"\n"}
+,{"stream_name":"stdout","time":6.229016256,"data":"==================================================\n"}
+,{"stream_name":"stdout","time":6.229019651,"data":"CPU cores: 4\n"}
+,{"stream_name":"stdout","time":6.230751114,"data":"Platform: Linux-6.12.90+-x86_64-with-glibc2.35\n"}
+,{"stream_name":"stdout","time":6.2307659300000005,"data":"P100 detected at boot: True\n"}
+,{"stream_name":"stdout","time":6.230770491,"data":"CUDA capability: N/A\n"}
+,{"stream_name":"stdout","time":6.23077432,"data":"==================================================\n"}
+,{"stream_name":"stdout","time":6.231091915,"data":"\n"}
+,{"stream_name":"stdout","time":6.231102068,"data":"Hardware report saved to /kaggle/working/silverwing/logs/hardware_report.json\n"}
+,{"stream_name":"stderr","time":9.929345412,"data":"/usr/local/lib/python3.12/dist-packages/mistune.py:435: SyntaxWarning: invalid escape sequence '\\|'\n"}
+,{"stream_name":"stderr","time":9.929396231,"data":"  cells[i][c] = re.sub('\\\\\\\\\\|', '|', cell)\n"}
+,{"stream_name":"stderr","time":10.17824762,"data":"/usr/local/lib/python3.12/dist-packages/nbconvert/filters/filter_links.py:36: SyntaxWarning: invalid escape sequence '\\_'\n"}
+,{"stream_name":"stderr","time":10.178276275,"data":"  text = re.sub(r'_', '\\_', text) # Escape underscores in display text\n"}
+,{"stream_name":"stderr","time":10.786558821,"data":"[NbConvertApp] Converting notebook __script__.ipynb to html\n"}
+,{"stream_name":"stderr","time":12.031816786,"data":"[NbConvertApp] Writing 296926 bytes to __results__.html\n"}
+]

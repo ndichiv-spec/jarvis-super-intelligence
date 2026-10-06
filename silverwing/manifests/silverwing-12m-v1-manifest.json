@@ -1,0 +1,140 @@
+{
+  "model_identity": {
+    "name": "Silverwing-12M-v1",
+    "designation": "silverwing-12m-v1",
+    "type": "decoder-only transformer",
+    "description": "Baseline engineering and scaling reference model. 12.4M parameter, CPU-optimized configuration.",
+    "status": "FROZEN"
+  },
+  "model_configuration": {
+    "vocab_size": 8192,
+    "max_position_embeddings": 1024,
+    "n_layers": 6,
+    "n_heads": 8,
+    "n_kv_heads": 2,
+    "d_model": 384,
+    "hidden_size": 1024,
+    "multiple_of": 64,
+    "norm_eps": 1e-05,
+    "rope_theta": 10000.0,
+    "use_bias": false,
+    "tie_word_embeddings": true,
+    "pad_token_id": 0,
+    "bos_token_id": 1,
+    "activation": "SwiGLU",
+    "normalization": "RMSNorm",
+    "position_encoding": "RoPE",
+    "attention": "GQA (8 Q-heads, 2 KV-heads, ratio 4:1)"
+  },
+  "parameter_count": 12440448,
+  "parameter_count_str": "12,440,448 (~12.4M)",
+  "cryptographic_hashes": {
+    "model_weights": {
+      "filepath": "silverwing/local_run/final/model.safetensors",
+      "sha256": "7ae69bd973484bc5fc71b9db523727e543290f1d18df079be01b177d6b81fc14",
+      "size_bytes": 62350232
+    },
+    "tokenizer": {
+      "filepath": "silverwing/local_run/tokenizer/tokenizer.json",
+      "sha256": "4862da1d814a2f2a306f02dd954d9cd57a9bd84f19134faf955fce7ecec17d0a",
+      "size_bytes": 569272
+    },
+    "config": {
+      "filepath": "silverwing/local_run/final/config.json",
+      "sha256": "334bc89e3ab8378bf34fdaf9a39f6ffcdc994bcfee24d15265d654a08fd0add3"
+    },
+    "dataset_manifest": {
+      "sha256": "01efe782aef6dc2481b5e11b764b8364660023b12acdb744f4a32f2f9a3a6dab",
+      "description": "SHA256 of dataset_manifest_v1.json"
+    }
+  },
+  "dataset": {
+    "identity": "Silverwing-v1-dataset (4-book Gutenberg corpus)",
+    "license": "Public Domain (Project Gutenberg)",
+    "sources": {
+      "pride_prejudice": {
+        "url": "https://www.gutenberg.org/files/1342/1342-0.txt",
+        "title": "Pride and Prejudice by Jane Austen",
+        "chars": 728846
+      },
+      "frankenstein": {
+        "url": "https://www.gutenberg.org/files/84/84-0.txt",
+        "title": "Frankenstein by Mary Wollstonecraft Shelley",
+        "chars": 419434
+      },
+      "sherlock_holmes": {
+        "url": "https://www.gutenberg.org/files/1661/1661-0.txt",
+        "title": "The Complete Sherlock Holmes by Arthur Conan Doyle",
+        "chars": 562290
+      },
+      "alice_wonderland": {
+        "url": "https://www.gutenberg.org/files/11/11-0.txt",
+        "title": "Alice's Adventures in Wonderland by Lewis Carroll",
+        "chars": 144696
+      }
+    },
+    "train_file": "silverwing/local_run/data/splits/train.txt",
+    "train_chars": 1884002,
+    "train_hash": "01efe782aef6dc2481b5e11b764b8364660023b12acdb744f4a32f2f9a3a6dab",
+    "val_file": "silverwing/local_run/data/splits/val.txt",
+    "val_chars": 40091,
+    "val_hash": "398237c8a1bdd003cee95c1cd1fb26e2b034653d0057de4424ec8d58ccf2d188",
+    "estimated_tokens": 481022,
+    "train_val_split": "98% train / 2% val"
+  },
+  "training": {
+    "type": "causal language modeling (next token prediction)",
+    "steps": 1000,
+    "tokens_processed": 1024000,
+    "batch_size": 1,
+    "gradient_accumulation_steps": 4,
+    "effective_batch_size": 4,
+    "sequence_length": 256,
+    "optimizer": "AdamW",
+    "learning_rate": 0.0002,
+    "lr_decay": "cosine",
+    "weight_decay": 0.01,
+    "warmup_steps": 100,
+    "grad_clip": 1.0,
+    "seed": 42,
+    "precision": "float32",
+    "train_loss": 5.788215398788452,
+    "val_loss": 5.976619243621826,
+    "val_perplexity": 394.10573790953435,
+    "best_val_loss": 5.976619243621826,
+    "elapsed_seconds": 2713.4,
+    "throughput_tokens_per_second": 377,
+    "nans": 0,
+    "infs": 0
+  },
+  "generation_settings": {
+    "temperature": 0.8,
+    "max_new_tokens": 50,
+    "top_k": 40,
+    "top_p": 0.95,
+    "do_sample": true,
+    "repetition_penalty": 1.0
+  },
+  "environment": {
+    "python_version": "3.13.14 (tags/v3.13.14:fd17997, Jun 10 2026, 13:03:48) [MSC v.1944 64 bit (AMD64)]",
+    "pytorch_version": "2.14.0+cpu",
+    "cuda_version": "N/A (CPU-only training)",
+    "device": "CPU",
+    "machine": "AMD64",
+    "cpu_count": 4
+  },
+  "training_provenance": {
+    "location": "local",
+    "script": "silverwing/kaggle/silverwing_train.py",
+    "work_dir": "silverwing/local_run",
+    "checkpoint_dir": "silverwing/local_run/checkpoints"
+  },
+  "validation_checksums": {
+    "model_weights_verified": true,
+    "tokenizer_verified": true,
+    "config_verified": true,
+    "dataset_verified": true,
+    "generation_verified": true,
+    "checkpoint_recovery_verified": true
+  }
+}

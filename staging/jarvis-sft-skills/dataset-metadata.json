@@ -1,0 +1,11 @@
+{
+  "title": "JARVIS SFT Skills - LoRA Training Data (403 Q/A)",
+  "id": "videlisndichi/jarvis-sft-skills",
+  "subtitle": "403 skill Q/A examples mined from Claude skill packs for JARVIS LoRA fine-tuning",
+  "description": "Training corpus of 403 question/answer pairs mined from the project Claude skill packs (brainstorming, code, debugging, etc.), formatted as OpenAI-style messages for GPT-2 / Llama LoRA supervised fine-tuning. Used by Jarvis-super-intelligence/scripts/kaggle_train_jarvis_lora.py.",
+  "licenses": [
+    {
+      "name": "CC0-1.0"
+    }
+  ]
+}

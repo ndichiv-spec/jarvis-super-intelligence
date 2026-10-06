@@ -1,0 +1,34 @@
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+python-multipart>=0.0.6
+# Optional: required only for the Gemini-powered Training Advisor.
+# google.genai is imported lazily; the backend runs with the deterministic
+# LocalProvider when this is absent or when GEMINI_API_KEY is unset.
+google-genai>=2.22.0
+
+# Optional: model-provider SDKs for the general /api/models/* surface and the
+# model_provider tool. Each is imported *lazily*; any subset may be installed
+# (or none at all) and the LocalProvider fallback is used automatically. Only
+# install the providers you intend to call:
+#   pip install openai anthropic groq ollama
+#   pip install openai            # GPT-5.x / GPT-OSS (also powers DeepSeek + llama.cpp providers)
+#   pip install anthropic         # Claude 5.x
+#   pip install google-genai      # Gemini 2.5/3.x
+#   pip install groq              # Groq serverless (DeepSeek, Llama, Qwen)
+#   pip install ollama            # local Ollama server
+#   pip install boto3             # AWS Bedrock Converse API
+#   pip install google-cloud-aiplatform  # Google Cloud Vertex AI
+#   pip install llama-cpp-python  # llama.cpp Python bindings (optional; the
+#                                 # llama.cpp HTTP server mode needs no extra
+#                                 # package beyond openai for the client)
+openai>=1.13.0          # GPT-5.x / GPT-OSS / DeepSeek / llama.cpp client
+anthropic>=0.40.0       # Claude 5.x
+google-genai>=2.22.0    # Gemini 2.5/3.x
+groq>=0.6.0             # Groq serverless (DeepSeek, Llama, Qwen)
+ollama>=0.2.0           # local Ollama / llama.cpp server
+boto3>=1.34.0           # AWS Bedrock Converse API
+# google-cloud-aiplatform>=1.71.0  # Vertex AI (uncomment to enable)
+# llama-cpp-python>=0.2.0          # llama.cpp Python bindings (optional;
+#                                  # HTTP server mode uses openai client)
+# vllm>=0.5.0                      # vLLM server (OpenAI-compatible inference)

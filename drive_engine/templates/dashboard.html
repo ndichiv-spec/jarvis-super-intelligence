@@ -1,0 +1,295 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JARVIS Control Panel</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1><i class="fas fa-robot"></i> JARVIS Control Panel</h1>
+            <div class="header-controls">
+                <button id="refresh-btn" class="btn btn-primary">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+                <span id="status-indicator" class="status-indicator">
+                    <i class="fas fa-circle"></i> <span id="status-text">Loading...</span>
+                </span>
+            </div>
+        </header>
+        
+        <nav class="sidebar">
+            <ul class="nav-menu">
+                <li><a href="#dashboard" class="nav-link active" data-section="dashboard">
+                    <i class="fas fa-tachometer-alt"></i> Dashboard
+                </a></li>
+                <li><a href="#components" class="nav-link" data-section="components">
+                    <i class="fas fa-cogs"></i> Components
+                </a></li>
+                <li><a href="#ai" class="nav-link" data-section="ai">
+                    <i class="fas fa-brain"></i> AI Capabilities
+                </a></li>
+                <li><a href="#monitoring" class="nav-link" data-section="monitoring">
+                    <i class="fas fa-chart-line"></i> Monitoring
+                </a></li>
+                <li><a href="#testing" class="nav-link" data-section="testing">
+                    <i class="fas fa-vial"></i> Testing
+                </a></li>
+                <li><a href="#deployment" class="nav-link" data-section="deployment">
+                    <i class="fas fa-rocket"></i> Deployment
+                </a></li>
+                <li><a href="#performance" class="nav-link" data-section="performance">
+                    <i class="fas fa-tachometer-alt"></i> Performance
+                </a></li>
+                <li><a href="#alerts" class="nav-link" data-section="alerts">
+                    <i class="fas fa-exclamation-triangle"></i> Alerts
+                </a></li>
+            </ul>
+        </nav>
+        
+        <main class="main-content">
+            <section id="dashboard" class="content-section active">
+                <h2>System Dashboard</h2>
+                <div class="dashboard-grid">
+                    <div class="card">
+                        <h3>System Status</h3>
+                        <div id="system-status" class="status-content">
+                            <div class="status-item">
+                                <span class="label">Status:</span>
+                                <span id="drive-engine-status" class="value">Loading...</span>
+                            </div>
+                            <div class="status-item">
+                                <span class="label">Components:</span>
+                                <span id="total-components" class="value">0</span>
+                            </div>
+                            <div class="status-item">
+                                <span class="label">Active:</span>
+                                <span id="active-components" class="value">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>Performance Metrics</h3>
+                        <div class="metrics-grid">
+                            <div class="metric">
+                                <span class="metric-label">CPU Usage</span>
+                                <span id="cpu-usage" class="metric-value">0%</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Memory Usage</span>
+                                <span id="memory-usage" class="metric-value">0%</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Disk Usage</span>
+                                <span id="disk-usage" class="metric-value">0%</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Uptime</span>
+                                <span id="uptime" class="metric-value">0s</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card full-width">
+                        <h3>System Performance Chart</h3>
+                        <canvas id="performance-chart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+            </section>
+            
+            <section id="components" class="content-section">
+                <h2>Component Management</h2>
+                <div class="component-controls">
+                    <button id="load-all-components" class="btn btn-primary">
+                        <i class="fas fa-play"></i> Load All
+                    </button>
+                    <button id="unload-all-components" class="btn btn-secondary">
+                        <i class="fas fa-stop"></i> Unload All
+                    </button>
+                    <button id="refresh-components" class="btn btn-info">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+                <div id="components-list" class="components-grid">
+                    <!-- Components will be loaded here -->
+                </div>
+            </section>
+            
+            <section id="ai" class="content-section">
+                <h2>AI Capabilities</h2>
+                <div class="ai-controls">
+                    <div class="control-group">
+                        <label for="ai-task-type">Task Type:</label>
+                        <select id="ai-task-type">
+                            <option value="text_processing">Text Processing</option>
+                            <option value="image_processing">Image Processing</option>
+                            <option value="reasoning">Reasoning</option>
+                            <option value="learning">Learning</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="ai-task-priority">Priority:</label>
+                        <select id="ai-task-priority">
+                            <option value="1">Low</option>
+                            <option value="2">Normal</option>
+                            <option value="3">High</option>
+                            <option value="4">Urgent</option>
+                        </select>
+                    </div>
+                    <button id="submit-ai-task" class="btn btn-primary">
+                        <i class="fas fa-paper-plane"></i> Submit Task
+                    </button>
+                </div>
+                <div id="ai-status" class="ai-status-panel">
+                    <h3>AI System Status</h3>
+                    <div id="ai-metrics" class="metrics-grid">
+                        <!-- AI metrics will be loaded here -->
+                    </div>
+                </div>
+            </section>
+            
+            <section id="monitoring" class="content-section">
+                <h2>System Monitoring</h2>
+                <div class="monitoring-controls">
+                    <button id="start-monitoring" class="btn btn-success">
+                        <i class="fas fa-play"></i> Start Monitoring
+                    </button>
+                    <button id="stop-monitoring" class="btn btn-danger">
+                        <i class="fas fa-stop"></i> Stop Monitoring
+                    </button>
+                    <button id="clear-alerts" class="btn btn-warning">
+                        <i class="fas fa-trash"></i> Clear Alerts
+                    </button>
+                </div>
+                <div id="monitoring-dashboard" class="monitoring-grid">
+                    <div class="card">
+                        <h3>Real-time Metrics</h3>
+                        <div id="real-time-metrics" class="metrics-list">
+                            <!-- Real-time metrics will be loaded here -->
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>Active Alerts</h3>
+                        <div id="active-alerts" class="alerts-list">
+                            <!-- Alerts will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <section id="testing" class="content-section">
+                <h2>Testing & Validation</h2>
+                <div class="testing-controls">
+                    <div class="control-group">
+                        <label for="test-suite">Test Suite:</label>
+                        <select id="test-suite">
+                            <option value="unit">Unit Tests</option>
+                            <option value="integration">Integration Tests</option>
+                            <option value="performance">Performance Tests</option>
+                            <option value="security">Security Tests</option>
+                        </select>
+                    </div>
+                    <button id="run-tests" class="btn btn-primary">
+                        <i class="fas fa-play"></i> Run Tests
+                    </button>
+                    <button id="stop-tests" class="btn btn-danger">
+                        <i class="fas fa-stop"></i> Stop Tests
+                    </button>
+                </div>
+                <div id="test-results" class="test-results-panel">
+                    <h3>Test Results</h3>
+                    <div id="test-metrics" class="test-metrics">
+                        <!-- Test metrics will be loaded here -->
+                    </div>
+                    <div id="test-details" class="test-details">
+                        <!-- Test details will be loaded here -->
+                    </div>
+                </div>
+            </section>
+            
+            <section id="deployment" class="content-section">
+                <h2>Deployment Management</h2>
+                <div class="deployment-controls">
+                    <div class="control-group">
+                        <label for="service-select">Service:</label>
+                        <select id="service-select">
+                            <option value="jarvis-api">JARVIS API</option>
+                            <option value="jarvis-dashboard">JARVIS Dashboard</option>
+                            <option value="jarvis-ai">JARVIS AI Orchestrator</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="deployment-version">Version:</label>
+                        <input type="text" id="deployment-version" placeholder="1.0.0">
+                    </div>
+                    <div class="control-group">
+                        <label for="deployment-strategy">Strategy:</label>
+                        <select id="deployment-strategy">
+                            <option value="rolling">Rolling</option>
+                            <option value="blue_green">Blue-Green</option>
+                            <option value="canary">Canary</option>
+                        </select>
+                    </div>
+                    <button id="deploy-service" class="btn btn-primary">
+                        <i class="fas fa-rocket"></i> Deploy
+                    </button>
+                </div>
+                <div id="deployment-status" class="deployment-panel">
+                    <h3>Deployment Status</h3>
+                    <div id="deployment-info" class="deployment-info">
+                        <!-- Deployment info will be loaded here -->
+                    </div>
+                </div>
+            </section>
+            
+            <section id="performance" class="content-section">
+                <h2>Performance Optimization</h2>
+                <div class="performance-controls">
+                    <button id="run-optimization" class="btn btn-primary">
+                        <i class="fas fa-magic"></i> Run Optimization
+                    </button>
+                    <button id="clear-cache" class="btn btn-secondary">
+                        <i class="fas fa-broom"></i> Clear Cache
+                    </button>
+                    <button id="force-gc" class="btn btn-info">
+                        <i class="fas fa-recycle"></i> Force GC
+                    </button>
+                </div>
+                <div id="performance-metrics" class="performance-panel">
+                    <h3>Performance Metrics</h3>
+                    <div id="performance-charts" class="charts-grid">
+                        <!-- Performance charts will be loaded here -->
+                    </div>
+                </div>
+            </section>
+            
+            <section id="alerts" class="content-section">
+                <h2>Alert Management</h2>
+                <div class="alerts-controls">
+                    <button id="acknowledge-all" class="btn btn-warning">
+                        <i class="fas fa-check"></i> Acknowledge All
+                    </button>
+                    <button id="resolve-all" class="btn btn-success">
+                        <i class="fas fa-check-circle"></i> Resolve All
+                    </button>
+                </div>
+                <div id="alerts-list" class="alerts-panel">
+                    <h3>Active Alerts</h3>
+                    <div id="alerts-content" class="alerts-content">
+                        <!-- Alerts will be loaded here -->
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+    
+    <script src="/static/control-panel.jj"rvi>_advcnceipt>
+</body>
+</html>
+        

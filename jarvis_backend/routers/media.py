@@ -1,0 +1,328 @@
+"""Video analysis, frame extraction, video info; image generation."""
+
+from __future__ import annotations
+
+import asyncio
+import base64
+import logging
+import os
+import threading
+import time
+import uuid
+from typing import Annotated, Any
+from urllib.parse import urlsplit
+
+import httpx as _httpx
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel, Field, validator
+
+from ..core import UPLOADS_DIR, ai_service, get_current_user, now_iso
+
+router = APIRouter(prefix="/api/v1", tags=["media"])
+_logger = logging.getLogger(__name__)
+_IMAGE_LIMIT_WINDOW_S = 60
+_IMAGE_LIMIT_PER_USER = 5
+_image_rate_buckets: dict[str, list[float]] = {}
+_image_rate_lock = threading.Lock()
+
+
+class VideoUrlIn(BaseModel):
+    video_url: str
+
+
+async def _save_from_upload(file: UploadFile) -> str:
+    name = f"{uuid.uuid4()}-{os.path.basename(file.filename or 'video')}"
+    path = UPLOADS_DIR / name
+    with path.open("wb") as fh:
+        fh.write(await file.read())
+    return str(path)
+
+
+@router.post("/video/analyze")
+async def video_analyze(file: UploadFile | None = File(None),
+                        video_url: str | None = Form(None)):
+    if file is not None:
+        path = await _save_from_upload(file)
+        name = file.filename or ""
+    elif video_url:
+        path = video_url
+        name = video_url
+    else:
+        raise HTTPException(status_code=400, detail="Provide a file or video_url")
+    return {
+        "analysis": await ai_service.chat(f"Analyze video: {name}"),
+        "file": name,
+        "path": path,
+        "duration_seconds": None,
+        "frames": 0,
+        "objects_detected": [],
+    }
+
+
+@router.post("/video/extract-frames")
+async def video_extract_frames(file: UploadFile = File(...),
+                               num_frames: int = Form(10)):
+    path = await _save_from_upload(file)
+    return {
+        "success": True,
+        "file": file.filename,
+        "frames_extracted": 0,
+        "frames_dir": None,
+        "requested": num_frames,
+    }
+
+
+@router.post("/video/info")
+async def video_info(file: UploadFile = File(...)):
+    path = await _save_from_upload(file)
+    return {
+        "success": True,
+        "filename": file.filename,
+        "path": path,
+        "size": os.path.getsize(path),
+        "codec": None,
+        "duration": None,
+        "resolution": None,
+        "fps": None,
+    }
+
+
+class ImageGenerateIn(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=4000)
+    provider: str | None = None
+    size: str = Field("1024x1024", max_length=9)
+    quality: str = "standard"
+    style: str | None = Field(None, max_length=100)
+    negative_prompt: str | None = Field(None, max_length=4000)
+    num_images: int = Field(1, ge=1, le=4)
+    model_name: str | None = None
+
+    @validator("prompt")
+    def prompt_must_not_be_blank(cls, value: str) -> str:  # noqa: N805
+        if not value.strip():
+            raise ValueError("prompt is required")
+        return value
+
+    @validator("size")
+    def size_must_be_bounded_dimensions(cls, value: str) -> str:  # noqa: N805
+        try:
+            width, height = (int(part) for part in value.lower().split("x"))
+        except (TypeError, ValueError):
+            raise ValueError("size must use WIDTHxHEIGHT dimensions")
+        if not (256 <= width <= 1536 and 256 <= height <= 1536):
+            raise ValueError("image dimensions must be between 256 and 1536 pixels")
+        return f"{width}x{height}"
+
+
+def _parse_size(size: str):
+    width, height = size.lower().split("x")
+    return int(width), int(height)
+
+
+def _image_rate_allowed(user_id: str) -> bool:
+    now = time.monotonic()
+    with _image_rate_lock:
+        cutoff = now - _IMAGE_LIMIT_WINDOW_S
+        bucket = [timestamp for timestamp in _image_rate_buckets.get(user_id, []) if timestamp > cutoff]
+        if len(bucket) >= _IMAGE_LIMIT_PER_USER:
+            _image_rate_buckets[user_id] = bucket
+            return False
+        bucket.append(now)
+        _image_rate_buckets[user_id] = bucket
+        return True
+
+
+@router.post("/image/generate")
+async def image_generate(
+    body: ImageGenerateIn,
+    user: Annotated[dict[str, Any], Depends(get_current_user)],
+):
+    prompt = (body.prompt or "").strip()
+    user_id = str(user.get("id") or user.get("username") or "unknown")
+    if not _image_rate_allowed(user_id):
+        raise HTTPException(status_code=429, detail="Image generation rate limit exceeded")
+    provider = (body.provider or "replicate").lower()
+    width, height = _parse_size(body.size)
+    try:
+        if provider == "replicate":
+            return await _generate_replicate(prompt, body, width, height)
+        if provider == "stability":
+            return await _generate_stability(prompt, body, width, height)
+        if provider == "openai":
+            return await _generate_openai_image(prompt, body, width, height)
+    except HTTPException:
+        raise
+    except _httpx.HTTPStatusError as exc:
+        _logger.warning("Image provider returned an HTTP error (%s)", exc.response.status_code)
+        raise HTTPException(status_code=502, detail="Image provider request failed")
+    except (TimeoutError, _httpx.RequestError, ValueError) as exc:
+        _logger.warning("Image provider request could not be completed (%s)", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="Image provider request could not be completed")
+    raise HTTPException(
+        status_code=501,
+        detail=f"Image provider '{provider}' is not implemented. "
+               f"Supported: replicate, stability, openai.",
+    )
+
+
+async def _generate_replicate(prompt: str, body: ImageGenerateIn, width: int, height: int):
+    key = os.environ.get("REPLICATE_API_KEY", "")
+    if not key:
+        raise HTTPException(status_code=401,
+                            detail="Replicate API key not configured. Set REPLICATE_API_KEY.")
+    model = body.model_name or "stability-ai/sdxl"
+    owner, _, name = model.partition("/")
+    if not name:
+        owner, name = "stability-ai", "sdxl"
+    h = {"Authorization": f"Token {key}", "Content-Type": "application/json"}
+    inp = {"prompt": prompt, "width": width, "height": height,
+           "num_outputs": max(1, min(4, body.num_images)),
+           "guidance_scale": 7.5, "num_inference_steps": 30}
+    if body.negative_prompt:
+        inp["negative_prompt"] = body.negative_prompt
+    async with _httpx.AsyncClient(timeout=30) as c:
+        # 1) resolve the model's latest version (model-specific POST .../predictions
+        #    404s on Replicate's REST; the version+general endpoint is correct).
+        m = await c.get(f"https://api.replicate.com/v1/models/{owner}/{name}", headers=h)
+        if m.status_code == 401:
+            raise HTTPException(status_code=401, detail="invalid Replicate API key")
+        if m.status_code == 404:
+            raise HTTPException(status_code=404, detail=f"Replicate model '{model}' not found")
+        mj = m.json()
+        if not isinstance(mj, dict):
+            raise HTTPException(status_code=502, detail="Replicate returned an invalid model response")
+        latest_version = mj.get("latest_version")
+        latest_id = latest_version.get("id") if isinstance(latest_version, dict) else None
+        versions = mj.get("versions")
+        first_version = versions[0] if isinstance(versions, list) and versions else {}
+        vid = latest_id or (first_version.get("id") if isinstance(first_version, dict) else None)
+        if not isinstance(vid, str) or not vid:
+            raise HTTPException(status_code=502, detail=f"Could not resolve version for Replicate model '{model}'")
+        # 2) create a prediction
+        r = await c.post("https://api.replicate.com/v1/predictions",
+                         headers=h, json={"version": vid, "input": inp})
+        if r.status_code == 401:
+            raise HTTPException(status_code=401, detail="invalid Replicate API key")
+        if r.status_code == 402:
+            raise HTTPException(status_code=402,
+                                detail="Replicate account has insufficient credit. Add credit at https://replicate.com/account/billing")
+        if r.status_code != 201:
+            raise HTTPException(status_code=502, detail=f"Replicate request failed: HTTP {r.status_code}")
+        pred = r.json()
+    if not isinstance(pred, dict):
+        raise HTTPException(status_code=502, detail="Replicate returned an invalid prediction response")
+    urls = pred.get("urls")
+    poll_url = urls.get("get") if isinstance(urls, dict) else None
+    if not poll_url and isinstance(pred.get("id"), str):
+        poll_url = f"https://api.replicate.com/v1/predictions/{pred['id']}"
+    if not isinstance(poll_url, str):
+        raise HTTPException(status_code=502, detail="Replicate returned an invalid prediction URL")
+    parsed_poll_url = urlsplit(poll_url)
+    try:
+        poll_port = parsed_poll_url.port
+    except ValueError:
+        raise HTTPException(status_code=502, detail="Replicate returned an invalid prediction URL")
+    path_parts = parsed_poll_url.path.split("/")
+    if (
+        parsed_poll_url.scheme != "https"
+        or parsed_poll_url.hostname != "api.replicate.com"
+        or poll_port not in (None, 443)
+        or parsed_poll_url.username is not None
+        or parsed_poll_url.password is not None
+        or parsed_poll_url.query
+        or parsed_poll_url.fragment
+        or len(path_parts) != 4
+        or path_parts[:3] != ["", "v1", "predictions"]
+        or not path_parts[3]
+    ):
+        raise HTTPException(status_code=502, detail="Replicate returned an invalid prediction URL")
+    output = None
+    async with _httpx.AsyncClient(timeout=10) as c:
+        for _ in range(40):
+            pr = await c.get(poll_url, headers=h)
+            pj = pr.json()
+            if pj.get("status") == "succeeded" and pj.get("output"):
+                output = pj.get("output")
+                break
+            if pj.get("status") in ("failed", "canceled", "error"):
+                raise HTTPException(status_code=502,
+                                  detail=f"Replicate prediction {pj.get('status')}")
+            await asyncio.sleep(1.0)
+    images = []
+    if isinstance(output, list):
+        for item in output:
+            if isinstance(item, str):
+                images.append({"url": item, "prompt": prompt, "model": model})
+            elif isinstance(item, dict):
+                images.append({"url": item.get("url"), "base64": item.get("base64"),
+                               "prompt": prompt, "model": model})
+    elif isinstance(output, str):
+        images.append({"url": output, "prompt": prompt, "model": model})
+    elif isinstance(output, dict):
+        images.append({"url": output.get("url"), "base64": output.get("base64"),
+                       "prompt": prompt, "model": model})
+    return {"success": True, "images": images, "count": len(images), "prompt": prompt,
+            "provider": "replicate", "model": model, "timestamp": now_iso()}
+
+
+async def _generate_stability(prompt: str, body: ImageGenerateIn, width: int, height: int):
+    key = os.environ.get("STABILITY_API_KEY", "")
+    if not key:
+        raise HTTPException(status_code=401,
+                            detail="Stability API key not configured. Set STABILITY_API_KEY.")
+    model = body.model_name or "sdxl-1024-positivity"
+    url = f"https://api.stability.ai/v2beta/stable-image/generation/{model}/image"
+    async with _httpx.AsyncClient(timeout=40) as c:
+        r = await c.post(url, headers={"Authorization": f"Bearer {key}"},
+                         files={"prompt": (None, prompt)},
+                         data={"width": str(min(max(width, 256), 1536)),
+                               "height": str(min(max(height, 256), 1536)),
+                               "num_images": str(max(1, min(4, body.num_images)) or 1)})
+        if r.status_code in (401, 403):
+            raise HTTPException(status_code=401, detail="invalid Stability API key")
+        if r.status_code == 404:
+            raise HTTPException(status_code=401,
+                                detail="Stability API key not accepted by provider (HTTP 404) -- verify key/scope and model slug")
+        if r.status_code != 200:
+            raise HTTPException(status_code=502,
+                                detail=f"Stability request failed: HTTP {r.status_code}")
+        ct = r.headers.get("content-type", "")
+        data = r.content
+    images = []
+    if "json" in ct:
+        try:
+            j = r.json()
+            if isinstance(j, dict) and "image" in j:
+                images.append({"base64": j["image"], "prompt": prompt, "model": model})
+            elif isinstance(j, dict) and "images" in j:
+                for im in j["images"]:
+                    images.append({"base64": im.get("base64") or im.get("b64") or im.get("image"),
+                                   "prompt": prompt, "model": model})
+        except Exception:
+            images.append({"base64": base64.b64encode(data).decode(), "prompt": prompt, "model": model})
+    else:
+        images.append({"base64": base64.b64encode(data).decode(), "prompt": prompt, "model": model})
+    return {"success": True, "images": images, "count": len(images), "prompt": prompt,
+            "provider": "stability", "model": model, "timestamp": now_iso()}
+
+
+async def _generate_openai_image(prompt: str, body: ImageGenerateIn, width: int, height: int):
+    key = os.environ.get("OPENAI_API_KEY", "") or os.environ.get("JARVIS_API_KEY_OPENAI", "")
+    if not key:
+        raise HTTPException(status_code=401,
+                            detail="OpenAI API key not configured. Set OPENAI_API_KEY.")
+    size = f"{width}x{height}"
+    async with _httpx.AsyncClient(timeout=30) as c:
+        r = await c.post("https://api.openai.com/v1/images/generations",
+                         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                         json={"prompt": prompt, "n": max(1, min(4, body.num_images)),
+                               "size": size, "response_format": "b64_json"})
+        if r.status_code == 401:
+            raise HTTPException(status_code=401, detail="invalid OpenAI API key")
+        if r.status_code != 200:
+            raise HTTPException(status_code=502, detail=f"OpenAI image request failed: HTTP {r.status_code}")
+        d = r.json()
+    images = [{"base64": im.get("b64_json"), "prompt": prompt, "model": "dall-e-3"}
+              for im in (d.get("data") or []) if im.get("b64_json")]
+    return {"success": True, "images": images, "count": len(images), "prompt": prompt,
+            "provider": "openai", "model": "dall-e-3", "timestamp": now_iso()}

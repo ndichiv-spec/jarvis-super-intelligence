@@ -1,0 +1,11 @@
+[Unit]
+Description=Run verified JARVIS backups daily
+
+[Timer]
+OnCalendar=*-*-* 02:00:00 UTC
+RandomizedDelaySec=15m
+Persistent=true
+Unit=jarvis-backup.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,17 @@
+groups:
+  - name: jarvis-production
+    rules:
+      - alert: JarvisApiUnavailable
+        expr: up{job="jarvis-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: JARVIS API metrics endpoint is unavailable
+      - alert: JarvisHighErrorRate
+        expr: sum(rate(jarvis_errors_total[5m])) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: JARVIS is recording a sustained elevated application error rate

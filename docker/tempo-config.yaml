@@ -1,0 +1,43 @@
+auth_enabled: false
+server:
+  http_listen_port: 3200
+  grpc_listen_port: 4317
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+        http:
+
+ingester:
+  max_block_size: 1000
+  chunk_target_size: 2097152
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /tmp/tempo/traces
+  metrics:
+    backend: local
+    local:
+      path: /tmp/tempo/metrics
+      wal_enabled: true
+
+compactor:
+  compaction:
+    block_retention: 48h
+    compacted_block_retention: 12h
+
+schema:
+  configs:
+    - from: 2024-01-01
+      store:
+        - trace
+        - metric
+      object_store: local
+      schema: v3
+      index:
+        prefix: '<empty>'
+        endpoint: 's3'
