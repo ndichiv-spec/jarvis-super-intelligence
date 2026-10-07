@@ -1,0 +1,69 @@
+{
+  "openai": {
+    "provider": "openai",
+    "configured": true,
+    "api_key_present": true,
+    "default_model": "gpt-4o-mini",
+    "health_status": "degraded",
+    "health_detail": "endpoint reachable but /v1/models returned no models",
+    "models_found": 0,
+    "health_latency_ms": 3358.1,
+    "chat_status": "error",
+    "chat_error": "ProviderContractError: POST /v1/chat/completions -> HTTP 404: ",
+    "latency_ms": 955.3
+  },
+  "google": {
+    "provider": "google",
+    "configured": true,
+    "health_status": "healthy",
+    "health_detail": "58 models advertised",
+    "health_latency_ms": 5349.2,
+    "chat_status": "success",
+    "response": "P",
+    "model": "gemini-2.5-flash",
+    "latency_ms": 980.3,
+    "usage": {
+      "prompt": 9,
+      "completion": 1
+    }
+  },
+  "nvidia": {
+    "provider": "nvidia",
+    "configured": false,
+    "result": "NOT CONFIGURED"
+  },
+  "aws": {
+    "provider": "aws",
+    "configured": false,
+    "result": "NOT CONFIGURED"
+  },
+  "hf": {
+    "provider": "hf",
+    "configured": true,
+    "inference_ready": false,
+    "health_status": "unknown",
+    "health_detail": "registry token present; no inference endpoint configured",
+    "health_latency_ms": 0.0,
+    "repo_models": [
+      "Edge0/Edge0-35B-A3B-preview",
+      "deepseek-ai/DeepSeek-V4.1-Flash",
+      "prism-ml/Ternary-Bonsai-2-27B-gguf",
+      "Qwen/Qwen3.8-27B",
+      "m-a-p/YuE2-3B",
+      "TokenRhythm/NeoHorse-1-4B",
+      "ISTA-DASLab/Qwen3.8-27B-GSQ-RCO-GGUF",
+      "Lightricks/LTX-2.5",
+      "ukisai/Swift-Qwen3.8-27b",
+      "DavidAU/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NEO-CODER-MAX-MTP-GGUF"
+    ],
+    "repo_model_count": 1000,
+    "repo_latency_ms": 1057.3
+  },
+  "brain": {
+    "provider": "jarvis_brain",
+    "endpoint": "http://127.0.0.1:8011/v1",
+    "api_key_present": true,
+    "health_error": "ConnectionError: HTTPConnectionPool(host='127.0.0.1', port=8011): Max retries exceeded with url: /health (Caused by NewConnectionError(\"HTTPConnection(host='127.0.0.1', port=8011): Failed to establish a new connection",
+    "health_latency_ms": 2009.8
+  }
+}

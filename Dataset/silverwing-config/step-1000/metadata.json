@@ -1,0 +1,14 @@
+{
+  "step": 1000,
+  "tag": "step-1000",
+  "train_loss": 5.970149517059326,
+  "val_loss": null,
+  "total_tokens": 1024000,
+  "lr": 5.467919892865325e-10,
+  "batch_size": 1,
+  "grad_accum": 4,
+  "max_seq_len": 256,
+  "torch_version": "2.10.0+cpu",
+  "seed": 42,
+  "model_sha256": "d1cf8889527146e6d8b0e18f8996eccdf55174bac1b41cc8737f8bd04a152bd0"
+}

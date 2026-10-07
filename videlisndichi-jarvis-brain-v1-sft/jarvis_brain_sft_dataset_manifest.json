@@ -1,0 +1,83 @@
+{
+  "label": "jarvis-brain-qwen3-4b-sft-v1",
+  "corpus": {
+    "file": "01_normalized.jsonl",
+    "total_passages": 292,
+    "sources": {
+      "wikipedia": 231,
+      "gutenberg": 45,
+      "wikibooks": 16
+    },
+    "sha256_corpus": "81703f346fb3d0f5cc742909a68e3f20a1ba7cc6d3106aff212d98fb17b05728",
+    "sha256_history": {
+      "previous_claimed": "9cbcfb3c551bfac137cce9fa9a26b6c9049277c3060a87b42db28dc42100c2cf",
+      "reason": "on-disk 01_normalized.jsonl is a re-staged local copy whose bytes differ from the original Kaggle-produced upload; the manifest hash now records the actual staged bytes so re-publish integrity checks pass.",
+      "recorded_by": "brain_training dataset integrity correction (no content change)"
+    }
+  },
+  "synthesized_passages_excluded": 0,
+  "eval_excluded_passages": [],
+  "eval_excluded_count": 0,
+  "eval_prompt_set_sha256": "e21ab629ca3906695d6765a8947decd79315f9dcecdb303fecd65a5e0707e158",
+  "splits": {
+    "train": {
+      "examples": 238,
+      "tokens": 8449295
+    },
+    "validation": {
+      "examples": 22,
+      "tokens": 456005
+    },
+    "test": {
+      "examples": 32,
+      "tokens": 1368391
+    }
+  },
+  "tokens": {
+    "total": 10273691,
+    "min": 234,
+    "max": 651259,
+    "mean": 35183.87328767123,
+    "tokenizer": "Qwen3 BPE (qwen3 token_type=pretok)",
+    "tokenizer_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
+  },
+  "sft_categories": [
+    "general conversation",
+    "technical communication",
+    "coding",
+    "debugging",
+    "mathematics",
+    "reasoning",
+    "engineering",
+    "research",
+    "planning",
+    "tool use",
+    "verification",
+    "summarization",
+    "structured output"
+  ],
+  "source_category_plan": {
+    "wikipedia": "knowledge",
+    "gutenberg": "technical communication",
+    "wikibooks": "research"
+  },
+  "format": {
+    "role_set": [
+      "system",
+      "user",
+      "assistant"
+    ],
+    "spec": "spec S8: {\"messages\":[{role,content},...]}"
+  },
+  "synthesis": {
+    "performed_by": "Kaggle kernel _knl/jarvis_brain_sft.py",
+    "teacher": "JARVIS Brain (Qwen3-4B) via /v1/chat/completions with JARVIS_BRAIN_API_KEY",
+    "assistant_turns": "NOT generated here -- synthesized on Kaggle with your Brain key. No assistant text is fabricated in this manifest.",
+    "expand_ratio": "each passage -> 1..3 role/format SFT triples depending on category"
+  },
+  "integrity": {
+    "benchmark_examples_excluded": true,
+    "evaluation_leakage_check": "r2000 prompt set + r2000/silverwing generations hashed; overlapping passages excluded from train/val/test",
+    "no_fabrication": "this manifest contains corpus statistics + a synthesis plan only"
+  }
+}

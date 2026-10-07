@@ -1,0 +1,30 @@
+{
+  "name": "silverwing-baseline-corpus-v1",
+  "sources": [
+    {
+      "name": "Project Gutenberg",
+      "license": "Public Domain (US)",
+      "books": [
+        {
+          "file": "alice.txt",
+          "chars": 144696
+        },
+        {
+          "file": "frankenstein.txt",
+          "chars": 419434
+        },
+        {
+          "file": "pride_prejudice.txt",
+          "chars": 728846
+        },
+        {
+          "file": "sherlock.txt",
+          "chars": 581425
+        }
+      ],
+      "total_chars": 1874401
+    }
+  ],
+  "total_characters": 1874401,
+  "note": "r2000 baseline was trained exclusively on these 4 public-domain books; training_tokens in summary counts packed/repeated tokens consumed, not unique corpus tokens."
+}

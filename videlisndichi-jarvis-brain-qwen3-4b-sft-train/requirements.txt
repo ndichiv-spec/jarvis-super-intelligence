@@ -1,0 +1,10 @@
+torch==2.4.1+cu121
+transformers>=4.46
+peft>=0.12.0
+bitsandbytes
+safetensors
+tokenizers
+datasets
+httpx
+huggingface_hub
+tqdm

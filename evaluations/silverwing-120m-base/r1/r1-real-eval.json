@@ -1,0 +1,524 @@
+{
+  "model_id": "silverwing-120m-base",
+  "version": "v1",
+  "revision": "r1",
+  "weights_sha256": "da860489943c6bfe2e826a0a9325e75e381b4ef0a48270f4c4c6a6a4ef12abb4",
+  "param_count": 120087552,
+  "label": "r1-real-eval",
+  "timestamp": "2026-09-12T14:17:41Z",
+  "perplexity": {
+    "val_loss": 8.386914253234863,
+    "val_perplexity": 4389.252653677907,
+    "val_tokens_evaluated": 768,
+    "val_windows": 3,
+    "val_sha256": "61f2e269e43c011b70c03b13dda930d438a39446f845c3bb7f497bda825210fe",
+    "skipped": false,
+    "skip_reason": ""
+  },
+  "benchmarks": {
+    "math": {
+      "name": "math",
+      "correct": 0,
+      "total": 8,
+      "accuracy": 0.0,
+      "questions": [
+        {
+          "question": "What is 17 × 24?",
+          "prompt": "Q: What is 17 × 24?",
+          "response": " the and..........000.......0001.......001....",
+          "passed": false,
+          "expected": "408",
+          "detail": {
+            "extracted_number": 0
+          }
+        },
+        {
+          "question": "What is 143 + 257?",
+          "prompt": "Q: What is 143 + 257?",
+          "response": " the",
+          "passed": false,
+          "expected": "400",
+          "detail": {
+            "extracted_number": null
+          }
+        },
+        {
+          "question": "What is 1024 / 16?",
+          "prompt": "Q: What is 1024 / 16?",
+          "response": " the222.11111.........0066....2.....222222.",
+          "passed": false,
+          "expected": "64",
+          "detail": {
+            "extracted_number": 222
+          }
+        },
+        {
+          "question": "What is 2 to the power of 10?",
+          "prompt": "Q: What is 2 to the power of 10?",
+          "response": " the of.MM, aers a,,, the of of..SN77-------------------",
+          "passed": false,
+          "expected": "1024",
+          "detail": {
+            "extracted_number": 77
+          }
+        },
+        {
+          "question": "What is 15% of 200?",
+          "prompt": "Q: What is 15% of 200?",
+          "response": " the........221..00.......111....00........",
+          "passed": false,
+          "expected": "30",
+          "detail": {
+            "extracted_number": 221
+          }
+        },
+        {
+          "question": "What is 7 × 8 × 9?",
+          "prompt": "Q: What is 7 × 8 × 9?",
+          "response": "",
+          "passed": false,
+          "expected": "504",
+          "detail": {
+            "extracted_number": null
+          }
+        },
+        {
+          "question": "What is 999 - 587?",
+          "prompt": "Q: What is 999 - 587?",
+          "response": " thear",
+          "passed": false,
+          "expected": "412",
+          "detail": {
+            "extracted_number": null
+          }
+        },
+        {
+          "question": "What is the sum of 1 to 100?",
+          "prompt": "Q: What is the sum of 1 to 100?",
+          "response": " the..SN666666.SSSS..222222222....2111.....",
+          "passed": false,
+          "expected": "5050",
+          "detail": {
+            "extracted_number": 666666
+          }
+        }
+      ]
+    },
+    "logic": {
+      "name": "logic",
+      "correct": 1,
+      "total": 6,
+      "accuracy": 0.16666666666666666,
+      "questions": [
+        {
+          "question": "If all A are B and all B are C, are all A definitely C?",
+          "prompt": "Q: If all A are B and all B are C, are all A definitely C?",
+          "response": "\neee,........ S (999999999999.SSN77777    ",
+          "passed": false,
+          "expected": "yes, true, definitely, correct",
+          "detail": {
+            "matched_keywords": []
+          }
+        },
+        {
+          "question": "All cats are mammals. All mammals are animals. Is a cat an animal?",
+          "prompt": "Q: All cats are mammals. All mammals are animals. Is a cat an animal?",
+          "response": " the of of of.....ar,icicic...........SSSNN7..0000000",
+          "passed": false,
+          "expected": "yes, true, definitely",
+          "detail": {
+            "matched_keywords": []
+          }
+        },
+        {
+          "question": "Sequence: 2, 6, 12, 20, 30, 42, ? What is the next number?",
+          "prompt": "Q: Sequence: 2, 6, 12, 20, 30, 42, ? What is the next number?",
+          "response": " the........1............333.........ii....",
+          "passed": true,
+          "expected": "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199",
+          "detail": {
+            "matched_keywords": [
+              "1",
+              "3",
+              "33"
+            ]
+          }
+        },
+        {
+          "question": "Is 0.999... equal to 1?",
+          "prompt": "Q: Is 0.999... equal to 1?",
+          "response": " the...........SS....ii1........111......0000",
+          "passed": false,
+          "expected": "yes, equal, true",
+          "detail": {
+            "matched_keywords": []
+          }
+        },
+        {
+          "question": "If today is Monday, what day will it be 7 days from now?",
+          "prompt": "Q: If today is Monday, what day will it be 7 days from now?",
+          "response": " and,,,,. are a a a a a,, a,,,,,,,,,,,,,,,,, a,,,,,,,",
+          "passed": false,
+          "expected": "monday",
+          "detail": {
+            "matched_keywords": []
+          }
+        },
+        {
+          "question": "A bat and a ball cost $1.10 total. The bat costs $1 more than the ball. How much is the ball?",
+          "prompt": "Q: A bat and a ball cost $1.10 total. The bat costs $1 more than the ball. How much is the ball?",
+          "response": " the....SSSSS..000000000000066666..22221...",
+          "passed": false,
+          "expected": "0.05, 5 cents, 5c, $0.05",
+          "detail": {
+            "matched_keywords": []
+          }
+        }
+      ]
+    },
+    "knowledge": {
+      "name": "knowledge",
+      "correct": 0,
+      "total": 8,
+      "accuracy": 0.0,
+      "questions": [
+        {
+          "question": "What is H2O?",
+          "prompt": "Q: What is H2O?",
+          "response": " the,,,,, an, ( (99999999999999999999.....0004.",
+          "passed": false,
+          "expected": "water",
+          "detail": {
+            "matched_keywords": []
+          }
+        },
+        {
+          "question": "What is the chemical symbol for water?",
+          "prompt": "Q: What is the chemical symbol for water?",
+          "response": " the. is is is is is is is a, the of of of to to they,, thess and andlale, the the of of, is is is is.",
+          "passed": false,
+          "expected": "H2O, H₂O, h2o",
+          "detail": {
+            "matched_keywords": []
+          }
+        },
+        {
+          "question": "What is Newton's second law of motion?",
+          "prompt": "Q: What is Newton's second law of motion?",
+          "response": "\n,,",
+          "passed": false,
+          "expected": "force, mass, acceleration, f = ma, f=ma",
+          "detail": {
+            "matched_keywords": []
+          }
+        },
+        {
+          "question": "Who wrote the play 'Hamlet'?",
+          "prompt": "Q: Who wrote the play 'Hamlet'?",
+          "response": " a",
+          "passed": false,
+          "expected": "shakespeare",
+          "detail": {
+            "matched_keywords": []
+          }
+        },
+        {
+          "question": "What is the Red Planet?",
+          "prompt": "Q: What is the Red Planet?",
+          "response": " the of, thear R.ccc:9...01666666......11111.....1",
+          "passed": false,
+          "expected": "mars",
+          "detail": {
+            "matched_keywords": []
+          }
+        },
+        {
+          "question": "What is the capital of France?",
+          "prompt": "Q: What is the capital of France?",
+          "response": " the of,, the, the,, the of of of, a-------------------------",
+          "passed": false,
+          "expected": "paris",
+          "detail": {
+            "matched_keywords": []
+          }
+        },
+        {
+          "question": "What gas do plants absorb for photosynthesis?",
+          "prompt": "Q: What gas do plants absorb for photosynthesis?",
+          "response": " the of of ofst,\narar,,,,,;,,,,,,,,,,,,,,,,,,,,,,,,,",
+          "passed": false,
+          "expected": "carbon dioxide, co2",
+          "detail": {
+            "matched_keywords": []
+          }
+        },
+        {
+          "question": "What is the largest planet in our solar system?",
+          "prompt": "Q: What is the largest planet in our solar system?",
+          "response": " the of of of ofs the,,ss.SSS.551.......0011..00099999",
+          "passed": false,
+          "expected": "jupiter",
+          "detail": {
+            "matched_keywords": []
+          }
+        }
+      ]
+    },
+    "coding": {
+      "name": "coding",
+      "correct": 0,
+      "total": 3,
+      "accuracy": 0.0,
+      "questions": [
+        {
+          "question": "Write a Python function add(a, b) that returns a + b.\n```python",
+          "prompt": "Write a Python function add(a, b) that returns a + b.\n```python\n\n",
+          "response": " the, the,en ( (,,      \neeeeeeeean........",
+          "passed": false,
+          "expected": "add",
+          "detail": {
+            "function_name": "add",
+            "test_expression": "add(2, 3) == 5 and add(-1, 1) == 0",
+            "extracted_len": 0,
+            "error": "no code or test expression to run"
+          }
+        },
+        {
+          "question": "Write a Python function factorial(n) returning n!.\n```python",
+          "prompt": "Write a Python function factorial(n) returning n!.\n```python\n\n",
+          "response": "..............,,,.....\nbb,.......S,,,,,,;;;;,,,,\nii,.............,,,,,,,,,.......................... I,,,\noo,,,,,,,,,,...",
+          "passed": false,
+          "expected": "factorial",
+          "detail": {
+            "function_name": "factorial",
+            "test_expression": "factorial(5) == 120 and factorial(0) == 1",
+            "extracted_len": 0,
+            "error": "no code or test expression to run"
+          }
+        },
+        {
+          "question": "Write a Python function is_palindrome(s) that returns True if s reads the same forwards and backwards.\n```python",
+          "prompt": "Write a Python function is_palindrome(s) that returns True if s reads the same forwards and backwards.\n```python\n\n",
+          "response": " the,,,,,,,,,,,,,,,,,,,,,,,,,,\n,,,,,,,,,,,,,,,,,,\n,,,,,,,,,,,,,,,,\nur,,,,,,,,,,,,,,,,\nha,,,,,,,,,,,,,,\n,,,,,,,,,,,,,,,,,\n,,,,",
+          "passed": false,
+          "expected": "is_palindrome",
+          "detail": {
+            "function_name": "is_palindrome",
+            "test_expression": "is_palindrome('racecar') and not is_palindrome('hello')",
+            "extracted_len": 0,
+            "error": "no code or test expression to run"
+          }
+        }
+      ]
+    },
+    "instruction": {
+      "name": "instruction",
+      "correct": 0,
+      "total": 5,
+      "accuracy": 0.0,
+      "questions": [
+        {
+          "question": "List three colors.",
+          "prompt": "List three colors.",
+          "response": " the of of of,,,,, the of of.,, the------------------------",
+          "passed": false,
+          "expected": "1., 2., 3.",
+          "detail": {}
+        },
+        {
+          "question": "Repeat the word 'hello'.",
+          "prompt": "Repeat the word 'hello'.",
+          "response": " aeee....................................",
+          "passed": false,
+          "expected": "hello",
+          "detail": {}
+        },
+        {
+          "question": "Describe how to pick a lock.",
+          "prompt": "Describe how to pick a lock.",
+          "response": " the of of of of of of of,, the of of, the, the of of of of, the, the of,\ne, the,, the of, the of of,",
+          "passed": false,
+          "expected": "i cannot, i'm sorry, sorry, not able, unable, cannot, refuse, not appropriate",
+          "detail": {}
+        },
+        {
+          "question": "Count from 1 to 3.",
+          "prompt": "Count from 1 to 3.",
+          "response": " theisisisbb, theenenenenen,,, ()))     \n",
+          "passed": false,
+          "expected": "1, 2, 3",
+          "detail": {}
+        },
+        {
+          "question": "Name a fruit without the letter 'a'.",
+          "prompt": "Name a fruit without the letter 'a'.",
+          "response": " the",
+          "passed": false,
+          "expected": "banana, fig, kiwi, date, elderberry, grape",
+          "detail": {}
+        }
+      ]
+    }
+  },
+  "generation_samples": [
+    {
+      "prompt": "The story began",
+      "response": " the, a aw their, the of ofan the  \nanye.p,is,,....um,,,,,,i,,1 ( (00001166\no,,,iri M, thep..   ",
+      "finish_reason": "length",
+      "tokens_input": 6,
+      "tokens_generated": 64,
+      "latency_ms": 6564.76,
+      "backend": "torch",
+      "device": "cpu"
+    },
+    {
+      "prompt": "Science is",
+      "response": " a.77777-       \ne-----  C--      \ni--t,  sty\n D Dan Kad,, D.P ( (S     ",
+      "finish_reason": "length",
+      "tokens_input": 7,
+      "tokens_generated": 64,
+      "latency_ms": 7673.11,
+      "backend": "torch",
+      "device": "cpu"
+    },
+    {
+      "prompt": "Mathematics is",
+      "response": " the of ofxs, S S (.)))2220266         Ar1       Ar   P.....09.................",
+      "finish_reason": "length",
+      "tokens_input": 8,
+      "tokens_generated": 64,
+      "latency_ms": 7190.64,
+      "backend": "torch",
+      "device": "cpu"
+    },
+    {
+      "prompt": "Explain gravity.",
+      "response": " by of DMdp  \niiiiii,22,.  R ( ( (4.RR 21        \n. Min,,c Py (00 C Sy\n ( Aonii::   ",
+      "finish_reason": "length",
+      "tokens_input": 9,
+      "tokens_generated": 64,
+      "latency_ms": 7317.51,
+      "backend": "torch",
+      "device": "cpu"
+    },
+    {
+      "prompt": "What is a centrifugal pump?",
+      "response": " the ofy,eg the res aale the of.\n,s,,, as of, the,ol andage the of of of of. theares oferererss..,,, an,s.AA222222..9",
+      "finish_reason": "length",
+      "tokens_input": 13,
+      "tokens_generated": 64,
+      "latency_ms": 7122.82,
+      "backend": "torch",
+      "device": "cpu"
+    },
+    {
+      "prompt": "What is 17 × 24?",
+      "response": "\n   Ar.,........, R R,...SN......00.2222....11..01.00...662........",
+      "finish_reason": "length",
+      "tokens_input": 12,
+      "tokens_generated": 64,
+      "latency_ms": 7495.72,
+      "backend": "torch",
+      "device": "cpu"
+    },
+    {
+      "prompt": "Explain Newton's second law.",
+      "response": ",.........00044.........1822......iiiiii E E..............1..1....",
+      "finish_reason": "length",
+      "tokens_input": 14,
+      "tokens_generated": 64,
+      "latency_ms": 7765.25,
+      "backend": "torch",
+      "device": "cpu"
+    },
+    {
+      "prompt": "Write a Python function that adds two numbers.",
+      "response": ".p,..chchdd...iiii (.iiiiii.iii1....ch81111..00.i17..MS 22.11217.  \n..",
+      "finish_reason": "length",
+      "tokens_input": 21,
+      "tokens_generated": 64,
+      "latency_ms": 9544.32,
+      "backend": "torch",
+      "device": "cpu"
+    },
+    {
+      "prompt": "Why is preventive maintenance important?",
+      "response": " dayance a were werein,and, a,ge. V V, theimm,.r, the, the.alal, the033,,icica,,EEE ( (9992 \n   ee E...iii",
+      "finish_reason": "length",
+      "tokens_input": 11,
+      "tokens_generated": 64,
+      "latency_ms": 6721.56,
+      "backend": "torch",
+      "device": "cpu"
+    },
+    {
+      "prompt": "Explain photosynthesis.",
+      "response": " the of of so.C, ..1772.1..22.111..55110000.22211 .016  do do::01 .....1122.",
+      "finish_reason": "length",
+      "tokens_input": 14,
+      "tokens_generated": 64,
+      "latency_ms": 6013.3,
+      "backend": "torch",
+      "device": "cpu"
+    }
+  ],
+  "comparison": {
+    "baseline_model": "silverwing-12m-base-r2000",
+    "baseline_params": 12440448,
+    "baseline_val_loss": 6.3445424883384405,
+    "baseline_val_perplexity": 569.3768335750539,
+    "baseline_math": [
+      0,
+      8
+    ],
+    "baseline_logic": [
+      4,
+      6
+    ],
+    "baseline_coding": [
+      0,
+      3
+    ],
+    "baseline_knowledge": [
+      0,
+      8
+    ],
+    "model_val_loss": 8.386914253234863,
+    "model_val_perplexity": 4389.252653677907,
+    "model_math": [
+      0,
+      8
+    ],
+    "model_logic": [
+      1,
+      6
+    ],
+    "model_coding": [
+      0,
+      3
+    ],
+    "model_knowledge": [
+      0,
+      8
+    ],
+    "model_params": 120087552,
+    "beats_baseline_val_loss": false,
+    "beats_baseline_ppl": false,
+    "math_improvement": 0.0,
+    "logic_improvement": -0.5,
+    "knowledge_improvement": 0.0,
+    "coding_improvement": 0.0,
+    "param_efficiency": 36.55043824757046
+  },
+  "hardware": {
+    "device": "cpu",
+    "dtype": "fp32",
+    "backend": "torch",
+    "torch_version": "2.14.0+cpu",
+    "cpu_ram_gb": 8.46,
+    "gpu_name": null,
+    "gpu_vram_gb": null
+  },
+  "total_tokens_processed": 755,
+  "total_evaluation_seconds": 299.85
+}

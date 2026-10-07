@@ -1,0 +1,58 @@
+{
+  "id": "videlisndichi/silverwing-120m-gpu-r1",
+  "title": "Silverwing-120M-V1 GPU R1 Clean Relaunch",
+  "subtitle": "Clean GPU training run of Silverwing-120M-V1 on P100",
+  "description": "Self-contained training script for Silverwing-120M-V1. Fixes the Kaggle kernel cancellation by running smoke test and training in the same execution flow.",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "gpu": "P100",
+  "enable_internet": true,
+  "dataset_sources": [
+    "videlisndichi/silverwing-120m",
+    "videlisndichi/silverwing-120m-fixes"
+  ],
+  "script_path": "silverwing_120m_gpu_r1.py",
+  "script_command": "python silverwing_120m_gpu_r1.py",
+  "competition_sources": [],
+  "keywords": [
+    "llm-training",
+    "transformer",
+    "gpu",
+    "p100",
+    "kaggle"
+  ],
+  "requirements": [
+    "python3",
+    "numpy",
+    "safetensors",
+    "tokenizers",
+    "tqdm",
+    "torch==2.4.1+cu121"
+  ],
+  "expected_runtime_minutes": 60,
+  "expected_output_files": [
+    "silverwing_120m_gpu_r1_report.json",
+    "silverwing_120m_gpu_r1_report.md",
+    "metrics.jsonl",
+    "training_metrics.json",
+    "evaluation_report.json",
+    "comparison_report.json",
+    "capability_history.json",
+    "run_manifest.json",
+    "dataset_manifest.json",
+    "sample_generations.txt",
+    "environment_report.txt",
+    "environment_report.json"
+  ],
+  "checkpoint_dirs": [
+    "checkpoints/step-100",
+    "checkpoints/step-200",
+    "checkpoints/step-300",
+    "checkpoints/step-400",
+    "checkpoints/step-500",
+    "best",
+    "final"
+  ]
+}

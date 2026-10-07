@@ -1,0 +1,14 @@
+{
+  "title": "jarvis-brain-v1-sft",
+  "subtitle": "JARVIS Brain v1 Qwen3-4B SFT dataset sources",
+  "description": "SFT dataset for Qwen3-4B: jarvis_brain_sft_dataset_manifest.json + 01_normalized.jsonl (292 normalized passages: wikipedia/gutenberg/wikibooks). No secrets. Qwen weights pulled from HF at kernel runtime, never bundled.",
+  "sources": [
+    "https://huggingface.co/Qwen/Qwen3-4B-Base"
+  ],
+  "licenses": [
+    {
+      "name": "Other"
+    }
+  ],
+  "id": "videlisndichi/jarvis-brain-v1-sft"
+}

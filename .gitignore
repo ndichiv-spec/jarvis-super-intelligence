@@ -1,0 +1,231 @@
+# ==========================================================================
+#  JARVIS / Silverwing - repository ignore rules
+#
+#  Deliberately CONSERVATIVE: excludes live credentials and generated
+#  training artifacts. Source code, documentation, architecture notes,
+#  model/config manifests and test fixtures ARE tracked.
+#  This is NOT a blanket "*_generated" or "*.jsonl" exclusion.
+# ==========================================================================
+
+
+# ------------------------------------------------------------------------------
+# 1. SECRETS - live credentials, must never be committed
+# ------------------------------------------------------------------------------
+.env
+.env.local
+.env.development.local
+.env.production.local
+.env.test.local
+.env.bak
+.env.bak2
+.env.bak3
+.env.backup
+.env.orig
+.env.old
+.env.*.bak
+!.env.example
+
+.mcp.json
+.jarvis_persist_test_session.txt
+
+# Kaggle / HuggingFace credential material
+_kaggle_auth.txt
+kaggle.json
+*_auth.txt
+*_kaggle_auth*
+**/secret_hf/
+**/.cache/huggingface/
+
+# Keys, certificates, private key material
+**/*.pem
+**/*.key
+**/*.pfx
+**/*.p12
+**/id_rsa
+**/id_rsa.*
+**/id_ecdsa
+**/id_ed25519
+**/.ssh/
+
+# n8n / external system credential stores
+**/credentials.json
+!**/tests/**/credentials.json
+
+# ------------------------------------------------------------------------------
+# 2. SCRIPTS THAT PREVIOUSLY HARDCODE LIVE CREDENTIAL VALUES
+#    All of these were rewritten to read secrets from the environment and to
+#    fail loudly when the variable is missing. They are legitimate tooling, so
+#    they are no longer excluded. Verified clean by the staged secret scan.
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# 3. PYTHON CACHES / VIRTUAL ENVS
+# ------------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+ENV/
+
+# ------------------------------------------------------------------------------
+# 4. NODE / FRONTEND BUILD OUTPUT
+# ------------------------------------------------------------------------------
+node_modules/
+.next/
+out/
+dist/
+build/
+.vite/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+.npm/
+.yarn/
+
+# ------------------------------------------------------------------------------
+# 5. MODEL WEIGHTS AND CHECKPOINT BINARIES
+# ------------------------------------------------------------------------------
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.bin
+*.onnx
+*.gguf
+*.h5
+*.msgpack
+*.tflite
+*.params
+*.data
+
+# generated checkpoint / run-output trees (config-only siblings excluded too)
+**/checkpoints/
+**/kaggle-output/
+**/local_run/
+**/final/
+**/best/
+**/corpus/
+**/out_base_*/
+**/out_sft_*/
+**/out_probe/
+**/out_train/
+
+# ------------------------------------------------------------------------------
+# 6. GENERATED TRAINING RUNS AND KAGGLE ARTIFACT DIRECTORIES
+# ------------------------------------------------------------------------------
+/silverwing/
+/silverwing-10m/
+/silverwing-10m-instr-probe/
+/silverwing-120m/
+/silverwing-r2000/
+/silverwing-stage3a/
+/_kout*/
+/_kaggle_ds_*/
+/_kaggle_kernel/
+_kaggle_release/
+# Generated Kaggle corpus dir. Excluded wholesale, EXCEPT the cleaned
+# preparation script, which is legitimate tooling.
+/_kaggle_silverwing_r2/
+!/_kaggle_silverwing_r2/
+_kaggle_silverwing_r2/*
+!/_kaggle_silverwing_r2/run_prep.ps1
+/_probe_out/
+/_qwen_stage/
+/.sw_cache/
+/kaggle_full_output/
+/kaggle_download/
+/kaggle_output/
+/.jarvis_uploads/
+/brain_training/artifacts/
+
+# ------------------------------------------------------------------------------
+# 7. GENERATED CORPORA / TRAINING DATASETS
+#    Targeted - only known-generated corpus files. Manifests, configs and
+#    test-suite fixtures (*.jsonl) elsewhere remain tracked.
+# ------------------------------------------------------------------------------
+01_normalized.jsonl
+02_language_filtered.jsonl
+03_quality_filtered.jsonl
+04_deduped.jsonl
+05_pii_reduced.jsonl
+06_tokenized_stats.jsonl
+**/*_raw.jsonl
+**/data_pipeline/processed/
+**/data_pipeline/raw/
+/data/instr_train.txt
+/val.txt
+/dataset-metadata.json
+
+# generated tokenizers (regenerable from training code)
+/tokenizer.json
+/r2000_tokenizer.json
+**/tokenizer/tokenizer.json
+
+# ------------------------------------------------------------------------------
+# 8. LOGS AND RUNTIME / PROBE OUTPUT
+# ------------------------------------------------------------------------------
+*.log
+*.log.*
+logs/
+*.out
+nohup.out
+
+# scratch probe output captured to text files
+/_*.txt
+/_.*.txt
+/._*
+/*_err.txt
+/*_out.txt
+/*.err
+/test_output.txt
+/brain_gate_verbose.txt
+/kaggle_live_logs.txt
+/kaggle_run_logs_raw.txt
+*36b_full_suite.txt
+/-null
+/Continue
+
+# generated HTML/JSON report output
+/sleepstudy-report.html
+/battery_report.html
+/_p7_baseline_suite.json
+/*_report.json
+/*_report.md
+/*_report.html
+
+# ------------------------------------------------------------------------------
+# 9. EDITOR / OS / TOOLING STATE
+# ------------------------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+__MACOSX/
+
+# ------------------------------------------------------------------------------
+# 10. NESTED GIT REPOSITORY
+#     Jarvis-super-intelligence- is itself a git repo (4 commits, own remote
+#     ndichiv-spec/Jarvis-super-intelligence-, currently PUBLIC) containing
+#     committed encryption keys. Left EXCLUDED pending a merge/decision so
+#     git does not record it as a gitlink and silently drop its content.
+# ------------------------------------------------------------------------------
+/Jarvis-super-intelligence-/

@@ -1,0 +1,94 @@
+{
+  "baseline_name": "silverwing-12m-v1-r2000",
+  "created_utc": "2026-09-09T19:41:23Z",
+  "source_checkpoint": "F:\\AI\\silverwing-r2000\\final",
+  "architecture": "Silverwing-12M",
+  "architecture_detail": "6 layers / d_model 384 / 8 Q heads / 2 KV heads / GQA / RoPE(theta=10000) / RMSNorm / SwiGLU / tied embeddings",
+  "params": 12440448,
+  "files": {
+    "config.json": {
+      "path": "config.json",
+      "bytes": 350,
+      "sha256": "334bc89e3ab8378bf34fdaf9a39f6ffcdc994bcfee24d15265d654a08fd0add3"
+    },
+    "metadata.json": {
+      "path": "metadata.json",
+      "bytes": 368,
+      "sha256": "a23ae083bf29a588e4aedd99c662b7ed0cfeec74635743d0d0cb96e237b0c5d3"
+    },
+    "model.safetensors": {
+      "path": "model.safetensors",
+      "bytes": 62350232,
+      "sha256": "2c2775a7a7fe30359ce2c085e3278c69c99bac0452eb45e2cd007a91ffb724d2"
+    },
+    "tokenizer_manifest.json": {
+      "path": "tokenizer_manifest.json",
+      "bytes": 122,
+      "sha256": "a48dafd318f50c29500c35955bb1833fda59ba327c95877621d2e1fbd2e3613f"
+    },
+    "tokenizer/tokenizer.json": {
+      "path": "tokenizer/tokenizer.json",
+      "bytes": 568422,
+      "sha256": "5b09bfb6cf456dbbdc52879c133bf706bafeee34bc9f9766786fd2bda8027844"
+    }
+  },
+  "checkpoint_metadata": {
+    "step": 2000,
+    "tag": "final",
+    "train_loss": 5.38886284828186,
+    "val_loss": 5.874158716201782,
+    "total_tokens": 2048000,
+    "lr": 1.3669809075800288e-10,
+    "batch_size": 1,
+    "grad_accum": 4,
+    "max_seq_len": 256,
+    "torch_version": "2.14.0+cpu",
+    "seed": 42,
+    "model_sha256": "2c2775a7a7fe30359ce2c085e3278c69c99bac0452eb45e2cd007a91ffb724d2"
+  },
+  "training_summary": {
+    "model": "silverwing-12m",
+    "params": 12440448,
+    "steps": 2000,
+    "tokens": 2048000,
+    "train_loss": 5.38886284828186,
+    "val_loss": 5.874158716201782,
+    "val_perplexity": 355.7252688463944,
+    "best_val_loss": 5.863319015502929,
+    "elapsed_s": 2081.1,
+    "device": "cpu",
+    "torch_version": "2.14.0+cpu"
+  },
+  "dataset_manifest": {
+    "name": "silverwing-baseline-corpus-v1",
+    "sources": [
+      {
+        "name": "Project Gutenberg",
+        "license": "Public Domain (US)",
+        "books": [
+          {
+            "file": "alice.txt",
+            "chars": 144696
+          },
+          {
+            "file": "frankenstein.txt",
+            "chars": 419434
+          },
+          {
+            "file": "pride_prejudice.txt",
+            "chars": 728846
+          },
+          {
+            "file": "sherlock.txt",
+            "chars": 581425
+          }
+        ],
+        "total_chars": 1874401
+      }
+    ],
+    "total_characters": 1874401,
+    "note": "r2000 baseline was trained exclusively on these 4 public-domain books; training_tokens in summary counts packed/repeated tokens consumed, not unique corpus tokens."
+  },
+  "read_only": true,
+  "integrity": "DO NOT MODIFY \u2014 baseline preserved for Stage 3A comparison."
+}

@@ -1,0 +1,15 @@
+{
+  "id": "videlisndichi/jarvis-brain-v1-qwen3-4b-base-baseline-eval",
+  "title": "JARVIS BRAIN v1 Qwen3-4B-Base baseline eval",
+  "code_file": "jarvis_brain_baseline.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [
+    "videlisndichi/jarvis-brain-v1-eval"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

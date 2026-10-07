@@ -1,0 +1,13 @@
+{
+  "id": "videlisndichi/jarvis-brain-v1-eval",
+  "title": "JARVIS BRAIN v1 Evaluation Suite",
+  "subtitle": "108 deterministic prompts, 9 task families, shared evaluator (v1)",
+  "description": "Fixed, deterministic evaluation suite for the JARVIS BRAIN v1 candidate gate. Families: conversation, math, logic, coding, knowledge, instruction_following, structured_output, tool_selection, verification. eval_suite.jsonl (sha256 62ae8523b30a2b78891e2fc4391574c22199546b33e2ad5537e107a1da90e248) is shared byte-identically by the baseline and SFT kernels; evaluator.py contains the single evaluation implementation.",
+  "isPrivate": false,
+  "licenses": [
+    {
+      "name": "other"
+    }
+  ],
+  "resources": []
+}

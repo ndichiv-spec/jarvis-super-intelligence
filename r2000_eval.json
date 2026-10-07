@@ -1,0 +1,60 @@
+{
+  "label": "r2000",
+  "param_count": 12440448,
+  "val_loss": 6.3445424883384405,
+  "val_perplexity": 569.3768335750539,
+  "val_windows": 127,
+  "val_tokens_evaluated": 32512,
+  "val_sha256": "561edaf288bd912732305b30c87a985ed208f92f0a8f740256f0dc19755247f9",
+  "generations": {
+    "The story began": " The story begankwardTnt littleains ra and and to.\u201d\n\u201c,?\u201d\n\u201c shall\n?\u201d\n\u201c he he.., what. they to me and me to I that,.\u2019 call\nOh dear, it be just,, her girl said. had.\n\u201c!\u201d the,,, your would",
+    "Science is": " Science is und\n, can to, sisters, you, after dear to. is, you that me You not\nes and to.\u201d\n\u201c have sorry said,,\u201d looked her,, he have half circle,andand.\n\u201c am, I to; make a, his, it not upon, it\n",
+    "Mathematics is": " Mathematics is buy the\nseal common of., to that should well but this; if had at moment it the\nave any and, it be in I the. may be, I, be one the, and is\n when been to and the and about\n enough for for for matter I very. would he me",
+    "Explain gravity.": " Explain gravity. and and hanging ofst at day however the\n began no of father, the of, each to with make for,\nake himself their\u2019 prevent the of, they it as as very.\n\u201cI not and understand said,s. would to, for am that haveto\n his them that with.,",
+    "What is a centrifugal pump?": " What is a centrifugal pump? introduce:\u201c will round,\u201d the.\u201d\n\u201c,\u201d __,\u201d added \u201c is?\u201d\n\u201c,\u201d she,\u201dMiss sister \u201c the of,\u201d he \u201c hope you what not your.\u201d\n\u201c it her,,, to the of.\n\u201c you me. gave to, about.\u201d\n\u201c is about,,\u201d",
+    "What is 17 \u00d7 24?": " What is 17 \ufffd 24? cloaks\n book it\n\u201c first,,\u201d he.\u201d\n\u201c,\u201d \u201c I thatly; is,where they so so!\u201d\n\u201c her.\u201d\n\u201c do __ with that will you that never __, is\now of. will your is you think of more\n\u2019 know?\u201d\n\u201c you",
+    "Explain Newton's second law.": " Explain Newtons second law.ler, was a he her \u201c is indeed you you\n fact so.\u201d\n\u201c!\u201d going little.,,\u201d he \u201c I, dear,\u201d \u201c\u2019 gone\n.\u201d\n\u201c will very with fellow in!\u201d\n\u201c is to last on side the. is young, think it good, dear,and.You,",
+    "Write a Python function that adds two numbers.": " Write a Python function that adds two numbers. beside longer and took\nft I, was a to the of man we very and much to said\n theircent, the of and\u2019- It a Rar-, he in most, I that it not a to to thees\n had the of, were to the to the. was the, was",
+    "Why is preventive maintenance important?": " Why is preventive maintenance important?ridge ear\n, get of husband of, would your, my to the of sir that once us tol.\n\u201c am that will into so a day said, in of, I \u2018You how you\n. why am. you be, you I the,\u201d said the.\n\u201c, I not the of",
+    "Explain photosynthesis.": " Explain photosynthesis. had a--,\n oforish, the--, yet was soon to man she not for.\nWhat a, I,, from out ands; had of was, there at again\n as would much, she with\u2019 farther which should the not to him\n off much in of. with"
+  },
+  "math": {
+    "correct": 0,
+    "total": 8,
+    "accuracy": 0.0
+  },
+  "logic": {
+    "correct": 4,
+    "total": 6,
+    "accuracy": 0.6666666666666666
+  },
+  "knowledge": {
+    "correct": 0,
+    "total": 8,
+    "accuracy": 0.0
+  },
+  "coding": {
+    "correct": 0,
+    "total": 3,
+    "accuracy": 0.0,
+    "details": [
+      {
+        "prompt": "Write a Python function add(a, b) that returns a + b.\n```python",
+        "passed": false,
+        "extracted_len": 0
+      },
+      {
+        "prompt": "Write a Python function factorial(n) returning n!.\n```python",
+        "passed": false,
+        "extracted_len": 0
+      },
+      {
+        "prompt": "Write a Python function is_palindrome(s) that returns True if s reads the same forwards and backwards.\n```python",
+        "passed": false,
+        "extracted_len": 0
+      }
+    ]
+  },
+  "checkpoint": "F:\\AI\\silverwing-r2000\\final",
+  "model_sha256": "2c2775a7a7fe30359ce2c085e3278c69c99bac0452eb45e2cd007a91ffb724d2"
+}

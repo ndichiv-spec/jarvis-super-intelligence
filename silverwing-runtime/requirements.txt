@@ -1,0 +1,17 @@
+# Silverwing Runtime (Layer 2) — inference/serving.
+# Framework-independent core; torch/transformers are OPTIONAL and only needed
+# when serving real weights locally (TorchBackend).
+fastapi>=0.110
+uvicorn>=0.27
+pydantic>=2.6
+python-multipart>=0.0.9
+
+# Optional durable-storage SDKs (lazy-imported by model_storage.py)
+# huggingface_hub>=0.23
+# boto3>=1.34
+# google-cloud-storage>=2.14
+# azure-storage-blob>=12.19
+
+# Optional real-weights backend
+# torch>=2.4
+# safetensors>=0.4.3

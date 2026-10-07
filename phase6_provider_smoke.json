@@ -1,0 +1,55 @@
+{
+  "openai": {
+    "provider": "openai",
+    "configured": true,
+    "key_prefix": "sk-proj-UOSz***",
+    "models_status": 200,
+    "models_found": 124,
+    "models_sample": [
+      "text-embedding-ada-002",
+      "whisper-1",
+      "gpt-3.5-turbo",
+      "tts-1",
+      "gpt-3.5-turbo-16k",
+      "davinci-002"
+    ],
+    "models_latency_ms": 8861.4,
+    "chat_status": 429,
+    "chat_body": "{\n    \"error\": {\n        \"message\": \"You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.\",\n        \"type\": \"insufficient",
+    "chat_latency_ms": 3167.1
+  },
+  "google": {
+    "provider": "google",
+    "configured": true,
+    "key_prefix": "AIzaSyCMVnI8***",
+    "model": "gemini-2.5-flash",
+    "status": 200,
+    "response": "PONG_GOOGLE",
+    "usage": {
+      "prompt": 9,
+      "candidates": 4
+    },
+    "latency_ms": 2278.0
+  },
+  "hf": {
+    "provider": "hf",
+    "configured": true,
+    "key_prefix": "hf_AJkkvpwrq***",
+    "whoami_status": 200,
+    "whoami": {
+      "name": "Reyvic-254",
+      "type": "user"
+    },
+    "latency_ms": 798.8,
+    "inference_note": "JARVIS_HF_INFERENCE_ENDPOINT not set"
+  },
+  "brain": {
+    "provider": "jarvis_brain",
+    "endpoint": "http://127.0.0.1:8011/v1",
+    "key_present": true,
+    "models_error": "ConnectionError: HTTPConnectionPool(host='127.0.0.1', port=8011): Max retries exceeded with url: /v1/v1/models (Caused by NewConnectionError(\"HTTPConnection(host='127.0.0.1', port=8011): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it\"))",
+    "models_latency_ms": 2059.0,
+    "chat_error": "ConnectionError: HTTPConnectionPool(host='127.0.0.1', port=8011): Max retries exceeded with url: /v1/v1/chat/completions (Caused by NewConnectionError(\"HTTPConnection(host='127.0.0.1', port=8011): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it\"))",
+    "chat_latency_ms": 2037.5
+  }
+}

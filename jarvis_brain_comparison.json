@@ -1,0 +1,105 @@
+{
+  "purpose": "JARVIS BRAIN v1 - Qwen3-4B baseline vs Silverwing-120M vs r2000 (identical r2000 benchmark).",
+  "benchmark_source": "stage3a_evaluate.py (FIXED_PROMPTS + MATH/LOGIC/KNOW/CODE_QS)",
+  "fairness": "Qwen column is scored with the SAME scorers (first_int / keyword / exec-subprocess) as Silverwing. Silverwing/r2000 columns are real existing reports, not re-run. No results are fabricated: an unconfigured Brain is reported as 'unconfigured'.",
+  "columns": {
+    "qwen3_4b_v1": {
+      "status": "error",
+      "endpoint": "http://127.0.0.1:8011/v1",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "categories": {},
+      "generations": {},
+      "error": "ConnectError: All connection attempts failed"
+    },
+    "silverwing_120m_pilot": {
+      "label": "silverwing-120m-pilot",
+      "param_count": 120087552,
+      "val_loss": 7.098564061592883,
+      "val_perplexity": 1210.2280133133388,
+      "categories": {
+        "math": {
+          "correct": 0,
+          "total": 8,
+          "accuracy": 0.0
+        },
+        "logic": {
+          "correct": 4,
+          "total": 6,
+          "accuracy": 0.6666666666666666
+        },
+        "knowledge": {
+          "correct": 0,
+          "total": 8,
+          "accuracy": 0.0
+        },
+        "coding": {
+          "correct": 0,
+          "total": 3,
+          "accuracy": 0.0
+        }
+      },
+      "generations": {
+        "The story began": " The story begang. The aralamied is a aut is taken of no of a ancient ancientialialialaxies. The nies.\nbut, the first, with the With the strongen as the parical that the can beality ofom Lapment is time to study of an Among the cha",
+        "Science is": " Science ispicallygiroation .\nMasiss, and we have a exclamamroical Sp through a\ncribute to the large large of Q Q Qufi:\nThe systemsems also also think . It is a\nMr Mon (AAmis .",
+        "Mathematics is": " Mathematics is and a manbotenci upon a attempts at the aid for a few der is yet ps the fine su of theumbm] dy.\nadales to have been the fire, the same field of the vanments.\nyour, or a January again, together is past are not their",
+        "Explain gravity.": " Explain gravity. on an\nplitnychnates over the first-time. Ret , as aHI g gings and these radifie; many many a\nxtic C5. NASSN 97). The\ncode:22001010.",
+        "What is a centrifugal pump?": " What is a centrifugal pump?sy-54-fs3) .124010 .. Octoberg;; El original on , the original on 2020 , ppin, 20-0219767. The pp.\nf",
+        "What is 17 × 24?": " What is 17 � 24? of 33305101 .\n02. However, E.110143.11142148-202021. Ccepts, Lner.19.\natics: L. M. Retrieved",
+        "Explain Newton's second law.": " Explain Newtons second law. of MartartartPDF)-078, and subg. ISN 97. doi:102298 .116 .19-0-1. Retrieved 20202020010110",
+        "Write a Python function that adds two numbers.": " Write a Python function that adds two numbers. went went to the occur, as the Tr encounter.\nI amgan will have been view, he management that a super of the\nthe fiveed that I should be looked of someonsider of a way, and was, to their quite man by when I\nttited, that the learning and",
+        "Why is preventive maintenance important?": " Why is preventive maintenance important? how, to\nf scheme left to the tobacco, said he was a unmarboled; and time of the tro to the\nThe rock to called in the\nthe tail, been divine, and no taken to make the\nct he was a little upon the knowing, the number of them.",
+        "Explain photosynthesis.": " Explain photosynthesis. of the Sololome the ran re may be S22-10, then, 7556. C thus, Fular were the desire Historpy, how ever to the\na one of the Its 202. J.\nIDFruary ."
+      },
+      "checkpoint": "F:\\AI\\silverwing-120m\\final",
+      "model_sha256": "7a2fd08e85432aad73cac6911b67d9b9167077d981076d28106f606c4231a333"
+    },
+    "r2000": {
+      "label": "r2000",
+      "param_count": 12440448,
+      "val_loss": 6.3445424883384405,
+      "val_perplexity": 569.3768335750539,
+      "categories": {
+        "math": {
+          "correct": 0,
+          "total": 8,
+          "accuracy": 0.0
+        },
+        "logic": {
+          "correct": 4,
+          "total": 6,
+          "accuracy": 0.6666666666666666
+        },
+        "knowledge": {
+          "correct": 0,
+          "total": 8,
+          "accuracy": 0.0
+        },
+        "coding": {
+          "correct": 0,
+          "total": 3,
+          "accuracy": 0.0
+        }
+      },
+      "generations": {
+        "The story began": " The story begankwardTnt littleains ra and and to.”\n“,?”\n“ shall\n?”\n“ he he.., what. they to me and me to I that,.’ call\nOh dear, it be just,, her girl said. had.\n“!” the,,, your would",
+        "Science is": " Science is und\n, can to, sisters, you, after dear to. is, you that me You not\nes and to.”\n“ have sorry said,,” looked her,, he have half circle,andand.\n“ am, I to; make a, his, it not upon, it\n",
+        "Mathematics is": " Mathematics is buy the\nseal common of., to that should well but this; if had at moment it the\nave any and, it be in I the. may be, I, be one the, and is\n when been to and the and about\n enough for for for matter I very. would he me",
+        "Explain gravity.": " Explain gravity. and and hanging ofst at day however the\n began no of father, the of, each to with make for,\nake himself their’ prevent the of, they it as as very.\n“I not and understand said,s. would to, for am that haveto\n his them that with.,",
+        "What is a centrifugal pump?": " What is a centrifugal pump? introduce:“ will round,” the.”\n“,” __,” added “ is?”\n“,” she,”Miss sister “ the of,” he “ hope you what not your.”\n“ it her,,, to the of.\n“ you me. gave to, about.”\n“ is about,,”",
+        "What is 17 × 24?": " What is 17 � 24? cloaks\n book it\n“ first,,” he.”\n“,” “ I thatly; is,where they so so!”\n“ her.”\n“ do __ with that will you that never __, is\now of. will your is you think of more\n’ know?”\n“ you",
+        "Explain Newton's second law.": " Explain Newtons second law.ler, was a he her “ is indeed you you\n fact so.”\n“!” going little.,,” he “ I, dear,” “’ gone\n.”\n“ will very with fellow in!”\n“ is to last on side the. is young, think it good, dear,and.You,",
+        "Write a Python function that adds two numbers.": " Write a Python function that adds two numbers. beside longer and took\nft I, was a to the of man we very and much to said\n theircent, the of and’- It a Rar-, he in most, I that it not a to to thees\n had the of, were to the to the. was the, was",
+        "Why is preventive maintenance important?": " Why is preventive maintenance important?ridge ear\n, get of husband of, would your, my to the of sir that once us tol.\n“ am that will into so a day said, in of, I ‘You how you\n. why am. you be, you I the,” said the.\n“, I not the of",
+        "Explain photosynthesis.": " Explain photosynthesis. had a--,\n oforish, the--, yet was soon to man she not for.\nWhat a, I,, from out ands; had of was, there at again\n as would much, she with’ farther which should the not to him\n off much in of. with"
+      },
+      "checkpoint": "F:\\AI\\silverwing-r2000\\final",
+      "model_sha256": "2c2775a7a7fe30359ce2c085e3278c69c99bac0452eb45e2cd007a91ffb724d2"
+    }
+  },
+  "env": {
+    "JARVIS_ADMIN_EMAIL": "admin@jarvis.local",
+    "JARVIS_BRAIN_MODEL": "nvidia/nemotron-3-ultra-550b-a55b",
+    "brain_endpoint_set": true,
+    "brain_api_key_configured": true
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "model_id": "jarvis-brain-qwen3-4b-sft",
+  "version": "v1",
+  "revision": "main",
+  "training_method": "sft",
+  "architecture": "Qwen3ForCausalLM",
+  "parameter_count": 4004667392,
+  "context_length": 40960,
+  "vocab_size": 151936,
+  "tokenizer": {
+    "version": "qwen3-tokenizer",
+    "type": "bpe",
+    "vocab_size": 151936,
+    "sha256": ""
+  },
+  "weights": {
+    "format": "remote-safetensors-sharded-hf",
+    "sha256": "",
+    "size_bytes": null,
+    "config_sha256": "",
+    "storage_uri": "hf://videlisndichi/jarvis-brain-qwen3-4b-sft-v1"
+  },
+  "capabilities": [
+    "text-generation",
+    "chat",
+    "reasoning",
+    "coding",
+    "math",
+    "long-context"
+  ],
+  "status": "training",
+  "created_at": "2026-09-15T00:00:00Z",
+  "archive_note": "SFT candidate. NOT yet published. SHA-256 hashes and exact size are populated after the Kaggle SFT kernel (silverwing_runtime/BRAIN_LINEAGE.md) trains and uploads to Hugging Face. This manifest only documents lineage: it does NOT overwrite Qwen/Qwen3-4B (Base). Weights are never stored in the JARVIS source tree.",
+  "evaluation": {
+    "license": "apache-2.0",
+    "source": "huggingface.co/videlisndichi/jarvis-brain-qwen3-4b-sft-v1",
+    "baseline": "pending — Kaggle SFT kernel training; run before promotion",
+    "training": "sft (Kaggle fine-tune of Qwen3-4B Base)",
+    "local_inference_feasibility": "NOT feasible on JARVIS PC (7.9 GB RAM, no GPU) — remote GPU required. Served on the Brain runtime (:8011) once published."
+  }
+}

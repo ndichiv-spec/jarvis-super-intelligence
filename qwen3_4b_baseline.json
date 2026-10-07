@@ -1,0 +1,8 @@
+{
+  "status": "error",
+  "endpoint": "http://127.0.0.1:8011/v1",
+  "model": "nvidia/nemotron-3-ultra-550b-a55b",
+  "categories": {},
+  "generations": {},
+  "error": "ConnectError: All connection attempts failed"
+}

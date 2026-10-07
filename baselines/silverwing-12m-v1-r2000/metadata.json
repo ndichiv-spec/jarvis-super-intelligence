@@ -1,0 +1,14 @@
+{
+  "step": 2000,
+  "tag": "final",
+  "train_loss": 5.38886284828186,
+  "val_loss": 5.874158716201782,
+  "total_tokens": 2048000,
+  "lr": 1.3669809075800288e-10,
+  "batch_size": 1,
+  "grad_accum": 4,
+  "max_seq_len": 256,
+  "torch_version": "2.14.0+cpu",
+  "seed": 42,
+  "model_sha256": "2c2775a7a7fe30359ce2c085e3278c69c99bac0452eb45e2cd007a91ffb724d2"
+}

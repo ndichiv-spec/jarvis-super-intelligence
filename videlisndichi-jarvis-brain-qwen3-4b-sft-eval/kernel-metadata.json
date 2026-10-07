@@ -1,0 +1,15 @@
+{
+  "id": "videlisndichi/jarvis-brain-v1-sft-candidate-eval",
+  "title": "JARVIS BRAIN v1 SFT candidate eval",
+  "code_file": "jarvis_brain_sft_eval.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [
+    "videlisndichi/jarvis-brain-v1-eval"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

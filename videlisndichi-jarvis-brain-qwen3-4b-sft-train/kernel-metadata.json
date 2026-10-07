@@ -1,0 +1,20 @@
+{
+  "id": "videlisndichi/jarvis-brain-v1-qwen3-4b-lora-qlora-sft",
+  "title": "JARVIS Brain v1 - Qwen3-4B LoRA/QLoRA SFT",
+  "code_file": "jarvis_brain_sft.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_interactive": false,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "enable_tpu": false,
+  "enable_tensorflow": false,
+  "enable_pytorch": true,
+  "packages": [],
+  "dataset_sources": [
+    "videlisndichi/jarvis-brain-v1-sft"
+  ],
+  "kernel_sources": [],
+  "competition_sources": [],
+  "model_sources": []
+}

@@ -1,0 +1,19 @@
+{
+  "title": "Silverwing Checkpoints",
+  "id": "videlisndichi/silverwing-checkpoints",
+  "subtitle": "Training checkpoints for Silverwing-12M LLM",
+  "description": "Latest training checkpoints (step-1000) for the Silverwing-12M language model, including model weights, optimizer state, config, and BPE tokenizer. Use --resume with the silverwing-training-v3 kernel to continue training from this checkpoint.",
+  "keywords": [
+    "machine-learning",
+    "deep-learning",
+    "language-model",
+    "training-checkpoint",
+    "silverwing",
+    "llm"
+  ],
+  "licenses": [
+    {
+      "name": "MIT"
+    }
+  ]
+}

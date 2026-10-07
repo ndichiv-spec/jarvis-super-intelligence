@@ -1,0 +1,21 @@
+{
+  "all_passed": true,
+  "checks": {
+    "config_loads": true,
+    "config_matches_12m": true,
+    "weights_load": true,
+    "param_count": true,
+    "output_shape": true,
+    "loss_finite": true,
+    "no_nan_weights": true,
+    "no_inf_weights": true,
+    "tokenizer_loads": true,
+    "tokenizer_roundtrip": true,
+    "val_eval_works": true,
+    "generation_works": true
+  },
+  "val_loss": 5.874158716201782,
+  "val_ppl": 355.7252688463944,
+  "param_count": 12440448,
+  "model_sha256": "2c2775a7a7fe30359ce2c085e3278c69c99bac0452eb45e2cd007a91ffb724d2"
+}

@@ -1,0 +1,14 @@
+{
+  "model_id": "silverwing-120m-base",
+  "evaluations": [
+    {
+      "label": "r1-real-eval",
+      "revision": "r1",
+      "timestamp": "2026-09-12T14:17:41Z",
+      "val_loss": 8.386914253234863,
+      "val_perplexity": 4389.252653677907,
+      "param_count": 120087552,
+      "path": "evaluations\\silverwing-120m-base\\r1\\r1-real-eval.json"
+    }
+  ]
+}
