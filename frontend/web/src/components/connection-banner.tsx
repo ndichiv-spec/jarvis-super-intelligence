@@ -61,7 +61,7 @@ export function ConnectionBanner() {
               <>
                 <Wifi className="h-5 w-5 text-white" />
                 <span className="text-sm font-semibold text-white">
-                  Connection Restored - All systems operational
+                  Connection Restored - Backend API reachable
                 </span>
               </>
             ) : (

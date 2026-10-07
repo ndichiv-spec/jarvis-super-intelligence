@@ -102,6 +102,7 @@ def test_matrix_marks_openai_configured_when_key_present(client, admin_headers, 
     assert resp.status_code == 200
     by_id = {p["id"]: p for p in resp.json()["providers"]}
     assert by_id["openai"]["configured"] is True
+    assert by_id["openai"]["connected"] is False
     assert by_id["openai"]["status"] == "CONFIGURED"  # probe=false -> no live call
     # Others remain NOT_CONFIGURED.
     assert by_id["gemini"]["status"] == "NOT_CONFIGURED"
@@ -117,6 +118,7 @@ def test_matrix_live_probe_reports_invalid_key_without_network(client, admin_hea
     assert resp.status_code == 200
     by_id = {p["id"]: p for p in resp.json()["providers"]}
     assert by_id["openai"]["status"] == "INVALID_KEY"
+    assert by_id["openai"]["connected"] is False
     assert by_id["openai"]["validator_result"]["verified"] is False
 
 
@@ -181,6 +183,7 @@ def test_openai_healthy_when_key_present_and_validator_passes(client, admin_head
     assert resp.status_code == 200
     by_id = {p["id"]: p for p in resp.json()["providers"]}
     assert by_id["openai"]["status"] == "HEALTHY"
+    assert by_id["openai"]["connected"] is True
     assert by_id["openai"]["validator_result"]["verified"] is True
     # Gemini is still NOT_CONFIGURED here (no google key present).
     assert by_id["gemini"]["status"] == "NOT_CONFIGURED"
@@ -206,6 +209,71 @@ def test_gemini_recognizes_all_canonical_key_names(client, admin_headers, monkey
     resp = _get(client, admin_headers)
     by_id = {p["id"]: p for p in resp.json()["providers"]}
     assert by_id["gemini"]["status"] == "NOT_CONFIGURED"
+
+
+def test_ai_status_does_not_treat_provider_configuration_as_available(
+    client, monkeypatch
+):
+    from jarvis_backend.routers import ai
+
+    async def catalog():
+        return {
+            "providers": [{
+                "provider": "google",
+                "configured": True,
+                "available": False,
+                "inference_verified": False,
+            }],
+        }
+
+    async def unavailable(*args, **kwargs):
+        return False
+
+    monkeypatch.setattr(ai, "_provider_catalog", catalog)
+    monkeypatch.setattr(ai, "_probe_endpoint", unavailable)
+    monkeypatch.setattr(ai, "_probe_silverwing_chat", unavailable)
+    monkeypatch.delenv("SILVERWING_ENDPOINT", raising=False)
+    monkeypatch.delenv("JARVIS_BRAIN_ENDPOINT", raising=False)
+
+    response = client.get("/api/v1/ai/status")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["enabled"] is False
+    assert body["status"] == "degraded"
+    assert body["configured_provider_count"] == 1
+    assert body["providers"][0]["status"] == "CONFIGURED"
+    assert body["providers"][0]["inference_verified"] is False
+    assert "127.0.0.1" not in response.text
+
+
+def test_ai_status_requires_verified_inference_for_online_state(client, monkeypatch):
+    from jarvis_backend.routers import ai
+
+    async def catalog():
+        return {
+            "providers": [{
+                "provider": "google",
+                "configured": True,
+                "available": True,
+                "inference_verified": True,
+            }],
+        }
+
+    async def unavailable(*args, **kwargs):
+        return False
+
+    monkeypatch.setattr(ai, "_provider_catalog", catalog)
+    monkeypatch.setattr(ai, "_probe_endpoint", unavailable)
+    monkeypatch.setattr(ai, "_probe_silverwing_chat", unavailable)
+    monkeypatch.delenv("SILVERWING_ENDPOINT", raising=False)
+    monkeypatch.delenv("JARVIS_BRAIN_ENDPOINT", raising=False)
+
+    response = client.get("/api/v1/ai/status")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["enabled"] is True
+    assert body["provider"] == "google"
+    assert body["status"] == "ready"
 
 
 def test_openai_invoke_runs_real_provider_path(client, admin_headers, monkeypatch):

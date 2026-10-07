@@ -293,12 +293,13 @@ async def _provider_catalog() -> Dict[str, Any]:
     brain_up = await _probe_endpoint(brain_ep) if brain_ep else False
     catalog["providers"].append({
         "provider": "jarvis-brain",
-        "available": brain_up,
+        "available": False,
         "authorized": brain_up,
+        "configured": bool(brain_ep),
+        "inference_verified": False,
         "model": _os.environ.get("JARVIS_BRAIN_MODEL", "jarvis-brain-qwen3-4b-sft-v1"),
-        "endpoint": brain_ep or None,
         "models": [_os.environ.get("JARVIS_BRAIN_MODEL", "jarvis-brain-qwen3-4b-sft-v1")],
-        "health_status": "healthy" if brain_up else "unreachable",
+        "health_status": "reachable_unverified" if brain_up else "unreachable",
         "errors": None if brain_up else "endpoint did not accept a connection",
     })
 
@@ -307,12 +308,13 @@ async def _provider_catalog() -> Dict[str, Any]:
     sw_up = await _probe_endpoint(sw_ep) if sw_ep else False
     catalog["providers"].append({
         "provider": "silverwing",
-        "available": sw_up,
+        "available": False,
         "authorized": sw_up,
+        "configured": bool(sw_ep),
+        "inference_verified": False,
         "model": _os.environ.get("SILVERWING_MODEL", "silverwing-120m-base-v1"),
-        "endpoint": sw_ep or None,
         "models": [_os.environ.get("SILVERWING_MODEL", "silverwing-120m-base-v1")],
-        "health_status": "healthy" if sw_up else "unreachable",
+        "health_status": "reachable_unverified" if sw_up else "unreachable",
         "errors": None if sw_up else "endpoint did not accept a connection",
     })
 
@@ -325,13 +327,17 @@ async def _provider_catalog() -> Dict[str, Any]:
     _fabric_providers: set[str] = set()
 
     try:
-        from ..gateway import _ensure_provider_fabric_import_path
+        from ..gateway import (
+            _ensure_provider_fabric_import_path,
+            verified_streaming_providers,
+        )
         _ensure_provider_fabric_import_path()
         from providers.control_center import ProviderControlCenter  # type: ignore[import-not-found]
         from providers.bootstrap import bootstrap_fabric  # type: ignore[import-not-found]
         _fabric = bootstrap_fabric()
         cc = ProviderControlCenter()
         _fabric_providers = set(cc.list_providers())
+        _streaming_verified = verified_streaming_providers()
         for pid in _fabric_providers:
             try:
                 st = cc.check_provider(pid)
@@ -341,17 +347,15 @@ async def _provider_catalog() -> Dict[str, Any]:
             _adapter = _fabric._adapters.get(pid)
             _models = [m.model_id for m in _adapter.models] if _adapter and _adapter.models else []
             _default_model = _models[0] if _models else None
-            # A provider is offered for selection only when a live probe proved
-            # its endpoint is reachable, its credential is accepted, and it can
-            # actually serve chat/streaming. The probe performs a real model-list
-            # call, so this is measured health - never "it exists in the catalog".
+            # A model-list probe proves configuration and reachability, not
+            # inference. Only a successful provider response marks it available.
             _healthy = st.health_status in ("healthy", "degraded")
             _serves_chat = any(
                 c in ("chat", "streaming", "reasoning")
                 for c in (st.capabilities or [])
             )
             _available = bool(
-                st.configured and _healthy and st.model_list_available and _serves_chat
+                st.configured and _healthy and st.inference_verified and _serves_chat
             )
             entry: Dict[str, Any] = {
                 "provider": pid,
@@ -367,10 +371,10 @@ async def _provider_catalog() -> Dict[str, Any]:
                 "configured": st.configured,
                 "model_list_available": st.model_list_available,
                 "inference_verified": st.inference_verified,
+                "streaming_verified": pid in _streaming_verified,
                 "model": _default_model,
                 "models": _models,
                 "capabilities": st.capabilities,
-                "endpoint": getattr(_adapter, "base_url", None) if _adapter else None,
                 "latency_ms": st.latency_ms,
                 "health_status": st.health_status,
                 "errors": st.errors,
@@ -479,11 +483,36 @@ async def ai_status():
     import os as _os
 
     data = {"status": "degraded", **ai_service.settings()}
+    catalog = await _provider_catalog()
+    configured_providers = [
+        provider for provider in catalog["providers"] if provider.get("configured")
+    ]
+    verified_providers = [
+        provider for provider in configured_providers
+        if provider.get("inference_verified") and provider.get("available")
+    ]
+    data["configured_provider_count"] = len(configured_providers)
+    data["provider_available"] = bool(verified_providers)
+    data["providers"] = [
+        {
+            "provider": provider["provider"],
+            "status": (
+                "AVAILABLE" if provider in verified_providers
+                else "CONFIGURED" if provider.get("configured")
+                else "UNCONFIGURED"
+            ),
+            "inference_verified": bool(provider.get("inference_verified")),
+        }
+        for provider in catalog["providers"]
+    ]
+    if verified_providers:
+        data["provider"] = verified_providers[0]["provider"]
+        data["enabled"] = True
     # The platform's own trained model needs no cloud key: report the chat
     # path as enabled only when the Silverwing runtime is actually reachable.
     # Availability must be based on a real TCP probe, not just a configured URL.
     sw_endpoint = _os.environ.get("SILVERWING_ENDPOINT", "").strip()
-    data["silverwing_endpoint"] = sw_endpoint or None
+    data["silverwing_endpoint_configured"] = bool(sw_endpoint)
     data["silverwing_model"] = _os.environ.get("SILVERWING_MODEL", "silverwing-120m-base-v1")
     # Silverwing is integrated in-process under /silverwing in the single-process
     # deployment; verify that mount (real flag) before the standalone :8010
@@ -510,33 +539,40 @@ async def ai_status():
         "errors": None if sw_can_chat else ("runtime /v1/chat/completions not responding" if sw_up else ("runtime not reachable" if sw_endpoint else "not configured")),
         "model": _os.environ.get("SILVERWING_MODEL", "silverwing-120m-base-v1"),
     }
-    if sw_can_chat and not data.get("enabled"):
-        data["enabled"] = True
-        data["provider"] = "silverwing"
     # JARVIS BRAIN (remote Qwen3-4B) — configured endpoint only; liveness is
     # measured by a real probe, never assumed.  Healthy only after the probe
     # succeeds.
     brain_endpoint = _os.environ.get("JARVIS_BRAIN_ENDPOINT", "").strip()
-    data["brain_endpoint"] = brain_endpoint or None
+    data["brain_endpoint_configured"] = bool(brain_endpoint)
     data["brain_model"] = _os.environ.get("JARVIS_BRAIN_MODEL", "jarvis-brain-qwen3-4b-sft-v1")
     from ..gateway import ProviderGateway, _jarvis_brain_api_key_configured
     data["brain_api_key_configured"] = _jarvis_brain_api_key_configured()
     if brain_endpoint:
         probe = await ProviderGateway().probe_brain()
+        if isinstance(probe, dict):
+            probe.pop("endpoint", None)
         data["brain"] = probe
-        if probe.get("healthy") and not data.get("enabled"):
-            data["enabled"] = True
-            data["provider"] = "jarvis-brain"
+        if probe.get("healthy"):
+            data["provider_available"] = True
+            for provider in data["providers"]:
+                if provider["provider"] == "jarvis-brain":
+                    provider["status"] = "AVAILABLE"
+                    provider["inference_verified"] = True
     else:
         data["brain"] = {"configured": False, "healthy": False}
-    # Platform status: ONLINE only when a real provider can execute.
-    _real_provider = bool(data.get("enabled")) and (
-        sw_can_chat
-        or (data.get("brain") and data["brain"].get("healthy"))
+    # Online status requires a successful inference, not only model-list or
+    # endpoint reachability.
+    brain_verified = bool(data.get("brain", {}).get("healthy"))
+    _real_provider = bool(verified_providers) or sw_can_chat or brain_verified
+    data["enabled"] = _real_provider
+    data["provider"] = (
+        verified_providers[0]["provider"] if verified_providers
+        else "silverwing" if sw_can_chat
+        else "jarvis-brain" if brain_verified
+        else "auto"
     )
     data["platform_status"] = "online" if _real_provider else "degraded"
-    if not _real_provider:
-        data["status"] = "degraded"
+    data["status"] = "ready" if _real_provider else "degraded"
     return data
 
 

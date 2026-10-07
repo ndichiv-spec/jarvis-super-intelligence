@@ -387,6 +387,15 @@ async def start_grpc_server(host: str = "0.0.0.0", port: int = 50051) -> int:
     return actual_port
 
 
+async def stop_grpc_server(grace: float = 5.0) -> None:
+    """Stop the embedded gRPC server during FastAPI shutdown."""
+    global _SERVER
+    server, _SERVER = _SERVER, None
+    if server is not None:
+        await server.stop(grace)
+        await server.wait_for_termination()
+
+
 def start_grpc_server_blocking(host: str = "0.0.0.0", port: int = 50051) -> None:
     """Start gRPC server (blocking, for standalone use).
 

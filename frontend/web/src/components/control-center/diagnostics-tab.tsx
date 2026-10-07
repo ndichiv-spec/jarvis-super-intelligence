@@ -21,15 +21,14 @@ interface AiStatus {
   status: string;
   provider: string;
   enabled: boolean;
-  silverwing_endpoint?: string;
+  silverwing_endpoint_configured?: boolean;
   silverwing_model?: string;
-  brain_endpoint?: string;
+  brain_endpoint_configured?: boolean;
   brain_model?: string;
   brain_api_key_configured?: boolean;
   brain?: {
     configured: boolean;
     healthy: boolean;
-    endpoint: string;
     latency_ms: number | null;
     category: string;
     detail: string;
@@ -156,15 +155,15 @@ export function DiagnosticsTab() {
               <SysInfoRow label="Enabled" value={aiStatus.enabled ? "true" : "false"} />
               {aiStatus.brain && (
                 <>
-                  <SysInfoRow label="JARVIS Brain Endpoint" value={aiStatus.brain.endpoint} icon={<BrainIcon className="h-4 w-4" />} />
+                  <SysInfoRow label="JARVIS Brain Endpoint" value={aiStatus.brain_endpoint_configured ? "Configured" : "Not configured"} icon={<BrainIcon className="h-4 w-4" />} />
                   <SysInfoRow label="Brain Healthy" value={aiStatus.brain.healthy ? "Yes" : "No"} icon={
                     aiStatus.brain.healthy ? <Check className="h-4 w-4 text-success" /> : <X className="h-4 w-4 text-destructive" />
                   } />
                   <SysInfoRow label="Brain Detail" value={aiStatus.brain.detail} />
                 </>
               )}
-              {aiStatus.silverwing_endpoint && (
-                <SysInfoRow label="Silverwing Endpoint" value={aiStatus.silverwing_endpoint} icon={<Activity className="h-4 w-4" />} />
+              {aiStatus.silverwing_endpoint_configured && (
+                <SysInfoRow label="Silverwing Endpoint" value="Configured" icon={<Activity className="h-4 w-4" />} />
               )}
             </div>
           </CardContent>

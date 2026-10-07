@@ -498,6 +498,8 @@ class AuditEventService:
         start_time: Optional[float] = None,
         end_time: Optional[float] = None,
         category: Optional[str] = None,
+        event_type: Optional[str] = None,
+        user_id: Optional[str] = None,
         severity: Optional[str] = None,
     ) -> int:
         """Count events matching filters."""
@@ -510,6 +512,10 @@ class AuditEventService:
         
         if category:
             conditions.append(AuditEventRecord.category == category)
+        if event_type:
+            conditions.append(AuditEventRecord.event_type == event_type)
+        if user_id:
+            conditions.append(AuditEventRecord.user_id == user_id)
         if severity:
             conditions.append(AuditEventRecord.severity == severity)
         if start_time:

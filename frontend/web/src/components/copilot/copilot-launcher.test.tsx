@@ -52,7 +52,7 @@ describe('CopilotLauncher', () => {
     const { rerender } = render(<CopilotLauncher />);
     await waitFor(() => expect(screen.queryByRole('button', { name: 'JARVIS Copilot' })).not.toBeInTheDocument());
 
-    act(() => useAuthStore.setState({ token: 'test-token', isAuthenticated: true }));
+    act(() => useAuthStore.setState({ isAuthenticated: true }));
     vi.mocked(usePathname).mockReturnValue('/login');
     rerender(<CopilotLauncher />);
 
@@ -60,7 +60,7 @@ describe('CopilotLauncher', () => {
   });
 
   it('toggles with Ctrl+J, focuses chat, and restores focus on Escape', async () => {
-    useAuthStore.setState({ token: 'test-token', isAuthenticated: true });
+    useAuthStore.setState({ isAuthenticated: true });
     const { unmount } = render(<CopilotLauncher />);
 
     const launcher = await screen.findByRole('button', { name: 'JARVIS Copilot' });
@@ -79,7 +79,7 @@ describe('CopilotLauncher', () => {
 
   it('reports browser context failures and allows retrying initialization', async () => {
     chatLifecycle.browserContextError = 'Browser integration could not load';
-    useAuthStore.setState({ token: 'test-token', isAuthenticated: true });
+    useAuthStore.setState({ isAuthenticated: true });
     render(<CopilotLauncher />);
     fireEvent.click(await screen.findByRole('button', { name: 'JARVIS Copilot' }));
 

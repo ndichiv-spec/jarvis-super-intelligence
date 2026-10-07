@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Edit, Trash2, Save, X, Check, Calendar, Clock, Bell } from 'lucide-react';
-import { getAuthToken } from '@/lib/api-client';
 import { getApiUrl } from '@/lib/runtime-url';
 
 interface Reminder {
@@ -17,12 +16,11 @@ interface Reminder {
 }
 
 const authHeaders = (json = false): Record<string, string> => {
-  const token = getAuthToken();
-  const headers: Record<string, string> = {};
-  if (json) headers['Content-Type'] = 'application/json';
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  return headers;
+  return json ? { 'Content-Type': 'application/json' } : {};
 };
+
+const sessionFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
+  fetch(input, { ...init, credentials: 'include' });
 
 export default function JarvisReminders() {
   const [reminders, setReminders] = useState<Reminder[]>([]);
@@ -36,7 +34,7 @@ export default function JarvisReminders() {
 
   const loadReminders = async () => {
     try {
-      const response = await fetch(getApiUrl('/api/reminders'), { headers: authHeaders() });
+      const response = await sessionFetch(getApiUrl('/api/reminders'), { headers: authHeaders() });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       setReminders(data.reminders);
@@ -47,7 +45,7 @@ export default function JarvisReminders() {
 
   const createReminder = async () => {
     try {
-      const response = await fetch(getApiUrl('/api/reminders'), {
+      const response = await sessionFetch(getApiUrl('/api/reminders'), {
         method: 'POST',
         headers: authHeaders(true),
         body: JSON.stringify(newReminder)
@@ -67,7 +65,7 @@ export default function JarvisReminders() {
   const updateReminder = async () => {
     if (!editingReminder) return;
     try {
-      const response = await fetch(getApiUrl(`/api/reminders/${encodeURIComponent(editingReminder.id)}`), {
+      const response = await sessionFetch(getApiUrl(`/api/reminders/${encodeURIComponent(editingReminder.id)}`), {
         method: 'PATCH',
         headers: authHeaders(true),
         body: JSON.stringify(editingReminder)
@@ -85,7 +83,7 @@ export default function JarvisReminders() {
 
   const deleteReminder = async (id: string) => {
     try {
-      await fetch(getApiUrl(`/api/reminders/${encodeURIComponent(id)}`), { method: 'DELETE', headers: authHeaders() });
+      await sessionFetch(getApiUrl(`/api/reminders/${encodeURIComponent(id)}`), { method: 'DELETE', headers: authHeaders() });
       setReminders(reminders.filter(reminder => reminder.id !== id));
     } catch (error) {
       console.error('Failed to delete reminder:', error);
@@ -94,7 +92,7 @@ export default function JarvisReminders() {
 
   const completeReminder = async (id: string) => {
     try {
-      const response = await fetch(getApiUrl(`/api/reminders/${encodeURIComponent(id)}/complete`), {
+      const response = await sessionFetch(getApiUrl(`/api/reminders/${encodeURIComponent(id)}/complete`), {
         method: 'POST',
         headers: authHeaders()
       });

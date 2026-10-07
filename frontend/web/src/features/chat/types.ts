@@ -8,6 +8,7 @@ export interface ChatMessage {
   content: string;
   timestamp?: string;
   model?: string;
+  provider?: string;
   tool_calls?: ToolCall[];
   runtime_events?: RuntimeActivityEvent[];
   sources?: string[];
@@ -64,6 +65,7 @@ export interface ChatResponse {
   session_id?: string;
   message?: string;
   model?: string;
+  provider?: string;
   confidence?: number;
   sources?: string[];
   intent?: string;
@@ -185,6 +187,7 @@ export interface ChatStreamChunk {
   status?: string;
   message_id?: string;
   model?: string;
+  provider?: string;
   resumed?: boolean;
   event_id?: string;
   event_type?: string;
@@ -197,6 +200,7 @@ export interface MessageTurnResult {
   session_id?: string;
   message?: string | null;
   model?: string;
+  provider?: string;
   latency_ms?: number | null;
   sources?: string[];
   status?: string;

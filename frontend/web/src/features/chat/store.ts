@@ -13,7 +13,7 @@ import type {
   ChatSettings,
 } from './types';
 import type { AgentTask } from '@/features/agents/types';
-import chatApi, { newClientMessageId } from './api';
+import chatApi, { cancelStreamingMessage, newClientMessageId } from './api';
 import wsClient from '@/lib/websocket-client';
 import API_ENDPOINTS from '@/config/api';
 
@@ -108,6 +108,7 @@ interface ChatState {
   checkConnection: () => Promise<boolean>;
   sendMessage: (content: string, clientMessageId?: string) => Promise<void>;
   sendStreamMessage: (content: string, clientMessageId?: string) => Promise<void>;
+  stopStream: () => void;
   loadSessions: () => Promise<void>;
   loadSession: (sessionId: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
@@ -288,6 +289,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         content: response.message ?? '',
         timestamp: response.timestamp || new Date().toISOString(),
         model: response.model,
+        provider: response.provider,
+        latency_ms: response.latency_ms ?? undefined,
         sources: response.sources,
         tool_calls: response.tool_calls,
         runtime_events: response.runtime_events,
@@ -310,11 +313,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       get().loadSessions();
     } catch (error) {
-      set({
+      const message = error instanceof Error ? error.message : 'Failed to send message';
+      set((state) => ({
+        messages: [
+          ...state.messages,
+          {
+            id: `msg-${Date.now() + 1}`,
+            role: 'assistant',
+            content: '',
+            timestamp: new Date().toISOString(),
+            status: 'FAILED',
+            error: message,
+          },
+        ],
         isLoading: false,
-        error: error instanceof Error ? error.message : 'Failed to send message',
-        connected: false,
-      });
+        error: message,
+        ...(error instanceof TypeError ? { connected: false } : {}),
+      }));
     }
   },
 
@@ -414,6 +429,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
                       content: finalContent,
                       confidence: chunk.confidence,
                       sources: chunk.sources,
+                      model: chunk.model ?? msg.model,
+                      provider: chunk.provider ?? msg.provider,
                       tool_calls: chunk.tool_calls,
                       runtime_events: msg.runtime_events,
                       status: normalizeMessageStatus(chunk.status),
@@ -467,13 +484,43 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       },
       (error: Error, info?: ChatErrorInfo) => {
+        if (info?.category === 'CANCELLED') {
+          set((state) => ({
+            isStreaming: false,
+            streamingContent: '',
+            messages: state.messages.map((msg) =>
+              msg.id === assistantId
+                ? { ...msg, content: state.streamingContent, status: 'CANCELLED' }
+                : msg
+            ),
+          }));
+          return;
+        }
         const isTransient = chatApi.isTransient(info?.category);
         const retryable = Boolean(info?.retryable || isTransient);
-        set({
+        set((state) => ({
           isStreaming: false,
+          streamingContent: '',
           error: error.message,
           ...(isTransient ? { connected: false } : {}),
-        });
+          messages: state.messages.map((msg) =>
+            msg.id === assistantId
+              ? {
+                  ...msg,
+                  status: info?.category === 'STREAM_INTERRUPTED'
+                    ? 'STREAM_INTERRUPTED'
+                    : 'FAILED',
+                  interrupted: info?.category === 'STREAM_INTERRUPTED',
+                  error: {
+                    category: info?.category || 'UNKNOWN_ERROR',
+                    message: info?.message || error.message,
+                    request_id: info?.request_id || '',
+                    retryable,
+                  },
+                }
+              : msg
+          ),
+        }));
         if (retryable) {
           get().saveDraft(get().currentSessionId || 'default', content.trim());
         }
@@ -482,6 +529,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         set({ isStreaming: false });
       }
     );
+  },
+
+  stopStream: () => {
+    cancelStreamingMessage();
   },
 
   loadSessions: async () => {
@@ -503,7 +554,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
          content: (msg.content || msg.response || msg.answer || '') as string,
         timestamp: (msg.timestamp as string) || new Date().toISOString(),
         model: msg.model as string | undefined,
-         client_message_id: msg.client_message_id as string | undefined,
+        provider: msg.provider as string | undefined,
+        client_message_id: msg.client_message_id as string | undefined,
+        metadata: msg.metadata as ChatMessage['metadata'],
+        status: normalizeMessageStatus(
+          typeof msg.status === 'string' ? msg.status : undefined
+        ),
+        latency_ms: typeof msg.latency_ms === 'number' ? msg.latency_ms : undefined,
+        error: msg.error as ChatMessage['error'],
       }));
       set({ messages, currentSessionId: sessionId, isLoading: false });
     } catch (error) {
@@ -566,10 +624,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const configured = catalog.providers.filter(
         (p) => p.available || p.authorized || p.configured
       );
+      const readyDefault = catalog.providers.find((provider) =>
+        provider.available &&
+        provider.authorized &&
+        provider.provider === catalog.default_provider
+      );
+      const defaultModel = readyDefault
+        ? readyDefault.models.includes(catalog.default_model)
+          ? catalog.default_model
+          : readyDefault.model
+        : null;
       set({
         modelCatalog: catalog,
         availableProviders: configured,
-        activeModel: catalog.default_model || 'auto',
+        activeModel: readyDefault && defaultModel
+          ? `${readyDefault.provider}:${defaultModel}`
+          : 'auto',
       });
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Failed to load model catalog' });

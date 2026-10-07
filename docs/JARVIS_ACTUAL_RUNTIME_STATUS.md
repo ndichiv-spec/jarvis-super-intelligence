@@ -1,139 +1,73 @@
-# JARVIS Actual Runtime Status
+# JARVIS Runtime Status
 
-## Current State
+## Verification status
 
-**Backend:** RUNNING on `http://0.0.0.0:8000` (started: `python3 -u jarvis_api.py`)
+Last checked: 2026-10-07. The local Next.js application and FastAPI backend
+responded during this implementation session, and `/voice` rendered the shared
+chat interface. The backend health endpoint returned `ok`, and
+`/silverwing/health` reported the Silverwing app as mounted. The voice status
+endpoint reported ASR and TTS as `NOT_CONFIGURED`; the AI status endpoint
+reported zero configured providers and `degraded`. No provider inference,
+image generation, live database persistence, or production deployment was
+verified. Provider execution and production readiness are therefore **not
+available/verified**, despite the local API being reachable.
 
-**Frontend:** RUNNING on `http://localhost:3000` (started: `npx next dev -p 3000`)
+## Active application
 
-**Platform status:** ONLINE — real compute fabric is active and responding.
+- Backend entry point: `jarvis_backend.main:app` (FastAPI).
+- Browser client: `frontend/web` (Next.js).
+- Canonical conversation orchestration: `jarvis_backend.chat_service.ChatService`
+  and `ProviderGateway`.
+- Production deployment: immutable backend/frontend images, PostgreSQL,
+  migration job, and separate worker/beat services as defined in
+  `deployment/production/docker-compose.prod.yml`.
 
-## How to Start JARVIS (Production/Dev)
-
-### 1. Backend
-
-```powershell
-cd F:\AI\Jarvis-super-intelligence-
-# Clear JARVIS_TEST_MODE to use file-based SQLite (persistence)
-# Clear DATABASE_URL to avoid workspace .env override
-python3 -u jarvis_api.py
-```
-
-With `env` override:
-```json
-{ "JARVIS_TEST_MODE": "", "DATABASE_URL": "" }
-```
-
-### 2. Frontend
+For local development, from the application directory:
 
 ```powershell
-cd F:\AI\Jarvis-super-intelligence-\frontend\web
-npx next dev -p 3000
+python -m uvicorn jarvis_backend.main:app --host 127.0.0.1 --port 8000
 ```
 
-### 3. Login
+From `frontend/web`, use the existing `npm run dev`, `npm run typecheck`,
+`npm run test`, and `npm run build` scripts. Production image and Compose
+verification require Docker and are not covered by this local command.
 
-Navigate to `http://localhost:3000/login` and enter your configured admin credentials.
+## Authentication and conversation behavior
 
-After login, navigate to `http://localhost:3000/dashboard` → click "Real AI Chat".
+Browser authentication uses server-managed `HttpOnly`, `SameSite=Lax` cookies;
+the authentication stores do not persist access or refresh tokens in browser
+storage. Shared API clients and audited direct calls send cookies, and the
+refresh endpoint rotates them server-side. A repository-wide inventory of every
+legacy direct `fetch` call is still required before claiming complete cookie
+coverage.
 
-## Verified Runtime Chain
+`POST /api/chat` and `POST /api/chat/stream` require authentication and route
+through `ChatService`. Session ownership is checked server-side. Provider
+streaming is forwarded as received; when a provider cannot stream, the backend
+uses its buffered result rather than synthesizing chunks. A client Stop action
+aborts the HTTP stream; `ChatService` persists an interrupted lifecycle state
+when the stream is cancelled. The browser requires an explicit terminal frame;
+if the transport ends early, the partial assistant turn is marked interrupted
+with the backend error details instead of appearing as a completed response.
 
-```
-Browser (localhost:3000)
-  → POST /api/v1/auth/login  (credentials from config)
-  → JWT access_token stored in localStorage (jarvis-auth-storage)
-  → GET /api/v1/ai/status  (enabled=true, platform_status=online)
-  → "Backend Connected" (no "Self-Reliant Mode" banner)
-  → POST /api/chat/stream  (Authorization: Bearer <jwt>)
-  → SSE: typing → meta → chunk → complete
-  → Real response from google/gemini-2.5-flash
-  → Session persisted in SQLite (jarvis_data/jarvis.db)
-```
+The backend stores conversation messages and provider/model attribution in its
+configured persistence layer. The actual database selected and the persistence
+of a live conversation must be checked in the running deployment.
 
-### Live Test Result
+## Capability truth
 
-```
-User:          "Hello JARVIS"
-Provider:      google
-Model:         gemini-2.5-flash
-Response:      "Greetings. How may I be of assistance today?"
-Latency:       857ms
-Streamed:      True
-Status:        COMPLETED
-Sessions:      Persisted in SQLite jarvis_kv.chat_sessions
-```
-
-## Environment Variables
-
-### Set in `.env` (project root)
-
-| Key | Value | Purpose |
-|---|---|---|
-| `OPENAI_API_KEY` | (redacted) | OpenAI provider |
-| `NEXT_PUBLIC_API_URL` | `http://127.0.0.1:8000` | Frontend API base |
-| `JARVIS_APP_URL` | `http://127.0.0.1:3000` | Backend CORS/app URL |
-| `JARVIS_AI_ENABLED` | `1` | Enables AI status banner |
-| `JARVIS_ADMIN_PASSWORD` | (from environment) | Admin login password |
-| `JARVIS_SECRET_KEY` | (redacted) | JWT signing key |
-
-### Loaded from workspace `.env` (`F:\AI/.env`)
-
-| Key | Purpose |
+| Capability | Current implementation state |
 |---|---|
-| `OPENAI_API_KEY` | OpenAI API key |
-| `GOOGLE_API_KEY` | Google Gemini API key |
-| `NVIDIA_API_KEY` | NVIDIA NIM API key |
-| `HF_TOKEN` | Hugging Face token |
-| `JARVIS_NVIDIA_API_KEY` | NVIDIA key (JARVIS namespace) |
-| `DATABASE_URL` | Database URL (must be cleared for file-based SQLite) |
-| `JARVIS_BRAIN_ENDPOINT` | Brain endpoint (not running) |
-| `KAGGLE_USERNAME` / `KAGGLE_KEY` | Kaggle integration |
+| Text chat | Routed through the existing chat service and provider gateway; live provider execution was not verified. |
+| Streaming | Provider stream is forwarded when supported; frontend Stop aborts the request. Live end-to-end streaming was not verified. |
+| Knowledge/memory | Reads used by the cognitive search and chat context now filter by owner; shared unowned knowledge must explicitly be public. |
+| Image generation | Replicate, Stability, and OpenAI handlers validate provider image bytes before persisting owner-scoped files and artifact metadata with authenticated retrieval. When attached to a user-owned chat session, the prompt and generated artifacts are added as a conversation turn and displayed in history; standalone generation remains available without a chat session. Provider credentials and live generation were not verified. |
+| Voice | Chat composer uses browser SpeechRecognition when supported; recognized text enters the same authenticated ChatService streaming/history path. Completed responses can use browser SpeechSynthesis on demand. Browser support and device permissions are runtime-dependent. Authenticated audio uploads delegate to VoiceCapability and require a configured OpenAI Whisper or local Whisper provider; these providers were not live-tested. The legacy server voice WebSocket now reports unavailable instead of acknowledging fabricated transcripts. |
+| Video | Decode, frame extraction, and analysis are not implemented; the legacy endpoints now return `CAPABILITY_NOT_CONFIGURED` rather than reporting success. |
+| Agent tasks | Manual runs use the chat service and are user-scoped. Dynamic scheduling is not connected; scheduled task registration and scheduler control are unavailable. |
+| MCP | Optional HTTP mount authenticates each request with the JARVIS session cookie or bearer credential and derives tool grants from server-side RBAC. Stdio clients have no authenticated principal and receive no tool permissions; tool arguments cannot claim a JARVIS identity. |
+| Legacy embedded browser | In-memory simulation endpoints are disabled and return `CAPABILITY_NOT_CONFIGURED`; use the authenticated browser capability where available. |
+| Silverwing / JARVIS Brain | Silverwing's FastAPI app is mounted and its health endpoint reports `integrated`; model inference and JARVIS Brain provider availability were not verified. |
 
-### System Environment
-
-| Key | Value | Notes |
-|---|---|---|
-| `JARVIS_TEST_MODE` | SET | Must be **unset/empty** for file-based SQLite persistence |
-| `JARVIS_PASSWORD` | SET | Unused by any Python file — legacy variable |
-| `NVIDIA_API_KEY` | NOT SET | Available via `F:\AI/.env` loaded at startup |
-| `HF_TOKEN` | NOT SET | Available via `F:\AI/.env` loaded at startup |
-| `GOOGLE_API_KEY` | NOT SET | Available via `F:\AI/.env` loaded at startup |
-
-## Provider Status
-
-| Provider | Available | Authorized | Healthy | Notes |
-|---|---|---|---|---|
-| OpenAI | ✅ | ✅ | ✅ | gpt-5 |
-| Google | ✅ | ✅ | ✅ | gemini-2.5-pro / gemini-2.5-flash |
-| NVIDIA | ✅ | ✅ | ✅ | nvidia/nemotron-3-ultra-550b-a55b |
-| HuggingFace | ❌ | ❌ | ✅ | Configured but no inference endpoint |
-| Silverwing | ❌ | ❌ | ❌ | Port 8010 not running (optional) |
-| JARVIS Brain | ❌ | ❌ | ❌ | Port 8011 not running (optional) |
-
-## CORS
-
-Configured in `jarvis_backend/core.py` (line 822):
-- Allow origins: `http://localhost:3000`, `http://127.0.0.1:3000`, `http://localhost:5173`, `http://localhost:3003`
-- Allow credentials: `true`
-- Allow methods/headers: `*`
-
-## Database
-
-- **Engine:** SQLite (file-based when `JARVIS_TEST_MODE` is not set)
-- **Path:** `jarvis_data/jarvis.db` (currently 20 KB, 22 rows in `jarvis_kv` table)
-- **Stores:** `users`, `chat_sessions`, `sessions` (auth), `refresh_tokens`, `roles`, `permissions`, `audit_logs`
-- **Chat sessions** persist user + assistant messages with provider/model attribution.
-
-## Fake/Legacy Fallback Paths — Eliminated
-
-- **`AIService.chat()` → `_fallback()`** (`core.py:724`): Dormant path, NOT used by frontend chat. Only reachable via `/api/v1/ai/process` when no cloud key is configured. Returns canned text.
-- **`local-rule` provider:** Only selected when `JARVIS_MODEL=local-rule` (not set) AND no cloud key. Honesty guard raises `ChatError` instead of fake responses.
-- **"Self-Reliant Mode" banner:** Hidden when `JARVIS_AI_ENABLED=1` (verified live: `enabled=true` → `usingLocalFallback=false`).
-
-## Known Limitations
-
-1. **`JARVIS_TEST_MODE` in system env** must be explicitly cleared when starting the backend to enable file-based SQLite persistence. If not cleared, an in-memory SQLite DB is used (data lost on restart).
-2. **Silverwing runtime** (port 8010) and **JARVIS Brain** (port 8011) are not running. These are optional compute targets; the Phase 6 fabric (OpenAI/Google/NVIDIA) handles all requests.
-3. **Stale admin user** from previous sessions can cause login failures. Delete `jarvis_data/jarvis.db` and restart, or use the forgot-password flow.
-4. **Frontend uses `npx next dev`** only — `npx next start` fails with "Could not find a production build". Dev mode is the only supported option.
+Only advertise a capability as ready when the running system's readiness check
+confirms its configuration and availability.

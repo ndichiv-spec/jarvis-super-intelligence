@@ -18,17 +18,24 @@ Usage:
 Security:
     All tool execution goes through the existing JARVIS ToolCapability security
     boundary: credentials are NEVER passed from the MCP client. Tools access
-    their own credentials via the vault/secrets manager. Authorization is
-    enforced per-tool via the capability's _authorize_tool() check.
+    their own credentials via the vault/secrets manager. HTTP requests require
+    a JARVIS session or bearer credential; per-tool grants come from server-side
+    RBAC. The stdio transport has no authenticated principal and no tool grants.
+    Authorization is enforced per-tool via _authorize_tool().
 """
 from __future__ import annotations
 
 import asyncio
+from contextvars import ContextVar
 import json
 import os
 import sys
 import uuid
 from typing import Any, Dict, List, Optional
+
+from fastapi import HTTPException
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 # ---------------------------------------------------------------------------
 # MCP SDK imports
@@ -226,6 +233,88 @@ _TOOL_CATALOG: Dict[str, Dict[str, Any]] = {
     },
 }
 
+_MCP_PRINCIPAL: ContextVar[Optional[Dict[str, Any]]] = ContextVar(
+    "jarvis_mcp_principal",
+    default=None,
+)
+_TOOL_PERMISSIONS = {
+    "github": "tool.github",
+    "postgresql": "tool.database",
+    "browser": "tool.browser",
+    "science": "tool.science",
+    "research": "tool.research",
+    "mcp": "tool.mcp",
+}
+
+
+def _execution_context():
+    """Build tool authority only from the authenticated HTTP principal."""
+    from jarvis_backend.capability import ExecutionContext
+
+    principal = _MCP_PRINCIPAL.get()
+    if principal is None:
+        return ExecutionContext(
+            user_id="mcp_client",
+            session_id=f"mcp-{uuid.uuid4().hex[:8]}",
+            correlation_id=f"mcp-{uuid.uuid4().hex[:12]}",
+        )
+
+    from jarvis_backend.core import has_permission, is_admin
+
+    user_id = principal.get("id") or principal.get("user_id")
+    if not isinstance(user_id, str) or not user_id:
+        raise RuntimeError("Authenticated MCP principal has no user identity")
+
+    permissions = [
+        permission
+        for permission in _TOOL_PERMISSIONS.values()
+        if has_permission(principal, permission)
+    ]
+    if is_admin(principal):
+        permissions.append("admin")
+
+    return ExecutionContext(
+        user_id=user_id,
+        session_id=f"mcp-{uuid.uuid4().hex[:8]}",
+        correlation_id=f"mcp-{uuid.uuid4().hex[:12]}",
+        permissions=permissions,
+    )
+
+
+class _AuthenticatedMCPHTTPApp:
+    """Authenticate each MCP HTTP request and bind its principal to tool calls."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request = Request(scope, receive=receive)
+        try:
+            from jarvis_backend.core import get_current_user
+
+            principal = get_current_user(
+                authorization=request.headers.get("authorization"),
+                request=request,
+            )
+        except HTTPException as exc:
+            response = JSONResponse(
+                {"detail": exc.detail},
+                status_code=exc.status_code,
+                headers=exc.headers,
+            )
+            await response(scope, receive, send)
+            return
+
+        token = _MCP_PRINCIPAL.set(principal)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            _MCP_PRINCIPAL.reset(token)
+
 
 # ---------------------------------------------------------------------------
 # Tool execution bridge: MCP tool call -> JARVIS ToolCapability.execute()
@@ -266,21 +355,15 @@ async def _execute_jarvis_tool(
             isError=True,
         )
 
-    args = arguments or {}
+    args = dict(arguments or {})
     tool_cap = _get_tool_capability()
 
-    from jarvis_backend.capability import ExecutionContext
+    # MCP tool arguments are untrusted and cannot establish an authenticated
+    # JARVIS principal. The standalone transport receives no user grants.
+    args.pop("_user_id", None)
+    args.pop("_session_id", None)
 
-    # Build execution context — user_id comes from MCP metadata if provided
-    # Credentials NEVER flow from the MCP client — tools access their own.
-    user_id = args.pop("_user_id", "mcp_client")
-    session_id = args.pop("_session_id", f"mcp-{uuid.uuid4().hex[:8]}")
-
-    context = ExecutionContext(
-        user_id=user_id,
-        session_id=session_id,
-        correlation_id=f"mcp-{uuid.uuid4().hex[:12]}",
-    )
+    context = _execution_context()
 
     # Map MCP tool name to JARVIS tool name and extract action + params
     catalog_entry = _TOOL_CATALOG.get(tool_name)
@@ -395,7 +478,7 @@ def get_mcp_http_app():
 
     # The streamable_http_app() method returns a fully configured ASGI app
     # that handles session management, SSE streaming, and JSON-RPC framing.
-    return server.streamable_http_app()
+    return _AuthenticatedMCPHTTPApp(server.streamable_http_app())
 
 
 # ---------------------------------------------------------------------------

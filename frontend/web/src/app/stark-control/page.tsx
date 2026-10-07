@@ -87,7 +87,7 @@ export default function StarkControlPanel() {
   const fetchSystemStatus = useCallback(async () => {
     try {
       const get = async (path: string) => {
-        const r = await fetch(`${env.API_URL}${path}`);
+        const r = await fetch(`${env.API_URL}${path}`, { credentials: 'include' });
         if (!r.ok) throw new Error(`${path}: ${r.status}`);
         return r.json();
       };
@@ -161,7 +161,9 @@ export default function StarkControlPanel() {
 
   const fetchHealthChecks = useCallback(async () => {
     try {
-      const response = await fetch(`${env.API_URL}/api/v1/monitoring/health`);
+      const response = await fetch(`${env.API_URL}/api/v1/monitoring/health`, {
+        credentials: 'include',
+      });
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.health_checks) {
@@ -182,7 +184,9 @@ export default function StarkControlPanel() {
 
   const fetchActiveGoals = useCallback(async () => {
     try {
-      const response = await fetch(`${env.API_URL}/api/v1/agents/goals`);
+      const response = await fetch(`${env.API_URL}/api/v1/agents/goals`, {
+        credentials: 'include',
+      });
       if (response.ok) {
         const data = await response.json();
         if (data.success) {

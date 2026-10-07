@@ -111,6 +111,9 @@ Only Caddy publishes host ports 80 and 443 (TCP and HTTP/3 UDP). PostgreSQL,
 Redis, workers, Prometheus, and API ports are not published. The frontend uses
 same-origin API and WebSocket requests; the edge proxies API, health, MCP,
 Silverwing, and WebSocket routes to FastAPI.
+The worker joins the private data network for PostgreSQL/Redis and a separate
+unpublished egress network for outbound provider and connector calls; neither
+network publishes an application port.
 
 Production readiness behavior distinguishes process liveness
 (`/health/live`), database-backed readiness (`/health/ready`), and runtime

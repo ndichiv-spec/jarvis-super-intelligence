@@ -476,6 +476,7 @@ class UsageAccountant:
         self,
         start_time: Optional[float] = None,
         end_time: Optional[float] = None,
+        user_id: Optional[str] = None,
     ) -> Dict[str, Dict[str, float]]:
         """Get usage aggregated by provider."""
         self._ensure_tables()
@@ -484,6 +485,8 @@ class UsageAccountant:
         engine = self._get_engine()
         
         conditions = []
+        if user_id:
+            conditions.append(CostRecord.user_id == user_id)
         if start_time:
             conditions.append(CostRecord.timestamp >= start_time)
         if end_time:

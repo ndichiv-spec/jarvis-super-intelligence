@@ -22,8 +22,8 @@ from pydantic import BaseModel
 
 from ..core import (
     ROOT, ai_service, get_store, now_iso, get_current_user,
-    get_optional_user, is_admin,
-    _require_auth, _require_admin, _audit_system_action,
+    get_optional_user, is_admin, is_owner,
+    _require_auth, _require_admin, _require_owner, _audit_system_action,
 )
 from ..capability import get_orchestrator as get_cap_orchestrator
 from ..platform_identity import get_platform_identity
@@ -65,7 +65,11 @@ def _active_connections() -> int:
         return 0
 
 
-router = APIRouter(prefix="/api/v1/system", tags=["system"])
+router = APIRouter(
+    prefix="/api/v1/system",
+    tags=["system"],
+    dependencies=[Depends(_require_admin)],
+)
 
 
 class ProcessKillIn(BaseModel):
@@ -1095,7 +1099,7 @@ async def system_dashboard():
 
 
 @router.get("/processes")
-async def list_processes(user: Dict[str, Any] = Depends(_require_auth),
+async def list_processes(user: Dict[str, Any] = Depends(_require_owner),
                          limit: int = Query(50), sort: str = Query("cpu")):
     """List running processes. Requires authentication."""
     _audit_system_action("read", "list_processes", "system/processes",
@@ -1131,7 +1135,7 @@ async def list_processes(user: Dict[str, Any] = Depends(_require_auth),
 
 @router.post("/processes/kill")
 @router.post("/process/kill")
-async def kill_process(body: ProcessKillIn, user: Dict[str, Any] = Depends(_require_admin)):
+async def kill_process(body: ProcessKillIn, user: Dict[str, Any] = Depends(_require_owner)):
     """Kill a process. Requires admin role."""
     _audit_system_action("write", "kill_process", f"process/{body.pid}",
                          user.get("email", ""), f"force={body.force}")
@@ -1146,7 +1150,7 @@ async def kill_process(body: ProcessKillIn, user: Dict[str, Any] = Depends(_requ
 
 
 @router.get("/provider-settings")
-async def get_provider_settings(user: Dict[str, Any] = Depends(_require_admin)):
+async def get_provider_settings(user: Dict[str, Any] = Depends(_require_owner)):
     """Get provider settings metadata (spec §58).
 
     Returns the scrubbed ``ProviderSettingsResponse`` envelope. NEVER returns
@@ -1161,7 +1165,7 @@ async def get_provider_settings(user: Dict[str, Any] = Depends(_require_admin)):
 
 @router.put("/provider-settings")
 async def update_provider_settings(body: ProviderSettingsIn,
-                                     user: Dict[str, Any] = Depends(_require_admin),
+                                     user: Dict[str, Any] = Depends(_require_owner),
                                      request: Request = None):
     """Update provider settings.
 
@@ -1193,7 +1197,7 @@ async def update_provider_settings(body: ProviderSettingsIn,
 
 
 @router.get("/files")
-async def list_files(user: Dict[str, Any] = Depends(_require_auth),
+async def list_files(user: Dict[str, Any] = Depends(_require_owner),
                      path: str = Query(str(ROOT))):
     """List files in a directory. Requires authentication."""
     _audit_system_action("read", "list_files", f"system/files/{path}",
@@ -1230,7 +1234,7 @@ class ReadFileIn(BaseModel):
 
 
 @router.post("/files/read")
-async def read_file(body: ReadFileIn, user: Dict[str, Any] = Depends(_require_auth)):
+async def read_file(body: ReadFileIn, user: Dict[str, Any] = Depends(_require_owner)):
     """Read a file. Requires authentication."""
     _audit_system_action("read", "read_file", f"system/files/{body.path}",
                          user.get("email", ""))
@@ -1246,7 +1250,7 @@ async def read_file(body: ReadFileIn, user: Dict[str, Any] = Depends(_require_au
 
 
 @router.get("/clipboard")
-async def get_clipboard(user: Dict[str, Any] = Depends(_require_auth)):
+async def get_clipboard(user: Dict[str, Any] = Depends(_require_owner)):
     """Read clipboard. Requires authentication."""
     _audit_system_action("read", "get_clipboard", "system/clipboard",
                          user.get("email", ""))
@@ -1267,7 +1271,7 @@ class ClipboardIn(BaseModel):
 
 
 @router.post("/clipboard")
-async def set_clipboard(body: ClipboardIn, user: Dict[str, Any] = Depends(_require_auth)):
+async def set_clipboard(body: ClipboardIn, user: Dict[str, Any] = Depends(_require_owner)):
     """Set clipboard. Requires authentication."""
     _audit_system_action("write", "set_clipboard", "system/clipboard",
                          user.get("email", ""))
@@ -1525,17 +1529,26 @@ async def launch_app(body: LaunchIn, request: Request):
                 detail=(f"Refusing destructive host command matching '{denied}' "
                         "(system:launch is gated by the JARVIS safety policy)."),
             )
-    # 2) Privileged host operation: authenticated admin required.
+    # 2) Host process control is reserved for the configured owner.
     user = get_current_user(request.headers.get("authorization"))  # raises 401
-    if not is_admin(user):
+    if not is_owner(user):
         _audit_system_action("denied", "launch_app", f"system/launch/{body.app}",
                              user.get("email", "") or "anonymous",
-                             "policy:admin_required")
-        raise HTTPException(status_code=403, detail="Admin access required")
+                             "policy:owner_required")
+        raise HTTPException(status_code=403, detail="Owner access required")
+    executable = next(
+        (
+            entry["command"] for entry in _APPS
+            if entry["command"].lower() == body.app.strip().lower()
+        ),
+        None,
+    )
+    if executable is None:
+        raise HTTPException(status_code=403, detail="Application is not allowlisted")
     try:
         import subprocess
         args = (body.args or "").split()
-        subprocess.Popen([body.app] + args, shell=True)
+        subprocess.Popen([executable, *args], shell=False)
     except Exception:  # noqa: BLE001
         logger.exception("system:launch failed for %r", body.app)
         _audit_system_launch("error", body.app, body.args or "",
@@ -1562,7 +1575,7 @@ class ScreenshotIn(BaseModel):
 
 
 @router.post("/screenshot", response_model=None)
-async def take_screenshot(body: ScreenshotIn, user: Dict[str, Any] = Depends(_require_auth)):
+async def take_screenshot(body: ScreenshotIn, user: Dict[str, Any] = Depends(_require_owner)):
     """Take a screenshot. Requires authentication."""
     _audit_system_action("write", "take_screenshot", "system/screenshot",
                          user.get("email", ""))
@@ -1580,7 +1593,7 @@ async def take_screenshot(body: ScreenshotIn, user: Dict[str, Any] = Depends(_re
 
 
 @router.get("/windows")
-async def list_windows(user: Dict[str, Any] = Depends(_require_auth)):
+async def list_windows(user: Dict[str, Any] = Depends(_require_owner)):
     """List windows. Requires authentication."""
     _audit_system_action("read", "list_windows", "system/windows",
                          user.get("email", ""))
@@ -1604,7 +1617,7 @@ async def list_windows(user: Dict[str, Any] = Depends(_require_auth)):
 
 
 @router.get("/file-structure")
-async def file_structure(user: Dict[str, Any] = Depends(_require_auth)):
+async def file_structure(user: Dict[str, Any] = Depends(_require_owner)):
     """Get file structure. Requires authentication."""
     _audit_system_action("read", "file_structure", "system/file-structure",
                          user.get("email", ""))

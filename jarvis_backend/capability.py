@@ -60,6 +60,7 @@ from contextlib import asynccontextmanager
 class CapabilityStatus(str, Enum):
     """Truthful capability status values."""
     AVAILABLE = "available"
+    CONFIGURED = "configured"  # Configuration exists but the operation is not verified
     UNAVAILABLE = "unavailable"  # Capability not available
     NOT_CONFIGURED = "not_configured"  # Missing configuration/dependencies
     DEGRADED = "degraded"  # Available but with limited function

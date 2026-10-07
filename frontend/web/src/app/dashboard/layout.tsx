@@ -12,10 +12,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
 
   useEffect(() => {
-    // Any 401 from the API while inside the dashboard -> clear the stale
-    // token (both the in-memory zustand store AND the persisted localStorage
-    // AND the api-client in-memory token) and redirect to login so the
-    // user sees the sign-in form instead of a redirect loop.
+    // Any 401 that cannot be resolved by cookie refresh clears local auth
+    // presentation state and returns the user to sign-in.
     onAuthError(() => {
       clearAuthToken();
       // Synchronously clear the zustand persist store so the login page

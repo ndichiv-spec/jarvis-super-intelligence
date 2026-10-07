@@ -153,22 +153,13 @@ async def ws_voice_chat(ws: WebSocket):
     if not await _require_websocket_ticket(ws):
         return
     await ws.accept()
-    _connections.setdefault("voice", []).append(ws)
-    try:
-        while True:
-            data = await ws.receive_text()
-            try:
-                msg = json.loads(data)
-            except Exception:  # noqa: BLE001
-                msg = {"content": data}
-            text = msg.get("content", "") if isinstance(msg, dict) else str(msg)
-            await _safe_send(ws, json.dumps({"type": "voice_transcript", "text": text, "final": True}))
-            await _safe_send(ws, json.dumps({"type": "voice_command", "command": text, "processed": True}))
-    except WebSocketDisconnect:
-        pass
-    finally:
-        if ws in _connections.get("voice", []):
-            _connections["voice"].remove(ws)
+    await _safe_send(ws, json.dumps({
+        "type": "error",
+        "status": "error",
+        "code": "CAPABILITY_NOT_CONFIGURED",
+        "message": "Server-side voice streaming is unavailable. Use browser voice input in the authenticated chat.",
+    }))
+    await ws.close(code=1013, reason="CAPABILITY_NOT_CONFIGURED")
 
 
 @router.websocket("/api/v1/stark/ws/chat")

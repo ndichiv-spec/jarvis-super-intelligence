@@ -59,7 +59,8 @@ export default function BillingPage() {
 
   const fetchUsage = async () => {
     try {
-      const response = await fetch(getApiUrl('/api/v1/billing/usage'));
+      const response = await fetch(getApiUrl('/api/v1/billing/usage'), { credentials: 'include' });
+      if (!response.ok) throw new Error(`Billing usage request failed (HTTP ${response.status})`);
       const data = await response.json();
       setUsage(data.usage);
       setCurrentPlan(data.plan || "Free");
@@ -77,9 +78,11 @@ export default function BillingPage() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: 'include',
           body: JSON.stringify({ plan }),
         }
       );
+      if (!response.ok) throw new Error(`Plan change failed (HTTP ${response.status})`);
       const data = await response.json();
       if (data.success) {
         setCurrentPlan(plan);

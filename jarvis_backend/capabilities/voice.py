@@ -93,6 +93,7 @@ class VoiceCapability(Capability):
         self._stt_provider: Optional[str] = None
         self._tts_provider: Optional[str] = None
         self._event_bus = get_event_bus()
+        self._pipeline_verified = False
 
     @property
     def state(self) -> VoiceState:
@@ -135,36 +136,30 @@ class VoiceCapability(Capability):
         )
 
     async def _check_health(self) -> Dict[str, Any]:
-        """Real health check - verify STT and TTS availability."""
-        health_result = {
-            'status': CapabilityStatus.READY,
-            'healthy': True,
-            'components': {},
-        }
-
-        # Check STT provider availability
+        """Report configured voice services without treating credentials as tested."""
+        components = {}
         stt_ok = await self._check_stt_availability()
-        health_result['components']['stt'] = 'available' if stt_ok else 'unavailable'
-        if not stt_ok:
-            health_result['stt_available'] = False
-            health_result['status'] = CapabilityStatus.DEGRADED
-            health_result['healthy'] = True  # Voice is available, just STT is not
-
-        # Check TTS provider availability
+        components['stt'] = 'configured' if stt_ok else 'unavailable'
         tts_ok = await self._check_tts_availability()
-        health_result['components']['tts'] = 'available' if tts_ok else 'unavailable'
-        if not tts_ok:
-            health_result['tts_available'] = False
-
-        if not stt_ok and not tts_ok:
-            health_result['status'] = CapabilityStatus.UNAVAILABLE
-            health_result['healthy'] = False
-
-        # Check microphone availability (best-effort)
+        components['tts'] = 'configured' if tts_ok else 'unavailable'
         mic_ok = self._check_microphone()
-        health_result['components']['microphone'] = 'available' if mic_ok else 'unavailable'
-
-        return health_result
+        components['microphone'] = 'available' if mic_ok else 'unavailable'
+        status = (
+            CapabilityStatus.AVAILABLE if self._pipeline_verified
+            else CapabilityStatus.CONFIGURED if stt_ok and tts_ok
+            else CapabilityStatus.DEGRADED if stt_ok or tts_ok
+            else CapabilityStatus.NOT_CONFIGURED
+        )
+        return {
+            'status': status,
+            'healthy': self._pipeline_verified,
+            'components': components,
+            'stt_available': False,
+            'tts_available': False,
+            'stt_configured': stt_ok,
+            'tts_configured': tts_ok,
+            'pipeline_verified': self._pipeline_verified,
+        }
 
     async def _check_stt_availability(self) -> bool:
         """Check if a speech-to-text provider is configured."""
@@ -286,6 +281,9 @@ class VoiceCapability(Capability):
 
         result.latency_ms = (time.time() - start_time) * 1000.0
         result.correlation_id = correlation_id
+        if action == 'process_audio' and result.success:
+            self._pipeline_verified = True
+            self.set_status(CapabilityStatus.AVAILABLE)
 
         return result
 
@@ -358,7 +356,7 @@ class VoiceCapability(Capability):
             session_id=session_id,
             user_id=context.user_id,
             status='completed',
-            payload={'text': text},
+            payload={'text_length': len(text)},
             metrics={'confidence': transcription_result.get('confidence', 0)},
         )
 
@@ -420,7 +418,7 @@ class VoiceCapability(Capability):
             session_id=session_id,
             user_id=context.user_id,
             status='completed',
-            payload={'text': text},
+            payload={'text_length': len(text)},
         )
 
         return ExecutionResult(
@@ -500,8 +498,10 @@ class VoiceCapability(Capability):
                         f.write(audio_bytes)
                         temp_path = f.name
 
-                    result = model.transcribe(temp_path)
-                    os.unlink(temp_path)
+                    try:
+                        result = model.transcribe(temp_path)
+                    finally:
+                        os.unlink(temp_path)
 
                     return {
                         'success': True,
@@ -656,7 +656,7 @@ class VoiceCapability(Capability):
                     conversation_id=getattr(context, 'conversation_id', None),
                     correlation_id=context.correlation_id,
                     provenance='tts_synthesis',
-                    metadata={'text': text, 'provider': 'openai_tts', 'voice': voice},
+                    metadata={'text_length': len(text), 'provider': 'openai_tts', 'voice': voice},
                 )
 
                 import base64
@@ -697,14 +697,18 @@ class VoiceCapability(Capability):
                 session_id=context.session_id,
                 user_id=context.user_id,
                 status='completed',
-                payload={'text': result['text']},
+                payload={'text_length': len(result['text'])},
                 metrics={'confidence': result.get('confidence', 0)},
             )
 
         return ExecutionResult(
             capability=self.name,
             success=result['success'],
-            data={'text': result.get('text', '')} if result['success'] else {},
+            data={
+                'text': result.get('text', ''),
+                'provider': result.get('provider'),
+                'confidence': result.get('confidence'),
+            } if result['success'] else {},
             error=result.get('error'),
             error_type=None if result['success'] else 'STT_FAILED',
             correlation_id=context.correlation_id,

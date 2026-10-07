@@ -1,12 +1,14 @@
 'use client';
 
-import { memo, useMemo, type ReactNode } from 'react';
-import { AlertTriangle, Brain, Loader2, User } from 'lucide-react';
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import Image from 'next/image';
+import { AlertTriangle, Brain, Loader2, Square, User, Volume2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { MarkdownMessage } from '@/components/chat/markdown-message';
 import { ToolCallList } from '@/components/chat/tool-call-card';
 import type { ChatMessage } from '@/features/chat/types';
+import { getApiUrl } from '@/lib/runtime-url';
 
 /**
  * Chat message bubble.
@@ -36,6 +38,12 @@ function MessageMeta({ message }: { message: ChatMessage }) {
   }
   if (message.skill_used) {
     rows.push(['Skill', message.skill_used]);
+  }
+  if (message.provider) {
+    rows.push(['Provider', message.provider]);
+  }
+  if (message.model) {
+    rows.push(['Model', message.model]);
   }
   if (message.sources?.length) {
     rows.push(['Sources', String(message.sources.length)]);
@@ -76,7 +84,83 @@ function Sources({ sources }: { sources: string[] }) {
   );
 }
 
+interface GeneratedImageArtifact {
+  artifact_id: string;
+  url: string;
+  prompt: string;
+  width: number;
+  height: number;
+}
+
+function getGeneratedImageArtifacts(metadata?: Record<string, unknown>): GeneratedImageArtifact[] {
+  const artifacts = metadata?.artifacts;
+  if (!Array.isArray(artifacts)) return [];
+  return artifacts.filter((artifact): artifact is GeneratedImageArtifact =>
+    typeof artifact === 'object' && artifact !== null
+    && typeof artifact.artifact_id === 'string'
+    && typeof artifact.url === 'string'
+    && /^\/api\/v1\/image\/artifacts\/[A-Za-z0-9_-]+$/.test(artifact.url)
+    && typeof artifact.prompt === 'string'
+    && typeof artifact.width === 'number'
+    && typeof artifact.height === 'number'
+  );
+}
+
+function GeneratedImage({ artifact }: { artifact: GeneratedImageArtifact }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let objectUrl: string | null = null;
+
+    void fetch(getApiUrl(artifact.url), {
+      credentials: 'include',
+      cache: 'no-store',
+      signal: controller.signal,
+    }).then(async (response) => {
+      if (!response.ok) throw new Error(`Image artifact request failed with HTTP ${response.status}`);
+      const blob = await response.blob();
+      if (!blob.type.startsWith('image/')) throw new Error('Image artifact response was not an image');
+      objectUrl = URL.createObjectURL(blob);
+      setSrc(objectUrl);
+    }).catch((reason: unknown) => {
+      if (controller.signal.aborted) return;
+      setError(reason instanceof Error ? reason.message : 'Generated image could not be loaded');
+    });
+
+    return () => {
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [artifact.url]);
+
+  if (error) return <p role="alert" className="mt-2 text-xs text-amber-300">{error}</p>;
+  if (!src) return <p role="status" className="mt-2 text-xs text-muted-foreground">Loading generated image…</p>;
+
+  return (
+    <a
+      href={src}
+      download={`jarvis-image-${artifact.artifact_id}`}
+      className="mt-3 block w-fit max-w-full overflow-hidden rounded-lg border border-white/10"
+      aria-label={`Download generated image for: ${artifact.prompt}`}
+    >
+      <Image
+        src={src}
+        alt="Generated image"
+        width={artifact.width}
+        height={artifact.height}
+        unoptimized
+        className="max-h-96 max-w-full object-contain"
+      />
+    </a>
+  );
+}
+
 function ChatMessageBubbleImpl({ message, isStreaming = false, className }: ChatMessageBubbleProps) {
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speechError, setSpeechError] = useState<string | null>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
   const hasError = Boolean(message.error);
@@ -86,6 +170,40 @@ function ChatMessageBubbleImpl({ message, isStreaming = false, className }: Chat
     if (typeof message.error === 'string') return message.error;
     return message.error.message ?? 'Request failed';
   }, [message.error]);
+
+  useEffect(() => () => {
+    if (utteranceRef.current) {
+      window.speechSynthesis?.cancel();
+    }
+  }, []);
+
+  const toggleSpeech = () => {
+    if (isSpeaking) {
+      window.speechSynthesis.cancel();
+      utteranceRef.current = null;
+      setIsSpeaking(false);
+      return;
+    }
+    if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
+      setSpeechError('Spoken playback is not supported by this browser.');
+      return;
+    }
+
+    setSpeechError(null);
+    const utterance = new SpeechSynthesisUtterance(message.content);
+    utteranceRef.current = utterance;
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => {
+      utteranceRef.current = null;
+      setIsSpeaking(false);
+    };
+    utterance.onerror = () => {
+      utteranceRef.current = null;
+      setIsSpeaking(false);
+      setSpeechError('Browser speech playback failed.');
+    };
+    window.speechSynthesis.speak(utterance);
+  };
 
   if (isSystem) {
     return (
@@ -168,6 +286,10 @@ function ChatMessageBubbleImpl({ message, isStreaming = false, className }: Chat
             <ToolCallList tools={message.tool_calls} className="mb-1" />
           )}
 
+          {!isUser && getGeneratedImageArtifacts(message.metadata).map((artifact) => (
+            <GeneratedImage key={artifact.artifact_id} artifact={artifact} />
+          ))}
+
           {!isUser && message.runtime_events && message.runtime_events.length > 0 && (
             <ol aria-label="Capability execution activity" className="mt-2 space-y-1 border-l border-cyan-400/20 pl-3">
               {message.runtime_events.map((event) => (
@@ -214,6 +336,22 @@ function ChatMessageBubbleImpl({ message, isStreaming = false, className }: Chat
           >
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span className="min-w-0 break-words">{errorText}</span>
+          </div>
+        )}
+
+        {!isUser && !isStreaming && message.content && message.status === 'COMPLETED' && (
+          <div className="mt-1 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleSpeech}
+              className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-[11px] text-muted-foreground/60 hover:bg-white/[0.05] hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+              aria-label={isSpeaking ? 'Stop spoken response' : 'Speak response'}
+              title="Spoken playback uses your browser voice"
+            >
+              {isSpeaking ? <Square className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
+              {isSpeaking ? 'Stop' : 'Speak'}
+            </button>
+            {speechError && <span role="status" className="text-[11px] text-amber-300">{speechError}</span>}
           </div>
         )}
       </div>

@@ -66,6 +66,19 @@ from infrastructure.promotion_gate import (
 router = APIRouter(prefix="/api/v2/control", tags=["control-plane"])
 
 
+def _scope_user_id(user: dict, requested_user_id: Optional[str] = None) -> Optional[str]:
+    """Prevent authenticated users from reading other users' control-plane data."""
+    if is_admin(user):
+        return requested_user_id
+
+    current_user_id = user.get("id") or user.get("user_id")
+    if not isinstance(current_user_id, str) or not current_user_id:
+        raise HTTPException(status_code=403, detail="A user identity is required")
+    if requested_user_id and requested_user_id != current_user_id:
+        raise HTTPException(status_code=403, detail="Access to another user's data is denied")
+    return current_user_id
+
+
 # --------------------------------------------------------------------------- #
 # Request/Response Models
 # --------------------------------------------------------------------------- #
@@ -538,11 +551,12 @@ async def list_jobs(
 ):
     """List jobs with filters."""
     registry = get_job_registry()
+    scoped_user_id = _scope_user_id(user, user_id)
     
     jobs = registry.list_jobs(
         status=status,
         job_type=job_type,
-        user_id=user_id,
+        user_id=scoped_user_id,
         limit=limit,
     )
     
@@ -566,12 +580,17 @@ async def list_jobs(
 
 
 @router.get("/jobs/{job_id}", response_model=Dict[str, Any])
-async def get_job(job_id: str):
+async def get_job(
+    job_id: str,
+    user: dict = Depends(_require_auth),
+):
     """Get job details."""
     registry = get_job_registry()
     job = registry.get(job_id)
     
     if not job:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
+    if not is_admin(user) and job.user_id != _scope_user_id(user):
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
     
     return {
@@ -617,11 +636,12 @@ async def list_costs(
 ):
     """List cost records with filters."""
     accountant = get_usage_accountant()
+    scoped_user_id = _scope_user_id(user, user_id)
     
     records = accountant.list_records(
         provider_id=provider_id,
         model_id=model_id,
-        user_id=user_id,
+        user_id=scoped_user_id,
         start_time=start_time,
         end_time=end_time,
         limit=limit,
@@ -651,9 +671,10 @@ async def get_budget_status(
     user: dict = Depends(_require_auth),
 ):
     """Get budget status for a user."""
+    scoped_user_id = _scope_user_id(user, user_id)
     accountant = get_usage_accountant()
     
-    return accountant.get_budget_status(user_id, 0.0)  # No limit set by default
+    return accountant.get_budget_status(scoped_user_id or user_id, 0.0)  # No limit set by default
 
 
 @router.post("/budget", response_model=Dict[str, Any])
@@ -691,7 +712,12 @@ async def get_usage_by_provider(
     now = time.time()
     start = now - (days * 86400)
     
-    usage = accountant.get_usage_by_provider(start_time=start, end_time=now)
+    scoped_user_id = _scope_user_id(user)
+    usage = accountant.get_usage_by_provider(
+        start_time=start,
+        end_time=now,
+        user_id=scoped_user_id,
+    )
     
     return {
         "period_days": days,
@@ -717,11 +743,12 @@ async def list_audit_events(
 ):
     """Query audit events."""
     audit = get_audit_service()
+    scoped_user_id = _scope_user_id(user, user_id)
     
     events = audit.query_events(
         category=category,
         event_type=event_type,
-        user_id=user_id,
+        user_id=scoped_user_id,
         resource_type=resource_type,
         resource_id=resource_id,
         start_time=start_time,
@@ -761,11 +788,12 @@ async def count_audit_events(
 ):
     """Count audit events matching filters."""
     audit = get_audit_service()
+    scoped_user_id = _scope_user_id(user, user_id)
     
     count = audit.count_events(
         category=category,
         event_type=event_type,
-        user_id=user_id,
+        user_id=scoped_user_id,
         start_time=start_time,
         end_time=end_time,
     )

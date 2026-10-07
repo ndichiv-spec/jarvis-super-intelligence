@@ -36,7 +36,6 @@ const PROVIDER_LABELS: Record<string, string> = {
 interface ChatWindowProps {
   className?: string;
   showSidebar?: boolean;
-  onVoiceClick?: () => void;
 }
 
 function ProviderStatusIcon({ provider }: { provider: ProviderInfo }) {
@@ -49,7 +48,7 @@ function ProviderStatusIcon({ provider }: { provider: ProviderInfo }) {
   return <CheckCircle className="h-3 w-3 text-green-400" />;
 }
 
-export function ChatWindow({ className = '', showSidebar = true, onVoiceClick }: ChatWindowProps) {
+export function ChatWindow({ className = '', showSidebar = true }: ChatWindowProps) {
   const {
     messages,
     sessions,
@@ -62,6 +61,7 @@ export function ChatWindow({ className = '', showSidebar = true, onVoiceClick }:
     connected,
     sendMessage,
     sendStreamMessage,
+    stopStream,
     loadSessions,
     loadSession,
     deleteSession,
@@ -343,10 +343,9 @@ export function ChatWindow({ className = '', showSidebar = true, onVoiceClick }:
           <div className="mx-auto max-w-3xl">
             <ChatInput
               onSend={handleSend}
-              onStartVoice={onVoiceClick}
               disabled={isLoading}
               isStreaming={isStreaming}
-              onStopStreaming={() => useChatStore.setState({ isStreaming: false })}
+              onStopStreaming={stopStream}
             />
             <p className="mt-2 text-center text-[10px] text-muted-foreground/30">
               JARVIS may produce inaccurate information. Verify critical facts.

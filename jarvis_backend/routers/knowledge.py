@@ -58,7 +58,13 @@ def _visible_items(user_id: str) -> List[Dict[str, Any]]:
         {**item, "read_only": True}
         for item in items.values()
         if isinstance(item, dict)
-        and item.get("user_id") in (None, "", "system")
+        and (
+            item.get("user_id") == "system"
+            or (
+                item.get("user_id") in (None, "")
+                and item.get("visibility") == "public"
+            )
+        )
         and item.get("key") not in owned_keys
     ]
     return owned + public

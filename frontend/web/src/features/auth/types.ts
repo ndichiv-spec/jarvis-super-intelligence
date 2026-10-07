@@ -18,8 +18,8 @@ export interface UserRole {
 }
 
 export interface LoginResponse {
-  access_token: string;
-  token_type: string;
+  access_token?: string;
+  token_type?: string;
   user: User;
 }
 

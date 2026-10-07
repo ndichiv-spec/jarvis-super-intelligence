@@ -57,71 +57,54 @@ class VisionCapability(Capability):
         super().__init__()
         self._event_bus = get_event_bus()
         self._max_image_size = 10 * 1024 * 1024  # 10MB limit
+        self._inference_verified = False
 
     async def _check_health(self) -> Dict[str, Any]:
-        """Real health check - verify multimodal LLM availability."""
-        providers_available = []
+        """Report configured vision backends without implying inference worked."""
+        configured_providers = []
 
-        # Check OpenAI (GPT-4V / GPT-4o)
         api_key = os.environ.get('OPENAI_API_KEY')
         if api_key:
-            providers_available.append({
+            configured_providers.append({
                 'name': 'openai',
                 'models': ['gpt-4o', 'gpt-4-vision-preview'],
-                'status': 'available',
+                'status': 'configured',
             })
-            self.set_status(CapabilityStatus.READY)
-            return {
-                'status': CapabilityStatus.READY,
-                'providers': providers_available,
-                'healthy': True,
-                'ocr_available': True,
-                'image_understanding_available': True,
-            }
 
-        # Check Google (Gemini Vision)
         google_creds = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
         google_api_key = os.environ.get('GOOGLE_API_KEY')
         if google_creds or google_api_key:
-            providers_available.append({
+            configured_providers.append({
                 'name': 'google',
                 'models': ['gemini-1.5-flash', 'gemini-pro-vision'],
-                'status': 'available',
+                'status': 'configured',
             })
-            self.set_status(CapabilityStatus.READY)
-            return {
-                'status': CapabilityStatus.READY,
-                'providers': providers_available,
-                'healthy': True,
-                'ocr_available': True,
-                'image_understanding_available': True,
-            }
 
-        # Check for local vision models
         local_vision = os.environ.get('JARVIS_LOCAL_VISION')
         if local_vision:
-            providers_available.append({
+            configured_providers.append({
                 'name': 'local',
                 'models': [local_vision],
-                'status': 'available',
+                'status': 'configured',
             })
-            self.set_status(CapabilityStatus.READY)
-            return {
-                'status': CapabilityStatus.READY,
-                'providers': providers_available,
-                'healthy': True,
-                'ocr_available': True,
-                'image_understanding_available': True,
-            }
 
-        self.set_status(CapabilityStatus.NOT_CONFIGURED)
+        status = (
+            CapabilityStatus.AVAILABLE if self._inference_verified
+            else CapabilityStatus.CONFIGURED if configured_providers
+            else CapabilityStatus.NOT_CONFIGURED
+        )
         return {
-            'status': CapabilityStatus.NOT_CONFIGURED,
-            'providers': [],
-            'healthy': False,
-            'ocr_available': False,
-            'image_understanding_available': False,
-            'error': 'No vision provider configured. Set OPENAI_API_KEY, GOOGLE_API_KEY, or JARVIS_LOCAL_VISION.',
+            'status': status,
+            'providers': configured_providers,
+            'configured': bool(configured_providers),
+            'healthy': self._inference_verified,
+            'ocr_available': self._inference_verified,
+            'image_understanding_available': self._inference_verified,
+            'inference_verified': self._inference_verified,
+            'error': None if configured_providers else (
+                'No vision provider configured. Set OPENAI_API_KEY, '
+                'GOOGLE_API_KEY, or JARVIS_LOCAL_VISION.'
+            ),
         }
 
     async def execute(
@@ -190,6 +173,9 @@ class VisionCapability(Capability):
 
         result.latency_ms = (time.time() - start_time) * 1000.0
         result.correlation_id = correlation_id
+        if result.success:
+            self._inference_verified = True
+            self.set_status(CapabilityStatus.AVAILABLE)
 
         # Emit completion
         self._event_bus.emit(

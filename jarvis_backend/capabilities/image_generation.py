@@ -33,10 +33,12 @@ import os
 import sys
 import time
 import base64
+import uuid
 from typing import Any, Dict, List, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from jarvis_backend.core import DATA_DIR
 from jarvis_backend.capability import Capability, CapabilityStatus, ExecutionContext, ExecutionResult
 from jarvis_backend.event_fabric import get_event_bus
 from jarvis_backend.persistence import ArtifactRepository, AuditLog, ProviderStateRepository
@@ -57,14 +59,15 @@ class ImageGenerationCapability(Capability):
     def __init__(self):
         super().__init__()
         self._event_bus = get_event_bus()
+        self._generation_verified = False
         self._artifact_dir = os.environ.get(
             'JARVIS_ARTIFACT_DIR',
-            'F:/AI/Jarvis-super-intelligence-/jarvis_backend/data/artifacts'
+            str(DATA_DIR / 'artifacts' / 'images'),
         )
         os.makedirs(self._artifact_dir, exist_ok=True)
 
     async def _check_health(self) -> Dict[str, Any]:
-        """Real health check - verify image generation providers."""
+        """Report image providers as configured until generation succeeds."""
         providers = []
 
         # Check OpenAI DALL-E
@@ -73,18 +76,17 @@ class ImageGenerationCapability(Capability):
             try:
                 import openai
                 client = openai.OpenAI(api_key=api_key)
-                # Real check - try to list models
-                models = client.models.list()
+                client.models.list()
                 providers.append({
                     'name': 'openai_dalle',
                     'models': ['dall-e-2', 'dall-e-3'],
-                    'status': 'available',
+                    'status': 'configured',
                 })
             except Exception as e:
                 providers.append({
                     'name': 'openai_dalle',
-                    'status': 'error',
-                    'error': str(e),
+                    'status': 'unavailable',
+                    'error': type(e).__name__,
                 })
         else:
             providers.append({
@@ -98,7 +100,7 @@ class ImageGenerationCapability(Capability):
             providers.append({
                 'name': 'stability',
                 'models': ['sd3', 'sdxl', 'stable-diffusion-21'],
-                'status': 'available',
+                'status': 'configured',
             })
         else:
             providers.append({
@@ -112,25 +114,29 @@ class ImageGenerationCapability(Capability):
             providers.append({
                 'name': 'local',
                 'models': [local_model],
-                'status': 'available',
+                'status': 'configured',
             })
 
-        healthy = any(p['status'] == 'available' for p in providers)
+        configured = any(p['status'] == 'configured' for p in providers)
 
         ProviderStateRepository.update_state(
             provider_name='image_generation',
             capability='image.generate',
-            status='available' if healthy else 'not_configured',
+            status='configured' if configured else 'not_configured',
             latency_ms=0,
             metadata={'providers': providers},
         )
 
-        self.set_status(CapabilityStatus.READY if healthy else CapabilityStatus.NOT_CONFIGURED)
-
         return {
-            'status': 'ready' if healthy else 'not_configured',
+            'status': (
+                CapabilityStatus.AVAILABLE if self._generation_verified
+                else CapabilityStatus.CONFIGURED if configured
+                else CapabilityStatus.NOT_CONFIGURED
+            ),
             'providers': providers,
-            'healthy': healthy,
+            'configured': configured,
+            'healthy': self._generation_verified,
+            'generation_verified': self._generation_verified,
             'artifact_directory': self._artifact_dir,
         }
 
@@ -176,7 +182,10 @@ class ImageGenerationCapability(Capability):
             session_id=context.session_id,
             user_id=context.user_id,
             status='started',
-            payload={'prompt': prompt[:100], 'size': request.get('size', '1024x1024')},
+            payload={
+                'prompt_length': len(prompt),
+                'size': request.get('size', '1024x1024'),
+            },
         )
 
         try:
@@ -218,6 +227,7 @@ class ImageGenerationCapability(Capability):
                     correlation_id=correlation_id,
                     provenance=f"image_generation_{artifact.get('provider', 'unknown')}",
                     metadata={
+                        'owner_id': context.user_id,
                         'prompt': prompt,
                         'model': artifact.get('model'),
                         'provider': artifact.get('provider'),
@@ -233,7 +243,7 @@ class ImageGenerationCapability(Capability):
             action='generate',
             resource='image',
             result='success' if result.success else 'error',
-            details=prompt[:200],
+            details=f"prompt_length={len(prompt)}",
         )
 
         return result
@@ -301,6 +311,16 @@ class ImageGenerationCapability(Capability):
                         'index': i,
                     })
 
+                if not artifacts:
+                    raise ValueError("Image provider returned no image data")
+                self._generation_verified = True
+                self.set_status(CapabilityStatus.AVAILABLE)
+                ProviderStateRepository.update_state(
+                    provider_name='openai_dalle',
+                    capability='image.generate',
+                    status=CapabilityStatus.AVAILABLE.value,
+                    latency_ms=0,
+                )
                 return ExecutionResult(
                     capability=self.name,
                     success=True,
@@ -371,6 +391,14 @@ class ImageGenerationCapability(Capability):
                         'provider': 'stability',
                     })
 
+                    self._generation_verified = True
+                    self.set_status(CapabilityStatus.AVAILABLE)
+                    ProviderStateRepository.update_state(
+                        provider_name='stability',
+                        capability='image.generate',
+                        status=CapabilityStatus.AVAILABLE.value,
+                        latency_ms=0,
+                    )
                     return ExecutionResult(
                         capability=self.name,
                         success=True,

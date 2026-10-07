@@ -138,7 +138,7 @@ def _api_key_entry(ext_id: str, probe: bool) -> Dict[str, Any]:
         "key_env": key_names,
         "console_url": prov.get("console_url"),
         "configured": configured,
-        "connected": configured,
+        "connected": False,
         "status": None,
         "validator_result": None,
         "reason": None,
@@ -156,6 +156,7 @@ def _api_key_entry(ext_id: str, probe: bool) -> Dict[str, Any]:
     # Live probe (server-side only; the raw key is never logged or returned).
     verified, err = ext._validate_api_key(ext_id, key)  # type: ignore[arg-type]
     entry["validator_result"] = {"verified": verified, "error": err}
+    entry["connected"] = verified is True
     if verified is True:
         entry["status"] = "HEALTHY"
     elif verified is False:

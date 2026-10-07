@@ -26,6 +26,7 @@ def test_knowledge_reads_require_authentication(client):
     assert client.get("/api/v1/knowledge").status_code == 401
     assert client.get("/api/v1/knowledge/search?q=jarvis").status_code == 401
     assert client.get("/api/v1/knowledge/patterns").status_code == 401
+    assert client.get("/api/v1/cognitive/knowledge/search").status_code == 401
 
 
 def test_knowledge_entries_are_isolated_per_user(client, auth_headers):
@@ -80,3 +81,75 @@ def test_knowledge_upsert_and_patterns_return_renderable_entries(client, auth_he
         "response": "Updated response",
         "category": "pattern",
     } in patterns.json()["patterns"]
+
+
+def test_cognitive_knowledge_search_and_chat_context_are_user_scoped(
+    client, auth_headers
+):
+    owner_id = "testuser"
+    private_key = f"private_{uuid.uuid4().hex}"
+    other_key = f"other_{uuid.uuid4().hex}"
+    global_key = f"global_{uuid.uuid4().hex}"
+    knowledge = get_store("knowledge").load()
+    knowledge.update({
+        f"{owner_id}::{private_key}": {
+            "key": private_key,
+            "value": "owner privateproof",
+            "category": "private",
+            "user_id": owner_id,
+        },
+        f"other-user::{other_key}": {
+            "key": other_key,
+            "value": "other privateproof",
+            "category": "private",
+            "user_id": "other-user",
+        },
+        f"system::{global_key}": {
+            "key": global_key,
+            "value": "shared sharedproof",
+            "category": "shared",
+            "user_id": "system",
+        },
+        "legacy-unowned": {
+            "key": "legacy-private",
+            "value": "legacy legacyproof",
+            "user_id": None,
+        },
+        "explicit-public": {
+            "key": "public-marker",
+            "value": "approved publicproof",
+            "user_id": None,
+            "visibility": "public",
+        },
+    })
+    get_store("knowledge").save()
+
+    results = client.get(
+        "/api/v1/cognitive/knowledge/search",
+        params={"query": "privateproof"},
+        headers=auth_headers,
+    )
+    assert results.status_code == 200
+    visible_keys = {item["key"] for item in results.json()["results"]}
+    assert private_key in visible_keys
+    assert other_key not in visible_keys
+    assert global_key not in visible_keys
+    assert "legacy-private" not in visible_keys
+
+    visible_public = client.get(
+        "/api/v1/cognitive/knowledge/search",
+        params={"query": "approved publicproof"},
+        headers=auth_headers,
+    ).json()["results"]
+    assert [entry["key"] for entry in visible_public] == ["public-marker"]
+
+    from jarvis_backend.chat_service import chat_service
+
+    own_context = chat_service._recall_context(owner_id, "privateproof")
+    assert private_key in own_context
+    assert other_key not in own_context
+    assert global_key not in own_context
+    assert "legacy legacyproof" not in own_context
+
+    shared_context = chat_service._recall_context(owner_id, "sharedproof")
+    assert global_key in shared_context

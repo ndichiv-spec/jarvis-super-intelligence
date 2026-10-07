@@ -332,6 +332,34 @@ class ChatService:
             "limit": limit,
         }
 
+    def record_generated_images(
+        self,
+        user_id: str,
+        session_id: str,
+        prompt: str,
+        images: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Persist an image prompt and its artifacts as a user-owned chat turn."""
+        session = self.get_session(user_id, session_id)
+        user_message = _new_message(
+            str(uuid.uuid4()),
+            "user",
+            prompt,
+            status=COMPLETED,
+        )
+        assistant_message = _new_message(
+            str(uuid.uuid4()),
+            "assistant",
+            f"Generated {len(images)} image{'s' if len(images) != 1 else ''}.",
+            status=COMPLETED,
+        )
+        assistant_message["provider"] = "image_generation"
+        assistant_message["metadata"] = {"artifacts": images}
+        session.setdefault("messages", []).extend([user_message, assistant_message])
+        session["updated_at"] = now_iso()
+        get_store("chat_sessions").save()
+        return [user_message, assistant_message]
+
     def _summary(self, session: dict[str, Any]) -> dict[str, Any]:
         messages = session.get("messages") or []
         last = messages[-1] if messages else None
@@ -359,12 +387,11 @@ class ChatService:
 
     # -- memory / knowledge context for the system prompt ---------------------- #
     def _recall_context(self, user_id: str, content: str, limit: int = 8) -> str:
-        """Recruit the user's memories + globally-indexed knowledge relevant to
+        """Recruit the user's memories and visible knowledge relevant to
         the current ``content`` to ground the system prompt.
 
-        Only the *user's own* memories (and memories with no owner) are
-        considered, so one user can never leak another user's context to the
-        provider.  Relevance is a cheap term-overlap + importance score,
+        Only the user's own memories are considered. Shared knowledge must be
+        explicitly system-owned or marked public. Relevance is a cheap term-overlap + importance score,
         bounded to ``limit`` memories plus matching knowledge items.
         """
         query = (content or "").lower()
@@ -374,8 +401,7 @@ class ChatService:
         memories = get_store("memory").load()
         scored: list[tuple[float, str]] = []
         for m in memories.values():
-            owner = m.get("user_id")
-            if owner and owner != user_id:
+            if not isinstance(m, dict) or m.get("user_id") != user_id:
                 continue  # ownership-safe: skip another user's memories
             mcontent = (m.get("content") or "").lower()
             if not mcontent:
@@ -392,6 +418,14 @@ class ChatService:
         knowledge = get_store("knowledge").load()
         kmatches: list[str] = []
         for item in knowledge.values():
+            if not isinstance(item, dict):
+                continue
+            owner = item.get("user_id")
+            shared = owner == "system" or (
+                owner in (None, "") and item.get("visibility") == "public"
+            )
+            if owner != user_id and not shared:
+                continue
             key = (item.get("key") or "").lower()
             val = (item.get("value") or "").lower()
             if not key and not val:

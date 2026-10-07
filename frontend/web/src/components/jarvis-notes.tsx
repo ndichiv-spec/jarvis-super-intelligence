@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Edit, Trash2, Save, X, Search, Tag } from 'lucide-react';
-import { getAuthToken } from '@/lib/api-client';
 import { getApiUrl } from '@/lib/runtime-url';
 
 interface Note {
@@ -16,12 +15,11 @@ interface Note {
 }
 
 const authHeaders = (json = false): Record<string, string> => {
-  const token = getAuthToken();
-  const headers: Record<string, string> = {};
-  if (json) headers['Content-Type'] = 'application/json';
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  return headers;
+  return json ? { 'Content-Type': 'application/json' } : {};
 };
+
+const sessionFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
+  fetch(input, { ...init, credentials: 'include' });
 
 export default function JarvisNotes() {
   const [notes, setNotes] = useState<Note[]>([]);
@@ -36,7 +34,7 @@ export default function JarvisNotes() {
 
   const loadNotes = async () => {
     try {
-      const response = await fetch(getApiUrl('/api/notes'), { headers: authHeaders() });
+      const response = await sessionFetch(getApiUrl('/api/notes'), { headers: authHeaders() });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       setNotes(data.notes);
@@ -47,7 +45,7 @@ export default function JarvisNotes() {
 
   const createNote = async () => {
     try {
-      const response = await fetch(getApiUrl('/api/notes'), {
+      const response = await sessionFetch(getApiUrl('/api/notes'), {
         method: 'POST',
         headers: authHeaders(true),
         body: JSON.stringify(newNote)
@@ -65,7 +63,7 @@ export default function JarvisNotes() {
   const updateNote = async () => {
     if (!editingNote) return;
     try {
-      const response = await fetch(getApiUrl(`/api/notes/${encodeURIComponent(editingNote.id)}`), {
+      const response = await sessionFetch(getApiUrl(`/api/notes/${encodeURIComponent(editingNote.id)}`), {
         method: 'PATCH',
         headers: authHeaders(true),
         body: JSON.stringify(editingNote)
@@ -81,7 +79,7 @@ export default function JarvisNotes() {
 
   const deleteNote = async (id: string) => {
     try {
-      await fetch(getApiUrl(`/api/notes/${encodeURIComponent(id)}`), { method: 'DELETE', headers: authHeaders() });
+      await sessionFetch(getApiUrl(`/api/notes/${encodeURIComponent(id)}`), { method: 'DELETE', headers: authHeaders() });
       setNotes(notes.filter(note => note.id !== id));
     } catch (error) {
       console.error('Failed to delete note:', error);

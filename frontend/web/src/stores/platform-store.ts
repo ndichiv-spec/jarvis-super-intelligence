@@ -17,19 +17,17 @@
 
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
-import { getAuthToken } from '@/lib/api-client';
 import wsClient from '@/lib/websocket-client';
+import type { WsEvent } from '@/lib/websocket-client';
 import env from '@/config/env';
 import API_ENDPOINTS from '@/config/api';
 import type {
   PlatformState,
   ProviderStatus,
-  CredentialRef,
   SystemResourceUsage,
   ActivityEvent,
   NotificationItem,
   WorkspaceState,
-  NavigationContext,
   BackendConnection,
   ResourceStatus,
 } from '@/lib/types/platform';
@@ -50,37 +48,79 @@ function nextNotificationId(): string {
   return `notif-${Date.now()}-${_notificationId}`;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function finiteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
 /** Map a raw monitoring metrics / health-report response to our normalised shape. */
-function normaliseSystemUsage(raw: any): SystemResourceUsage {
-  const sys = raw?.system ?? raw ?? {};
+function normaliseSystemUsage(value: unknown): SystemResourceUsage | null {
+  const raw = isRecord(value) ? value : {};
+  const sys = isRecord(raw.system) ? raw.system : raw;
+  const memoryRaw = isRecord(raw.memory) ? raw.memory : {};
+  const cpu = finiteNumber(raw.cpu_percent) ? raw.cpu_percent : sys.cpu_percent;
+  const memory = finiteNumber(memoryRaw.percent) ? memoryRaw.percent : sys.memory_percent;
+  const available = finiteNumber(memoryRaw.available)
+    ? memoryRaw.available / 1048576
+    : sys.memory_available_mb;
+  const disk = finiteNumber(raw.disk) ? raw.disk : sys.disk_percent;
+  const processes = finiteNumber(raw.processes)
+    ? raw.processes
+    : finiteNumber(sys.processes)
+      ? sys.processes
+      : sys.process_count;
+
+  if (
+    !finiteNumber(cpu) ||
+    !finiteNumber(memory) ||
+    !finiteNumber(available) ||
+    !finiteNumber(disk) ||
+    !finiteNumber(processes)
+  ) {
+    return null;
+  }
+
   return {
-    cpu_percent: typeof raw?.cpu_percent === 'number' ? raw.cpu_percent
-      : typeof sys?.cpu_percent === 'number' ? sys.cpu_percent : 0,
-    memory_percent: typeof raw?.memory?.percent === 'number' ? raw.memory.percent
-      : typeof sys?.memory_percent === 'number' ? sys.memory_percent : 0,
-    memory_available_mb: typeof raw?.memory?.available === 'number' ? raw.memory.available / 1048576
-      : typeof sys?.memory_available_mb === 'number' ? sys.memory_available_mb : 0,
-    disk_percent: typeof raw?.disk === 'number' ? raw.disk
-      : typeof sys?.disk_percent === 'number' ? sys.disk_percent : 0,
-    processes: typeof raw?.processes === 'number' ? raw.processes
-      : typeof sys?.processes === 'number' ? sys.processes
-      : typeof sys?.process_count === 'number' ? sys.process_count : 0,
+    cpu_percent: cpu,
+    memory_percent: memory,
+    memory_available_mb: available,
+    disk_percent: disk,
+    processes,
     timestamp: Date.now(),
   };
 }
 
 /** Build provider status list from the control/status endpoint. */
-function normaliseProviders(raw: any): { providers: ProviderStatus[]; summary: { total: number; connected: number; disconnected: number } } {
-  const providers: ProviderStatus[] = Array.isArray(raw?.providers) ? raw.providers : [];
-  const summary = raw?.provider_summary ?? { total: providers.length, connected: 0, disconnected: providers.length };
-  const connected = summary.connected ?? providers.filter((p: any) => p.connected === true).length;
-  const total = summary.total ?? providers.length;
+function normaliseProviders(raw: unknown): { providers: ProviderStatus[]; summary: { total: number; connected: number; disconnected: number } } {
+  const data = isRecord(raw) ? raw : {};
+  const providers = Array.isArray(data.providers)
+    ? data.providers.filter((provider): provider is ProviderStatus => {
+        return isRecord(provider) &&
+          typeof provider.provider === 'string' &&
+          typeof provider.display_name === 'string' &&
+          typeof provider.connected === 'boolean' &&
+          typeof provider.status === 'string' &&
+          Array.isArray(provider.capabilities) &&
+          typeof provider.model_count === 'number' &&
+          typeof provider.configured === 'boolean';
+      })
+    : [];
+  const summary = isRecord(data.provider_summary) ? data.provider_summary : {};
+  const connected = finiteNumber(summary.connected)
+    ? summary.connected
+    : providers.filter((provider) => provider.connected).length;
+  const total = finiteNumber(summary.total) ? summary.total : providers.length;
   return {
     providers,
     summary: {
       total,
       connected,
-      disconnected: (summary.disconnected ?? total - connected),
+      disconnected: finiteNumber(summary.disconnected)
+        ? summary.disconnected
+        : total - connected,
     },
   };
 }
@@ -98,8 +138,6 @@ function loadWorkspace(): WorkspaceState {
 
 function defaultWorkspace(): WorkspaceState {
   return {
-    selectedModel: 'auto',
-    selectedProvider: 'jarvis-brain',
     panelState: {},
   };
 }
@@ -120,7 +158,7 @@ export interface PlatformStore extends PlatformState {
   setBackend: (c: Partial<BackendConnection>) => void;
   setSilverwing: (s: { connected: boolean; model: string | null; status: string }) => void;
   setProviders: (providers: ProviderStatus[], summary: { total: number; connected: number; disconnected: number }) => void;
-  setSystem: (usage: SystemResourceUsage) => void;
+  setSystem: (usage: SystemResourceUsage | null) => void;
   addActivity: (event: Omit<ActivityEvent, 'id' | 'timestamp'>) => void;
   addNotification: (n: Omit<NotificationItem, 'id' | 'timestamp' | 'read'>) => void;
   markNotificationRead: (id: string) => void;
@@ -253,15 +291,14 @@ export const usePlatformStore = create<PlatformStore>()(
         const start = Date.now();
         try {
           const res = await fetch(`${env.API_URL}/api/v1/monitoring/metrics`, {
-            headers: { Authorization: `Bearer ${getAuthToken() || ''}` },
+            credentials: 'include',
           });
           const latency = Date.now() - start;
           if (res.ok) {
             get().setBackend({ connected: true, status: 'completed', latencyMs: latency, error: null, lastChecked: new Date() });
             const data = await res.json();
-            if (typeof data.cpu_percent === 'number' || data.system) {
-              get().setSystem(normaliseSystemUsage(data));
-            }
+            const usage = normaliseSystemUsage(data);
+            if (usage) get().setSystem(usage);
           } else if (res.status >= 500) {
             get().setBackend({ connected: false, status: 'offline', error: `Backend error: ${res.status}`, lastChecked: new Date() });
           } else {
@@ -280,8 +317,8 @@ export const usePlatformStore = create<PlatformStore>()(
       refreshSystem: async () => {
         try {
           const [metricsRes, healthRes] = await Promise.allSettled([
-            fetch(API_ENDPOINTS.monitoring.metrics),
-            fetch(API_ENDPOINTS.monitoring.healthReport),
+            fetch(API_ENDPOINTS.monitoring.metrics, { credentials: 'include' }),
+            fetch(API_ENDPOINTS.monitoring.healthReport, { credentials: 'include' }),
           ]);
           let usage: SystemResourceUsage | null = null;
           if (metricsRes.status === 'fulfilled' && (metricsRes.value as Response).ok) {
@@ -290,18 +327,16 @@ export const usePlatformStore = create<PlatformStore>()(
           if (!usage && healthRes.status === 'fulfilled' && (healthRes.value as Response).ok) {
             usage = normaliseSystemUsage(await (healthRes.value as Response).json());
           }
-          if (usage) get().setSystem(usage);
+          get().setSystem(usage);
         } catch {
           // Silent — system metrics are best-effort
         }
       },
 
       refreshProviders: async () => {
-        const token = getAuthToken();
-        if (!token) return;
         try {
           const res = await fetch(`${env.API_URL}/api/v1/control/status`, {
-            headers: { Authorization: `Bearer ${token}` },
+            credentials: 'include',
           });
           if (res.ok) {
             const data = await res.json();
@@ -315,7 +350,9 @@ export const usePlatformStore = create<PlatformStore>()(
 
       refreshSilverwing: async () => {
         try {
-          const res = await fetch(`${env.API_URL}/silverwing/api/laboratory/model`);
+          const res = await fetch(`${env.API_URL}/silverwing/api/laboratory/model`, {
+            credentials: 'include',
+          });
           if (res.ok) {
             const data = await res.json();
             get().setSilverwing({ connected: true, model: data.id || data.name || null, status: data.status || 'unknown' });
@@ -344,29 +381,55 @@ export const usePlatformStore = create<PlatformStore>()(
           return () => {};
         }
 
-        const unsubscribe = wsClient.subscribe(`${wsUrl}/ws/monitoring`, (rawEvent: any) => {
-          const event: any = rawEvent;
-          const data = event.data as any;
-          if (event?.type === 'monitoring_update' && data?.metrics) {
-            get().setSystem(normaliseSystemUsage(data.metrics));
+        const unsubscribe = wsClient.subscribe(`${wsUrl}/ws/monitoring`, (event: WsEvent) => {
+          const data = isRecord(event.data) ? event.data : {};
+          if (event.type === 'monitoring_update' && data.metrics) {
+            const usage = normaliseSystemUsage(data.metrics);
+            if (usage) get().setSystem(usage);
           }
-          if (event?.type === 'health_update' && data) {
-            get().setSystem(normaliseSystemUsage(data));
+          if (event.type === 'health_update') {
+            const usage = normaliseSystemUsage(data);
+            if (usage) get().setSystem(usage);
           }
           // 'activity' and 'notification' are custom types the backend may emit
-          if (event?.type === 'activity') {
-            get().addActivity(data);
-          }
-          if (event?.type === 'notification') {
-            get().addNotification({
-              title: data?.title || 'JARVIS',
-              detail: data?.detail || '',
-              severity: data?.severity || 'info',
-              domain: data?.domain || 'system',
+          if (
+            event.type === 'activity' &&
+            typeof data.domain === 'string' &&
+            typeof data.operation === 'string' &&
+            typeof data.title === 'string' &&
+            typeof data.severity === 'string'
+          ) {
+            get().addActivity({
+              domain: data.domain as ActivityEvent['domain'],
+              operation: data.operation,
+              title: data.title,
+              detail: typeof data.detail === 'string' ? data.detail : undefined,
+              severity: data.severity as ActivityEvent['severity'],
+              user: typeof data.user === 'string' ? data.user : undefined,
+              resourceId: typeof data.resourceId === 'string' ? data.resourceId : undefined,
+              resourceType: typeof data.resourceType === 'string' ? data.resourceType : undefined,
+              metadata: isRecord(data.metadata) ? data.metadata : undefined,
             });
           }
-          if (event?.type === 'status_update') {
-            get().setBackend({ connected: data?.connected ?? true, status: data?.status as ResourceStatus, lastChecked: new Date() });
+          if (event.type === 'notification') {
+            get().addNotification({
+              title: typeof data.title === 'string' ? data.title : 'JARVIS',
+              detail: typeof data.detail === 'string' ? data.detail : '',
+              severity: data.severity === 'low' || data.severity === 'medium' ||
+                data.severity === 'high' || data.severity === 'critical'
+                ? data.severity
+                : 'info',
+              domain: typeof data.domain === 'string'
+                ? data.domain as ActivityEvent['domain']
+                : 'system',
+            });
+          }
+          if (event.type === 'status_update' && typeof data.status === 'string') {
+            get().setBackend({
+              connected: typeof data.connected === 'boolean' ? data.connected : true,
+              status: data.status as ResourceStatus,
+              lastChecked: new Date(),
+            });
           }
         });
 

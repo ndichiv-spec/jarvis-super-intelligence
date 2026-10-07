@@ -32,49 +32,19 @@ export class AuthError extends ApiClientError {
   }
 }
 
-let _authToken: string | null = null;
-let _refreshToken: string | null = null;
-let _authHydrated = false;
 let _refreshing = false;
 let _onAuthError: (() => void) | null = null;
 
-// zustand persist key used by stores/authStore.ts. Lazily read on first
-// request so API calls are authenticated even if the auth-store module hasn't
-// been imported yet — removes the first-render auth race that caused silent
-// 401 -> re-login on fresh mounts.
+// Persisted keys from versions that stored bearer credentials in localStorage.
 const AUTH_STORAGE_KEY = 'jarvis-auth-storage';
+const FEATURE_AUTH_STORAGE_KEY = 'jarvis-feature-auth-storage';
 
-export function setAuthToken(token: string | null, refreshToken: string | null = null) {
-  _authToken = token;
-  _refreshToken = refreshToken;
-  _authHydrated = true;
-  if (typeof window !== 'undefined' && token !== null && token !== '') {
-    try {
-      const existing = JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY) || '{}');
-      localStorage.setItem(
-        AUTH_STORAGE_KEY,
-        JSON.stringify({ ...existing, token, refreshToken: refreshToken ?? existing.refreshToken ?? null })
-      );
-    } catch { /* ignore storage errors */ }
-  }
-}
-
-function _hydrateFromStorage(): void {
-  if (_authHydrated || typeof window === 'undefined') return;
-  _authHydrated = true;
-  try {
-    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
-    if (raw) {
-      const s = JSON.parse(raw);
-      if (s.token) _authToken = s.token;
-      if (s.refreshToken) _refreshToken = s.refreshToken;
-    }
-  } catch { /* ignore */ }
+export function setAuthToken(_token: string | null, _refreshToken: string | null = null) {
+  // Authentication uses server-managed HttpOnly cookies only.
 }
 
 export function getAuthToken(): string | null {
-  _hydrateFromStorage();
-  return _authToken;
+  return null;
 }
 
 export function onAuthError(handler: () => void) {
@@ -82,18 +52,13 @@ export function onAuthError(handler: () => void) {
 }
 
 /**
- * Clear all auth state — both the in-memory token/refresh token and the
- * persisted `jarvis-auth-storage` entry in localStorage. Called when a 401
- * can't be resolved via refresh, so the login page correctly shows the
- * sign-in form instead of redirect-looping back to a protected route.
+ * Clear persisted UI auth state after the HttpOnly session cannot be refreshed.
  */
 export function clearAuthToken(): void {
-  _authToken = null;
-  _refreshToken = null;
-  _authHydrated = false;
   if (typeof window !== 'undefined') {
     try {
       localStorage.removeItem(AUTH_STORAGE_KEY);
+      localStorage.removeItem(FEATURE_AUTH_STORAGE_KEY);
     } catch { /* ignore */ }
   }
 }
@@ -118,10 +83,6 @@ export class ApiClient {
   private async request<T>(endpoint: string, config: RequestConfig = {}): Promise<T> {
     const { params, data, timeout = env.REQUEST_TIMEOUT, retries = 2, retryDelay = 1000, ...fetchConfig } = config;
     const url = this.buildUrl(endpoint, params);
-    // Make sure the in-memory token is populated from persisted storage on a
-    // fresh mount (no-op when authStore already synced it).
-    _hydrateFromStorage();
-
     const headers: Record<string, string> = {
       ...(fetchConfig.headers as Record<string, string>),
     };
@@ -130,14 +91,11 @@ export class ApiClient {
       headers['Content-Type'] = 'application/json';
     }
 
-    if (_authToken) {
-      headers['Authorization'] = `Bearer ${_authToken}`;
-    }
-
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     let lastError: Error | null = null;
+    let refreshAttempted = false;
 
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
@@ -146,6 +104,7 @@ export class ApiClient {
           headers,
           body: data instanceof FormData ? data as FormData : data ? JSON.stringify(data) : undefined,
           signal: controller.signal,
+          credentials: 'include',
         });
 
         clearTimeout(timeoutId);
@@ -155,16 +114,16 @@ export class ApiClient {
           const errorMessage = errorBody.error || errorBody.detail || `HTTP ${response.status}`;
           const errorCategory = response.headers.get('X-Browser-Error-Category');
 
-          // On a 401, try ONE silent refresh with the persisted refresh token.
-          // If it succeeds, retry the request with the new access token instead
+          // On a 401, try ONE silent refresh using the HttpOnly refresh cookie.
+          // If it succeeds, retry the request with the rotated access cookie instead
           // of forcing the user back to the login page.
           let refreshed = false;
-          if (response.status === 401 && !_refreshing) {
+          if (response.status === 401 && !_refreshing && !refreshAttempted) {
+            refreshAttempted = true;
             _refreshing = true;
             try {
               if (await this._tryRefresh()) {
                 refreshed = true;
-                headers['Authorization'] = `Bearer ${_authToken}`;
               }
             } finally {
               _refreshing = false;
@@ -261,24 +220,19 @@ export class ApiClient {
   }
 
   private async _tryRefresh(): Promise<boolean> {
-    if (!_refreshToken) return false;
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
       const response = await fetch(`${this.baseUrl}/api/v1/auth/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: _refreshToken }),
         signal: controller.signal,
+        credentials: 'include',
       });
       clearTimeout(timeoutId);
       if (!response.ok) return false;
-      const data = await response.json().catch(() => null);
-      const newAccess = data?.access_token;
-      if (!newAccess) return false;
-      // The refresh token stays valid (backend doesn't rotate/revoke on
-      // refresh), so we only swap in the new access token here.
-      setAuthToken(newAccess, _refreshToken);
+      // The backend rotates both HttpOnly cookies; JavaScript never receives
+      // or persists either credential.
       return true;
     } catch {
       return false;

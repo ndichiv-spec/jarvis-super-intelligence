@@ -20,7 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import apiClient, { AuthError, getAuthToken } from '@/lib/api-client';
+import apiClient, { AuthError } from '@/lib/api-client';
 import API_ENDPOINTS from '@/config/api';
 import env from '@/config/env';
 import { usePlatformStore } from '@/stores/platform-store';
@@ -383,7 +383,6 @@ const mapProviderToAsset = (provider: any): SecurityAsset => {
  * (health report, metrics) still renders.
  */
 const adminFetch = async (path: string, params?: Record<string, string | number>): Promise<any> => {
-  const token = getAuthToken();
   const url = new URL(path, env.API_URL);
   if (params) {
     for (const [k, v] of Object.entries(params)) {
@@ -393,7 +392,7 @@ const adminFetch = async (path: string, params?: Record<string, string | number>
     }
   }
   const resp = await fetch(url.toString(), {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    credentials: 'include',
   });
   if (!resp.ok) {
     // Swallow 401/403 — the dashboard handles missing admin data gracefully.

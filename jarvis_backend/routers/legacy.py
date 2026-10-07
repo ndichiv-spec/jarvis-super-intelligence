@@ -397,11 +397,9 @@ async def complete_reminder(reminder_id: str, user: Dict[str, Any] = Depends(get
 
 
 # --------------------------------------------------------------------------- #
-# Embedded browser (self-contained simulation)
+# Deprecated embedded-browser endpoints. The former in-memory implementation
+# did not browse or execute scripts; keep the routes explicit and truthful.
 # --------------------------------------------------------------------------- #
-_browser_windows: Dict[str, dict] = {}
-
-
 class BrowserCreateIn(BaseModel):
     window_id: Optional[str] = None
 
@@ -414,62 +412,77 @@ class BrowserActionIn(BaseModel):
     script: Optional[str] = None
 
 
+def _embedded_browser_not_configured() -> None:
+    raise HTTPException(
+        status_code=501,
+        detail={
+            "code": "CAPABILITY_NOT_CONFIGURED",
+            "message": "The legacy embedded browser is not implemented. Use the authenticated browser capability.",
+        },
+    )
+
+
 @router.post("/api/browser/system/initialize")
-async def browser_init():
-    _browser_windows.clear()
-    return {"success": True, "initialized": True}
+async def browser_init(user: Dict[str, Any] = Depends(get_current_user)):
+    _embedded_browser_not_configured()
 
 
 @router.get("/api/browser/system/status")
-async def browser_status():
-    return {"status": "running", "windows": list(_browser_windows.keys())}
+async def browser_status(user: Dict[str, Any] = Depends(get_current_user)):
+    _embedded_browser_not_configured()
 
 
 @router.post("/api/browser/create")
-async def browser_create(body: BrowserCreateIn):
-    wid = body.window_id or f"win-{uuid.uuid4()[:8]}"
-    _browser_windows[wid] = {"id": wid, "url": None, "html": None}
-    return {"window_id": wid}
+async def browser_create(
+    body: BrowserCreateIn,
+    user: Dict[str, Any] = Depends(get_current_user),
+):
+    _embedded_browser_not_configured()
 
 
 @router.post("/api/browser/navigate")
-async def browser_navigate(body: BrowserActionIn):
-    win = _browser_windows.get(body.window_id)
-    if not win:
-        raise HTTPException(status_code=404, detail="Window not found")
-    win["url"] = body.url
-    return {"window_id": body.window_id, "url": body.url, "loaded": True}
+async def browser_navigate(
+    body: BrowserActionIn,
+    user: Dict[str, Any] = Depends(get_current_user),
+):
+    _embedded_browser_not_configured()
 
 
 @router.post("/api/browser/load-content")
-async def browser_load_content(body: BrowserActionIn):
-    win = _browser_windows.get(body.window_id)
-    if not win:
-        raise HTTPException(status_code=404, detail="Window not found")
-    win["html"] = body.html
-    win["base_url"] = body.base_url
-    return {"window_id": body.window_id, "loaded": True}
+async def browser_load_content(
+    body: BrowserActionIn,
+    user: Dict[str, Any] = Depends(get_current_user),
+):
+    _embedded_browser_not_configured()
 
 
 @router.post("/api/browser/execute-script")
-async def browser_execute_script(body: BrowserActionIn):
-    win = _browser_windows.get(body.window_id)
-    if not win:
-        raise HTTPException(status_code=404, detail="Window not found")
-    return {"window_id": body.window_id, "result": None}
+async def browser_execute_script(
+    body: BrowserActionIn,
+    user: Dict[str, Any] = Depends(get_current_user),
+):
+    _embedded_browser_not_configured()
 
 
 @router.post("/api/browser/{window_id}/show")
-async def browser_show(window_id: str):
-    return {"window_id": window_id, "visible": True}
+async def browser_show(
+    window_id: str,
+    user: Dict[str, Any] = Depends(get_current_user),
+):
+    _embedded_browser_not_configured()
 
 
 @router.post("/api/browser/{window_id}/hide")
-async def browser_hide(window_id: str):
-    return {"window_id": window_id, "visible": False}
+async def browser_hide(
+    window_id: str,
+    user: Dict[str, Any] = Depends(get_current_user),
+):
+    _embedded_browser_not_configured()
 
 
 @router.delete("/api/browser/{window_id}")
-async def browser_destroy(window_id: str):
-    _browser_windows.pop(window_id, None)
-    return {"success": True}
+async def browser_destroy(
+    window_id: str,
+    user: Dict[str, Any] = Depends(get_current_user),
+):
+    _embedded_browser_not_configured()

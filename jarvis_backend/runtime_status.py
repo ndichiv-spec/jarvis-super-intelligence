@@ -298,12 +298,12 @@ async def check_silverwing_status() -> Dict[str, Any]:
         res = await _probe_silverwing()
         if res.get("reachable"):
             return {
-                "status": RuntimeState.AVAILABLE.value,
-                "detail": "Silverwing runtime reachable",
+                "status": RuntimeState.CONFIGURED.value,
+                "detail": "Silverwing endpoint reachable; inference is not verified",
             }
         return {
             "status": RuntimeState.UNREACHABLE.value,
-            "detail": f"Silverwing endpoint unreachable at {endpoint}",
+            "detail": "Configured Silverwing endpoint is unreachable",
         }
     except Exception as exc:
         return {
@@ -427,7 +427,245 @@ async def _command_runtime_status() -> Dict[str, Any]:
         "status": "AVAILABLE" if commands else "IDLE",
         "total_commands": len(commands),
         "by_status": counts,
-        "recent": list(commands.values())[-5:],
+    }
+
+
+async def _provider_runtime_status() -> Dict[str, Any]:
+    """Report provider configuration separately from verified inference."""
+    from .routers.ai import _provider_catalog
+
+    catalog = await _provider_catalog()
+    providers = []
+    for item in catalog.get("providers", []):
+        configured = bool(item.get("configured"))
+        inference_verified = bool(item.get("inference_verified"))
+        streaming_verified = bool(item.get("streaming_verified"))
+        providers.append({
+            "provider": item.get("provider"),
+            "status": (
+                RuntimeState.AVAILABLE.value if inference_verified
+                else RuntimeState.CONFIGURED.value if configured
+                else RuntimeState.UNCONFIGURED.value
+            ),
+            "configured": configured,
+            "inference_verified": inference_verified,
+            "streaming_verified": streaming_verified,
+            "capabilities": item.get("capabilities") or [],
+        })
+    verified = [item for item in providers if item["inference_verified"]]
+    configured = [item for item in providers if item["configured"]]
+    return {
+        "status": (
+            RuntimeState.AVAILABLE.value if verified
+            else RuntimeState.CONFIGURED.value if configured
+            else RuntimeState.UNCONFIGURED.value
+        ),
+        "providers": providers,
+        "verified_count": len(verified),
+        "configured_count": len(configured),
+    }
+
+
+async def _redis_runtime_status(queue_status: Dict[str, Any]) -> Dict[str, Any]:
+    from .celery_app import BROKER_URL
+    from urllib.parse import urlsplit
+
+    try:
+        scheme = urlsplit(BROKER_URL).scheme.lower()
+    except ValueError:
+        return {
+            "status": RuntimeState.UNAVAILABLE.value,
+            "configured": bool(BROKER_URL),
+        }
+    if scheme not in {"redis", "rediss"}:
+        return {
+            "status": RuntimeState.UNCONFIGURED.value,
+            "configured": False,
+        }
+    reachable = bool(queue_status.get("broker_reachable"))
+    return {
+        "status": RuntimeState.AVAILABLE.value if reachable else RuntimeState.UNREACHABLE.value,
+        "configured": True,
+        "reachable": reachable,
+    }
+
+
+async def _celery_runtime_status() -> Dict[str, Any]:
+    import asyncio
+    from .celery_app import get_queue_runtime_status
+
+    queue = await asyncio.to_thread(get_queue_runtime_status)
+    ready = (
+        queue.get("broker_reachable")
+        and queue.get("worker_probe") == "ok"
+        and queue.get("command_queue_probe") == "ok"
+    )
+    return {
+        **queue,
+        "status": (
+            RuntimeState.AVAILABLE.value if ready
+            else RuntimeState.DEGRADED.value if queue.get("broker_reachable")
+            else RuntimeState.UNREACHABLE.value
+        ),
+    }
+
+
+async def _memory_runtime_status() -> Dict[str, Any]:
+    try:
+        memory = get_store("memory").load()
+        return {
+            "status": RuntimeState.AVAILABLE.value,
+            "record_count": len(memory) if isinstance(memory, (dict, list)) else None,
+        }
+    except Exception as exc:
+        return {
+            "status": RuntimeState.UNAVAILABLE.value,
+            "error": type(exc).__name__,
+        }
+
+
+async def _voice_runtime_status() -> Dict[str, Any]:
+    from .routers.voice import voice_status
+
+    result = await voice_status()
+    stt = bool(result.get("asr_available"))
+    tts = bool(result.get("tts_available"))
+    configured = bool(result.get("tts_configured"))
+    return {
+        "status": (
+            RuntimeState.AVAILABLE.value if stt and tts
+            else RuntimeState.DEGRADED.value if stt or tts
+            else RuntimeState.CONFIGURED.value if configured
+            else RuntimeState.UNCONFIGURED.value
+        ),
+        "stt_available": stt,
+        "tts_available": tts,
+        "tts_configured": configured,
+    }
+
+
+async def _streaming_runtime_status(
+    provider_status: Dict[str, Any],
+) -> Dict[str, Any]:
+    from .routers.legacy import router as chat_router
+
+    route_registered = any(
+        getattr(route, "path", None) == "/api/chat/stream"
+        for route in chat_router.routes
+    )
+    streaming_providers = [
+        item for item in provider_status["providers"]
+        if item["configured"]
+        and any("stream" in str(capability).lower()
+                for capability in item["capabilities"])
+    ]
+    verified = any(item["streaming_verified"] for item in streaming_providers)
+    configured = bool(route_registered and streaming_providers)
+    return {
+        "status": (
+            RuntimeState.AVAILABLE.value if route_registered and verified
+            else RuntimeState.CONFIGURED.value if configured
+            else RuntimeState.UNAVAILABLE.value
+        ),
+        "route_registered": route_registered,
+        "streaming_verified": verified,
+    }
+
+
+async def _tool_runtime_status() -> Dict[str, Any]:
+    try:
+        from .capabilities import get_registry
+
+        capability = get_registry().get("tool")
+        if capability is None:
+            return {"status": RuntimeState.UNCONFIGURED.value, "tool_count": 0}
+        result = await capability.health()
+        return {
+            "status": (
+                RuntimeState.AVAILABLE.value
+                if result.get("healthy")
+                else RuntimeState.UNAVAILABLE.value
+            ),
+            "tool_count": int(result.get("tool_count", 0)),
+            "healthy_tool_count": sum(
+                1 for health in result.get("tools", {}).values()
+                if health.get("healthy")
+                or health.get("status") in {"ok", "available", "ready"}
+            ),
+        }
+    except Exception as exc:
+        return {
+            "status": RuntimeState.UNAVAILABLE.value,
+            "error": type(exc).__name__,
+        }
+
+
+async def _agent_runtime_status() -> Dict[str, Any]:
+    try:
+        from .routers.agents import router as agents_router
+
+        paths = {
+            getattr(route, "path", None) for route in agents_router.routes
+        }
+        graph_available = "/graph/status" in paths
+        store = get_store("agent_graph")
+        store.load()
+        return {
+            "status": (
+                RuntimeState.CONFIGURED.value
+                if graph_available
+                else RuntimeState.UNAVAILABLE.value
+            ),
+            "graph_route_registered": graph_available,
+            "execution_verified": False,
+        }
+    except Exception as exc:
+        return {
+            "status": RuntimeState.UNAVAILABLE.value,
+            "execution_verified": False,
+            "error": type(exc).__name__,
+        }
+
+
+async def _modality_runtime_status(
+    provider_status: Dict[str, Any],
+) -> Dict[str, Any]:
+    from .capabilities import get_registry
+
+    configured = [
+        provider for provider in provider_status["providers"]
+        if provider["configured"]
+    ]
+    vision_configured = any(
+        any("vision" in str(capability).lower() or "image.input" in str(capability).lower()
+            for capability in provider["capabilities"])
+        for provider in configured
+    )
+    image_configured = any(
+        provider["provider"] == "openai" for provider in configured
+    ) or bool(os.environ.get("STABILITY_API_KEY"))
+    registry = get_registry()
+    vision = registry.get("vision")
+    image_generation = registry.get("image_generation")
+    vision_verified = bool(getattr(vision, "_inference_verified", False))
+    image_verified = bool(getattr(image_generation, "_generation_verified", False))
+    return {
+        "VISION": {
+            "status": (
+                RuntimeState.AVAILABLE.value if vision_verified
+                else RuntimeState.CONFIGURED.value if vision_configured
+                else RuntimeState.UNCONFIGURED.value
+            ),
+            "verified": vision_verified,
+        },
+        "IMAGE_GENERATION": {
+            "status": (
+                RuntimeState.AVAILABLE.value if image_verified
+                else RuntimeState.CONFIGURED.value if image_configured
+                else RuntimeState.UNCONFIGURED.value
+            ),
+            "verified": image_verified,
+        },
     }
 
 
@@ -459,14 +697,50 @@ async def build_canonical_runtime_status(probe: bool = False) -> Dict[str, Any]:
         check_huggingface_status(probe=probe),
     )
     command_status = await _command_runtime_status()
+    provider_status, celery_status, memory_status, voice_status_result, tool_status, agent_status = await asyncio.gather(
+        _provider_runtime_status(),
+        _celery_runtime_status(),
+        _memory_runtime_status(),
+        _voice_runtime_status(),
+        _tool_runtime_status(),
+        _agent_runtime_status(),
+    )
+    if brain_res["status"] == RuntimeState.AVAILABLE.value:
+        brain_provider = next(
+            (item for item in provider_status["providers"]
+             if item["provider"] == "jarvis-brain"),
+            None,
+        )
+        if brain_provider is not None:
+            brain_provider.update({
+                "status": RuntimeState.AVAILABLE.value,
+                "inference_verified": True,
+            })
+        provider_status["verified_count"] += int(brain_provider is not None)
+        provider_status["status"] = RuntimeState.AVAILABLE.value
+    redis_status = await _redis_runtime_status(celery_status)
+    streaming_status = await _streaming_runtime_status(provider_status)
+    modality_status = await _modality_runtime_status(provider_status)
 
     components = {
+        "BACKEND": {"status": RuntimeState.AVAILABLE.value},
         "AUTH": auth_res,
         "CHAT": chat_res,
         "DATABASE": db_res,
-        "OPENAI": openai_res,
-        "GOOGLE": google_res,
-        "NVIDIA": nvidia_res,
+        "REDIS": redis_status,
+        "CELERY": celery_status,
+        "PROVIDER_GATEWAY": provider_status,
+        "PROVIDERS": provider_status["providers"],
+        "CONVERSATION": chat_res,
+        "STREAMING": streaming_status,
+        "MEMORY": memory_status,
+        "VOICE": voice_status_result,
+        "TOOLS": tool_status,
+        "AGENTS": agent_status,
+        **modality_status,
+        "OPENAI": next((p for p in provider_status["providers"] if p["provider"] == "openai"), openai_res),
+        "GOOGLE": next((p for p in provider_status["providers"] if p["provider"] == "google"), google_res),
+        "NVIDIA": next((p for p in provider_status["providers"] if p["provider"] == "nvidia"), nvidia_res),
         "BRAIN": brain_res,
         "SILVERWING": silverwing_res,
         "KAGGLE": kaggle_res,
@@ -482,10 +756,9 @@ async def build_canonical_runtime_status(probe: bool = False) -> Dict[str, Any]:
         and db_res["status"] == RuntimeState.AVAILABLE.value
     )
     # At least one AI provider must be AVAILABLE
-    any_provider_available = any(
-        res["status"] == RuntimeState.AVAILABLE.value
-        for name, res in components.items()
-        if name in ("OPENAI", "GOOGLE", "NVIDIA", "BRAIN", "SILVERWING")
+    any_provider_available = (
+        provider_status["verified_count"] > 0
+        or brain_res["status"] == RuntimeState.AVAILABLE.value
     )
 
     if core_ok and any_provider_available:

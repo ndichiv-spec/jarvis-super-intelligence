@@ -90,7 +90,7 @@ export function Sidebar({ isMobile, isOpen, onClose }: SidebarProps) {
   const backend = useBackend();
   const { summary } = useProviders();
   const silverwing = useSilverwing();
-  const workspaceProvider = usePlatformStore((s) => s.workspace.selectedProvider);
+  const activeModel = useChatStore((s) => s.activeModel);
 
   // Subscribe to platform data — refresh on mount
   useEffect(() => {
@@ -264,7 +264,7 @@ export function Sidebar({ isMobile, isOpen, onClose }: SidebarProps) {
                 { label: 'Memory', value: systemUsage ? `${Math.round(memPercent)}%` : '—', icon: Database, color: 'text-cyan-400', status: memPercent > 85 ? 'critical' : memPercent > 70 ? 'warning' : 'good' },
                 { label: 'Disk', value: systemUsage ? `${Math.round(diskPercent)}%` : '—', icon: Gauge, color: 'text-purple-400', status: diskPercent > 85 ? 'critical' : diskPercent > 70 ? 'warning' : 'good' },
                 { label: 'Active Processes', value: systemUsage ? processCount.toLocaleString() : '—', icon: Activity, color: 'text-emerald-400', status: systemUsage ? 'good' as const : 'unknown' as const },
-                { label: 'JARVIS Brain', value: backend.connected ? 'Online' : 'Offline', icon: Brain, color: backend.connected ? 'text-emerald-400' : 'text-red-400', status: backend.connected ? 'good' : 'critical' },
+                { label: 'Backend API', value: connectionLabel, icon: Server, color: backend.connected ? 'text-emerald-400' : 'text-red-400', status: backend.connected ? 'good' : 'critical' },
                 { label: 'Silverwing', value: silverwing.connected ? `${silverwing.status || 'idle'}` : 'Offline', icon: Zap, color: silverwing.connected ? 'text-amber-400' : 'text-gray-400', status: silverwing.connected ? 'good' : 'offline' },
               ].map((metric) => {
                 const Icon = metric.icon;
@@ -316,7 +316,7 @@ export function Sidebar({ isMobile, isOpen, onClose }: SidebarProps) {
               <span className={`text-xs font-bold ${connectionTone}`}>{connectionLabel}</span>
             </div>
             <div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground/40">
-              <span>Selected Provider: {workspaceProvider || 'none'}</span>
+              <span>Chat model: {activeModel || 'Auto-Select'}</span>
               <span>Latency: {backend.latencyMs ? `${backend.latencyMs}ms` : '—'}</span>
             </div>
             <p className="mt-1 text-[10px] text-muted-foreground/40">

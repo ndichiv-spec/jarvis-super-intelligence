@@ -9,7 +9,8 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from ..core import _require_auth, ai_service, get_current_user, get_store, now_iso
+from ..core import _require_auth, get_current_user, get_store, now_iso
+from ..chat_service import chat_service
 
 router = APIRouter(prefix="/api/v1/agents", tags=["agents"])
 
@@ -65,6 +66,20 @@ class AgentActIn(BaseModel):
     target_kind: str = "email"
 
 
+def _user_id(user: Dict[str, Any]) -> str:
+    user_id = user.get("id") or user.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authenticated identity is missing")
+    return str(user_id)
+
+
+def _owned_task(tasks: Dict[str, Any], task_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
+    task = tasks.get(task_id)
+    if not isinstance(task, dict) or task.get("user_id") != _user_id(user):
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
+
+
 def _ensure_agents() -> None:
     store = get_store("agents")
     agents = store.load()
@@ -94,13 +109,13 @@ def _ensure_agents() -> None:
 
 
 @router.get("")
-async def list_agents():
+async def list_agents(user: Dict[str, Any] = Depends(_require_auth)):
     _ensure_agents()
     return {"agents": list(get_store("agents").load().values())}
 
 
 @router.get("/stats")
-async def agent_stats():
+async def agent_stats(user: Dict[str, Any] = Depends(_require_auth)):
     _ensure_agents()
     agents = list(get_store("agents").load().values())
     return {
@@ -118,6 +133,7 @@ async def create_agent_task(body: TaskIn, user: Dict[str, Any] = Depends(_requir
     task_id = str(uuid.uuid4())
     tasks[task_id] = {
         "id": task_id,
+        "user_id": _user_id(user),
         "name": body.name,
         "description": body.description,
         "priority": body.priority,
@@ -135,10 +151,16 @@ async def create_agent_task(body: TaskIn, user: Dict[str, Any] = Depends(_requir
 
 @router.post("/tasks")
 async def register_task(body: RegisterTaskIn, user: Dict[str, Any] = Depends(_require_auth)):
+    if body.schedule_type != "manual":
+        raise HTTPException(
+            status_code=501,
+            detail="Scheduled agent tasks are not connected to a scheduler.",
+        )
     tasks = get_store("tasks").load()
     task_id = str(uuid.uuid4())
     tasks[task_id] = {
         "id": task_id,
+        "user_id": _user_id(user),
         "name": body.name,
         "description": body.description,
         "priority": body.priority,
@@ -154,70 +176,118 @@ async def register_task(body: RegisterTaskIn, user: Dict[str, Any] = Depends(_re
     return tasks[task_id]
 
 
+@router.get("/tasks")
+async def list_agent_tasks(
+    limit: int = Query(50, ge=1, le=200),
+    user: Dict[str, Any] = Depends(_require_auth),
+):
+    user_id = _user_id(user)
+    tasks = get_store("tasks").load()
+    owned = [
+        task for task in tasks.values()
+        if isinstance(task, dict) and task.get("user_id") == user_id
+    ]
+    owned.sort(key=lambda task: task.get("created_at") or "", reverse=True)
+    return {"tasks": owned[:limit], "total": len(owned)}
+
+
 @router.post("/tasks/{task_id}/toggle")
 async def toggle_task(task_id: str, body: ToggleIn, user: Dict[str, Any] = Depends(_require_auth)):
     tasks = get_store("tasks").load()
-    if task_id not in tasks:
-        raise HTTPException(status_code=404, detail="Task not found")
-    tasks[task_id]["enabled"] = body.enabled
+    task = _owned_task(tasks, task_id, user)
+    task["enabled"] = body.enabled
     get_store("tasks").save()
-    return tasks[task_id]
+    return task
 
 
 @router.post("/tasks/{task_id}/run")
 async def run_task(task_id: str, user: Dict[str, Any] = Depends(_require_auth)):
     tasks = get_store("tasks").load()
-    if task_id not in tasks:
-        raise HTTPException(status_code=404, detail="Task not found")
-    task = tasks[task_id]
+    task = _owned_task(tasks, task_id, user)
+    if not task.get("enabled", True):
+        raise HTTPException(status_code=409, detail="Task is disabled")
+    if task.get("status") == "running":
+        raise HTTPException(status_code=409, detail="Task is already running")
+    owner_id = _user_id(user)
     task["status"] = "running"
     task["started_at"] = now_iso()
-    task["last_result"] = await ai_service.chat(task.get("description") or task.get("name") or "run")
-    task["status"] = "completed"
+    task["error"] = None
+    task["run_count"] = int(task.get("run_count", 0)) + 1
+    session_id = task.setdefault("session_id", f"agent-task-{task_id}")
+    get_store("tasks").save()
+    chat_service.create_session(owner_id, session_id, task.get("name") or "Agent task")
+    result = await chat_service.send_message(
+        owner_id,
+        session_id,
+        task.get("description") or task.get("name") or "Run task",
+        client_message_id=f"agent-task:{task_id}:{task['run_count']}",
+    )
+    task["status"] = "completed" if result.get("status") == "COMPLETED" else "failed"
     task["completed_at"] = now_iso()
+    task["last_result"] = result.get("message") if task["status"] == "completed" else None
+    task["provider"] = result.get("provider")
+    task["model"] = result.get("model")
+    task["error"] = result.get("error")
+    task["runtime_status"] = result.get("status")
     get_store("tasks").save()
     executions = get_store("executions").load()
     executions.append({
         "id": str(uuid.uuid4()),
+        "user_id": owner_id,
         "task_id": task_id,
         "task_name": task.get("name"),
-        "status": "completed",
+        "status": task["status"],
         "started_at": task.get("started_at"),
         "completed_at": task.get("completed_at"),
+        "provider": task.get("provider"),
+        "model": task.get("model"),
+        "session_id": session_id,
     })
     get_store("executions").save()
     return task
 
 
 @router.get("/executions")
-async def list_executions(limit: int = Query(20), user: Dict[str, Any] = Depends(_require_auth)):
+async def list_executions(
+    limit: int = Query(20, ge=1, le=100),
+    user: Dict[str, Any] = Depends(_require_auth),
+):
     executions = get_store("executions").load()
-    return {"executions": executions[-limit:][::-1], "total": len(executions)}
+    owned = [
+        entry for entry in executions
+        if isinstance(entry, dict) and entry.get("user_id") == _user_id(user)
+    ]
+    return {"executions": owned[-limit:][::-1], "total": len(owned)}
 
 
 @router.delete("/tasks/{task_id}")
 async def delete_task(task_id: str, user: Dict[str, Any] = Depends(_require_auth)):
     tasks = get_store("tasks").load()
-    tasks.pop(task_id, None)
+    _owned_task(tasks, task_id, user)
+    tasks.pop(task_id)
     get_store("tasks").save()
     return {"success": True}
 
 
 @router.get("/scheduler/status")
 async def scheduler_status(user: Dict[str, Any] = Depends(_require_auth)):
-    return {"running": True, "interval": 60, "next_run": None}
+    return {"running": False, "status": "NOT_CONFIGURED", "next_run": None}
 
 
 @router.post("/scheduler/toggle")
 async def toggle_scheduler(body: Dict[str, Any], user: Dict[str, Any] = Depends(_require_auth)):
-    return {"running": body.get("running", True)}
+    raise HTTPException(
+        status_code=501,
+        detail="The legacy agent scheduler is not connected to a worker.",
+    )
 
 
 @router.get("/service-tailoring")
-async def service_tailoring():
+async def service_tailoring(user: Dict[str, Any] = Depends(_require_auth)):
     return {
-        "enabled": True,
-        "services": ["ai", "agents", "memory", "knowledge", "voice", "monitoring"],
+        "enabled": False,
+        "status": "NOT_CONFIGURED",
+        "services": [],
     }
 
 
@@ -245,7 +315,10 @@ async def collab_agents_list(user: Dict[str, Any] = Depends(_require_auth)):
 @router.get("/collaboration/tasks/list")
 async def collab_tasks_list(status: Optional[str] = None, limit: int = Query(20), user: Dict[str, Any] = Depends(_require_auth)):
     tasks = get_store("collab_tasks").load()
-    items = list(tasks.values())
+    items = [
+        task for task in tasks.values()
+        if isinstance(task, dict) and task.get("user_id") == _user_id(user)
+    ]
     if status:
         items = [t for t in items if t.get("status") == status]
     return {"tasks": items[-limit:][::-1], "total": len(items)}
@@ -257,6 +330,7 @@ async def collab_task_create(body: CollabCreateIn, user: Dict[str, Any] = Depend
     task_id = str(uuid.uuid4())
     tasks[task_id] = {
         "id": task_id,
+        "user_id": _user_id(user),
         "description": body.description,
         "agents_needed": body.agents_needed,
         "collaboration_pattern": body.collaboration_pattern,
@@ -270,12 +344,27 @@ async def collab_task_create(body: CollabCreateIn, user: Dict[str, Any] = Depend
 @router.post("/collaboration/task/execute")
 async def collab_task_execute(body: CollabExecuteIn, user: Dict[str, Any] = Depends(_require_auth)):
     tasks = get_store("collab_tasks").load()
-    task = tasks.get(body.task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    task["status"] = "completed"
+    task = _owned_task(tasks, body.task_id, user)
+    if task.get("status") == "running":
+        raise HTTPException(status_code=409, detail="Task is already running")
+    task["status"] = "running"
+    task["started_at"] = now_iso()
+    session_id = task.setdefault("session_id", f"collab-task-{body.task_id}")
+    owner_id = _user_id(user)
+    get_store("collab_tasks").save()
+    chat_service.create_session(owner_id, session_id, "Agent collaboration")
+    result = await chat_service.send_message(
+        owner_id,
+        session_id,
+        task.get("description") or "Execute the requested collaboration.",
+        client_message_id=f"collab-task:{body.task_id}",
+    )
+    task["status"] = "completed" if result.get("status") == "COMPLETED" else "failed"
     task["completed_at"] = now_iso()
-    task["result"] = await ai_service.chat(task.get("description") or "collaboration")
+    task["result"] = result.get("message") if task["status"] == "completed" else None
+    task["error"] = result.get("error")
+    task["provider"] = result.get("provider")
+    task["model"] = result.get("model")
     get_store("collab_tasks").save()
     return task
 
@@ -283,27 +372,31 @@ async def collab_task_execute(body: CollabExecuteIn, user: Dict[str, Any] = Depe
 @router.get("/collaboration/metrics")
 async def collab_metrics(user: Dict[str, Any] = Depends(_require_auth)):
     tasks = get_store("collab_tasks").load()
-    items = list(tasks.values())
+    items = [
+        task for task in tasks.values()
+        if isinstance(task, dict) and task.get("user_id") == _user_id(user)
+    ]
     return {
         "total_tasks": len(items),
         "completed": sum(1 for t in items if t.get("status") == "completed"),
-        "agents_utilization": 0.0,
+        "running": sum(1 for t in items if t.get("status") == "running"),
+        "failed": sum(1 for t in items if t.get("status") == "failed"),
     }
 
 
 @router.post("/collaboration/self-organize")
 async def collab_self_organize(description: str = Query(""), user: Dict[str, Any] = Depends(_require_auth)):
-    _ensure_agents()
-    agents = list(get_store("agents").load().values())
-    return {
-        "plan": description,
-        "assigned_agents": [a["id"] for a in agents],
-        "status": "planned",
-    }
+    raise HTTPException(
+        status_code=501,
+        detail="Automatic agent planning is not configured.",
+    )
 
 
 @router.get("/{agent_id}")
-async def agent_status(agent_id: str):
+async def agent_status(
+    agent_id: str,
+    user: Dict[str, Any] = Depends(_require_auth),
+):
     _ensure_agents()
     agents = get_store("agents").load()
     agent = agents.get(agent_id)

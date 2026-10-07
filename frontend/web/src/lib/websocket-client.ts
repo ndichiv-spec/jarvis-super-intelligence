@@ -18,6 +18,7 @@ export type WsEventType =
   | 'voice_command'
   | 'automation_event'
   | 'notification'
+  | 'activity'
   | 'error'
   | 'connected'
   | 'disconnected'

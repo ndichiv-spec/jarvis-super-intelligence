@@ -32,7 +32,7 @@ export default function LoginPage() {
       const response = await jarvisAPI.login(identifier, password);
       // Persist the refresh token so the session silently survives the 7-day
       // access-token TTL instead of bouncing back to first login.
-      authLogin(response.access_token, (response as any).refresh_token ?? null, response.user);
+      authLogin(response.access_token ?? null, null, response.user);
       router.push('/dashboard');
     } catch (err: any) {
       setError(err.message || 'Login failed. Please check your credentials.');

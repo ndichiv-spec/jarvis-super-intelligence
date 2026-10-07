@@ -32,6 +32,7 @@ The Browser is a JARVIS sensor + hand (spec §45–46):
 from __future__ import annotations
 
 import html as _html
+import hashlib
 import ipaddress
 import json
 import os
@@ -41,6 +42,7 @@ import uuid
 from datetime import datetime, timezone
 from http.client import HTTPConnection, HTTPSConnection
 from enum import Enum
+from pathlib import Path, PureWindowsPath
 from typing import Any, Dict, List, Literal, Optional, Tuple
 from urllib.parse import urljoin, urlparse, urlunparse
 
@@ -115,6 +117,37 @@ _INJECTION_PATTERNS = [
     r"you (?:must |should |are required to )?(?:reveal|expose|show|ignore)",
 ]
 _INJECTION_RE = re.compile("|".join(_INJECTION_PATTERNS), re.IGNORECASE)
+
+
+def _download_destination(filename: str, user_id: str) -> Path:
+    """Resolve a flat filename inside the authenticated user's download directory."""
+    if (
+        not filename
+        or filename in {".", ".."}
+        or "\x00" in filename
+        or "/" in filename
+        or "\\" in filename
+        or Path(filename).name != filename
+        or PureWindowsPath(filename).name != filename
+    ):
+        raise HTTPException(status_code=400, detail="Invalid download filename")
+    if not user_id:
+        raise HTTPException(status_code=403, detail="Authenticated user identity is required")
+
+    upload_root = UPLOADS_DIR.resolve()
+    user_directory = upload_root / "browser-downloads" / hashlib.sha256(
+        user_id.encode("utf-8")
+    ).hexdigest()
+    user_directory.mkdir(parents=True, exist_ok=True)
+    resolved_user_directory = user_directory.resolve()
+    if upload_root not in resolved_user_directory.parents:
+        raise HTTPException(status_code=400, detail="Invalid download directory")
+    destination = (resolved_user_directory / filename).resolve()
+    if destination.parent != resolved_user_directory:
+        raise HTTPException(status_code=400, detail="Invalid download filename")
+    if destination.is_symlink():
+        raise HTTPException(status_code=400, detail="Invalid download filename")
+    return destination
 
 
 # ---------------------------------------------------------------------------
@@ -2083,12 +2116,14 @@ async def autonomous_browse(
         loop = asyncio.get_event_loop()
         fetched = await loop.run_in_executor(None, _fetch_url_sync, url)
         filename = params.get("filename") or _domain_from_url(url)
-        save_path = UPLOADS_DIR / filename
+        if not isinstance(filename, str):
+            raise HTTPException(status_code=400, detail="Invalid download filename")
+        save_path = _download_destination(filename, str(user.get("id") or ""))
         try:
             with open(save_path, "w", encoding="utf-8") as f:
                 f.write(fetched.get("html", ""))
-        except Exception:
-            pass
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail="Download could not be saved") from exc
 
         download_entry = {
             "id": f"dl-{uuid.uuid4().hex[:12]}",
@@ -2329,12 +2364,14 @@ async def execute_action(
                 loop = _asyncio.get_event_loop()
                 fetched = await loop.run_in_executor(None, _fetch_url_sync, url)
                 filename = params.get("filename") or _domain_from_url(url)
-                save_path = UPLOADS_DIR / filename
+                if not isinstance(filename, str):
+                    raise HTTPException(status_code=400, detail="Invalid download filename")
+                save_path = _download_destination(filename, str(user.get("id") or ""))
                 try:
                     with open(save_path, "w", encoding="utf-8") as f:
                         f.write(fetched.get("html", ""))
-                except Exception:
-                    pass
+                except OSError as exc:
+                    raise HTTPException(status_code=500, detail="Download could not be saved") from exc
                 result["download"] = {"filename": filename, "size_bytes": len(fetched.get("html", ""))}
 
         elif action_type == ActionType.COMPARE.value:

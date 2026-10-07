@@ -444,7 +444,12 @@ def revoke_refresh_token(refresh_token: str) -> bool:
     return False
 def get_current_user(
     authorization: Optional[str] = Header(default=None),
+    request: Request = None,
 ) -> Dict[str, Any]:
+    cookie_token = request.cookies.get("jarvis_access_token") if request else None
+    if not authorization and cookie_token:
+        validate_cookie_origin(request, unsafe=True)
+        authorization = f"Bearer {cookie_token}"
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Not authenticated")
     token = authorization[7:].strip()
@@ -454,7 +459,15 @@ def get_current_user(
         key = find_api_key(token)
         if not key or is_api_key_expired(key):
             raise HTTPException(status_code=401, detail="Invalid or revoked API key")
-        return _api_key_principal(key)
+        principal = _api_key_principal(key)
+        owner_id = key.get("owner") or key.get("user_id")
+        if not owner_id or owner_id not in get_store("users").load():
+            raise HTTPException(status_code=401, detail="API key owner no longer exists")
+        if principal.get("status") in {"disabled", "suspended", "deleted", "pending_authorization"}:
+            raise HTTPException(status_code=403, detail="API key owner is not authorized")
+        if principal.get("email_verified") is False:
+            raise HTTPException(status_code=403, detail="API key owner email is not verified")
+        return principal
     payload = decode_token(token)
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
@@ -470,6 +483,14 @@ def get_current_user(
                 "message": "Verify your email address before using this account.",
             },
         )
+    if user.get("status") == "pending_authorization":
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "OWNER_AUTHORIZATION_REQUIRED",
+                "message": "The account is awaiting owner authorization.",
+            },
+        )
     if user.get("status") in {"disabled", "suspended", "deleted"}:
         raise HTTPException(status_code=403, detail="Account is disabled")
     session_id = payload.get("sid")
@@ -482,46 +503,146 @@ def get_current_user(
 
 def get_optional_user(
     authorization: Optional[str] = Header(default=None),
+    request: Request = None,
 ) -> Optional[Dict[str, Any]]:
     try:
-        return get_current_user(authorization)
+        return get_current_user(authorization, request)
     except HTTPException:
         return None
 
 
+def validate_cookie_origin(
+    request: Optional[Request],
+    *,
+    unsafe: bool,
+    reject_untrusted_origin: bool = False,
+) -> None:
+    """Enforce an explicit same-origin allowlist for browser cookie auth."""
+    if request is None:
+        return
+    origin = request.headers.get("origin")
+    has_auth_cookie = bool(
+        request.cookies.get("jarvis_access_token")
+        or request.cookies.get("jarvis_refresh_token")
+    )
+    if unsafe and has_auth_cookie and not origin:
+        raise HTTPException(status_code=403, detail="Origin required for cookie-authenticated requests")
+    if origin and (origin not in allow_origins):
+        if reject_untrusted_origin or has_auth_cookie:
+            raise HTTPException(status_code=403, detail="Untrusted request origin")
+
+
 # --------------------------------------------------------------------------- #
-# Centralized authorization helpers (SEC-1 — unified security boundary)
+# Centralized authorization helpers
 # --------------------------------------------------------------------------- #
+ROLE_PERMISSIONS: Dict[str, tuple[str, ...]] = {
+    "owner": ("*",),
+    "admin": (
+        "admin:access",
+        "system:read",
+        "monitoring:read",
+        "users:read",
+        "roles:read",
+        "permissions:read",
+        "audit:read",
+        "providers:read",
+        "connectors:read",
+        "agents:read",
+        "jobs:read",
+    ),
+    "operator": (
+        "system:read",
+        "monitoring:read",
+        "agents:read",
+        "agents:execute",
+        "jobs:read",
+        "jobs:execute",
+    ),
+    "user": ("chat:use", "memory:own", "files:own", "agents:own"),
+    "service": ("runtime:service",),
+}
+
+
+def is_owner(user: Dict[str, Any]) -> bool:
+    """The configured creator identity is the only effective OWNER."""
+    configured_owner = admin_email().lower().strip()
+    return bool(configured_owner) and (
+        (user.get("email") or "").lower().strip() == configured_owner
+    )
+
+
+def _role_permissions(user: Dict[str, Any]) -> set[str]:
+    """Resolve permissions from server-side role records, never request data."""
+    if is_owner(user):
+        return {"*"}
+
+    if user.get("api_key_id"):
+        scopes = {
+            item for item in (user.get("scopes") or ())
+            if isinstance(item, str)
+        }
+        if "admin" in scopes:
+            scopes.add("admin:access")
+        return scopes
+
+    role_names = {
+        value for value in (user.get("roles") or ())
+        if isinstance(value, str) and value != "owner"
+    }
+    permissions: set[str] = set()
+    for role_name in role_names:
+        permissions.update(ROLE_PERMISSIONS.get(role_name, ()))
+
+    for role in get_store("roles").load().values():
+        if not isinstance(role, dict):
+            continue
+        if role.get("name") in ROLE_PERMISSIONS:
+            continue
+        if role.get("name") not in role_names and role.get("id") not in role_names:
+            continue
+        permissions.update(
+            item for item in (role.get("permissions") or ())
+            if isinstance(item, str)
+        )
+    return permissions
+
+
+def has_permission(user: Dict[str, Any], permission: str) -> bool:
+    """Check a centralized permission or its resource wildcard."""
+    granted = _role_permissions(user)
+    if "*" in granted or permission in granted:
+        return True
+    resource = permission.split(":", 1)[0]
+    return f"{resource}:*" in granted
+
+
+def require_permission(permission: str):
+    """Build a FastAPI dependency for a named server-side permission."""
+    def dependency(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+        if not has_permission(user, permission):
+            raise HTTPException(status_code=403, detail="Permission denied")
+        return user
+
+    dependency.__name__ = f"require_{permission.replace(':', '_').replace('*', 'all')}"
+    return dependency
+
+
 def _require_auth(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     """Any authenticated user may access the endpoint."""
     return user
 
 
 def is_admin(user: Dict[str, Any]) -> bool:
-    """True when ``user`` holds the admin role or an owner wildcard (``*``).
-
-    Single source of truth for the privileged-host tier (SEC-1 unified
-    authorization boundary). ``_require_admin`` delegates here so admin
-    resolution is never duplicated. Preserves the historical logic (admin role
-    / explicit ``is_admin`` / owner ``*`` permission) for behavioural parity.
-    """
-    names = [r for r in (user.get("roles") or []) if isinstance(r, str)]
-    if "admin" in names or user.get("is_admin"):
-        return True
-    role_names = set(names)
-    for role in get_store("roles").load().values():
-        if role.get("name") in role_names or role.get("id") in role_names:
-            if "*" in (role.get("permissions") or []):
-                return True
-    return False
+    """True only for the configured owner or an explicitly assigned admin."""
+    return is_owner(user) or has_permission(user, "admin:access")
 
 
 def is_developer(user: Dict[str, Any]) -> bool:
     """True when ``user`` is a developer, admin, or owner (automation tier)."""
     names = [r for r in (user.get("roles") or []) if isinstance(r, str)]
-    if "developer" in names or "admin" in names or user.get("is_admin"):
+    if "developer" in names or is_admin(user):
         return True
-    return is_admin(user)
+    return has_permission(user, "developer:access")
 
 
 def _require_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
@@ -539,8 +660,7 @@ def _require_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str
 
 def _require_owner(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     """Gate a route to the canonical owner only."""
-    owner_email = admin_email().lower().strip()
-    if (user.get("email") or "").lower().strip() == owner_email:
+    if is_owner(user):
         return user
     raise HTTPException(status_code=403, detail="Owner access required")
 
@@ -1171,7 +1291,7 @@ def _seed_canonical_roles() -> None:
 
     Never clobbers existing roles -- only inserts the canonical roles that are
     missing, so real admins/users/roles on a running install are untouched.
-    'admin' already maps to OWNER/ADMIN (full access via ['*']).
+    Reserved role grants are refreshed from the canonical permission map.
     """
     roles = get_store("roles").load()
     canonical: Dict[str, Dict[str, Any]] = {
@@ -1181,7 +1301,8 @@ def _seed_canonical_roles() -> None:
         },
         "admin": {
             "id": "role-admin", "name": "admin",
-            "description": "Full system access", "permissions": ["*"],
+            "description": "Explicit administrative access, excluding owner-only controls",
+            "permissions": list(ROLE_PERMISSIONS["admin"]),
         },
         "operator": {
             "id": "role-operator", "name": "operator",
@@ -1224,24 +1345,14 @@ def _seed_canonical_roles() -> None:
             changed = True
         else:
             existing = roles[name]
-            # Additive merge: grant any missing canonical permission without
-            # ever removing a permission an operator added by hand.
-            have = set(existing.get("permissions") or ())
-            want = list(spec.get("permissions") or ())
-            if existing.get("permissions") is None:
-                existing["permissions"] = want
+            expected = list(spec.get("permissions") or ())
+            if existing.get("permissions") != expected:
+                existing["permissions"] = expected
+                changed = True
+            if existing.get("description") != spec["description"]:
                 existing["description"] = spec["description"]
                 changed = True
-            else:
-                have_now = set(existing["permissions"])
-                missing = [p for p in want if p not in have_now]
-                if missing and "*" not in have_now:
-                    existing["permissions"] = list(existing["permissions"]) + missing
-                    changed = True
-                if existing.get("description") != spec["description"]:
-                    existing["description"] = spec["description"]
-                    changed = True
-            if "id" not in existing:
+            if existing.get("id") != spec["id"]:
                 existing["id"] = spec["id"]
                 changed = True
     if changed:

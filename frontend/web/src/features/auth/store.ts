@@ -33,7 +33,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           const response = await authApi.login({ identifier, password });
           set({
-            token: response.access_token,
+            token: null,
             user: response.user,
             isAuthenticated: true,
             isLoading: false,
@@ -59,9 +59,6 @@ export const useAuthStore = create<AuthState>()(
       },
 
       loadUser: async () => {
-        const { token } = get();
-        if (!token) return;
-
         set({ isLoading: true });
         try {
           const user = await authApi.getMe();
@@ -86,12 +83,16 @@ export const useAuthStore = create<AuthState>()(
       },
     }),
     {
-      name: 'jarvis-auth-storage',
+      name: 'jarvis-feature-auth-storage',
       partialize: (state) => ({
-        token: state.token,
         user: state.user,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (state?.isAuthenticated) {
+          void state.loadUser();
+        }
+      },
     }
   )
 );

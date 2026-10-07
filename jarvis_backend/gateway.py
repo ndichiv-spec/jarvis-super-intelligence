@@ -52,6 +52,12 @@ from jarvis_runtime import SILVERWING_BACKEND_ROOT, WORKSPACE_ROOT, ensure_impor
 from .errors import ChatError, ErrorCategory, from_provider_exception
 
 logger = logging.getLogger("jarvis_backend.gateway")
+_STREAMING_PROVIDER_VERIFIED: set[str] = set()
+
+
+def verified_streaming_providers() -> set[str]:
+    """Return providers that have completed a real stream in this process."""
+    return set(_STREAMING_PROVIDER_VERIFIED)
 
 _SILVERWING_BACKEND = SILVERWING_BACKEND_ROOT
 _PROVIDER_FABRIC_ROOT = WORKSPACE_ROOT
@@ -744,6 +750,7 @@ class ProviderGateway:
             mark_verified = getattr(adapter, "mark_inference_verified", None)
             if mark_verified is not None:
                 mark_verified(models_found=1)
+            _STREAMING_PROVIDER_VERIFIED.add(provider_id)
             if usage is not None and hasattr(usage, "to_dict"):
                 usage = usage.to_dict()
             completed_tool_calls = []

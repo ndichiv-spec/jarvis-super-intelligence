@@ -139,13 +139,31 @@ async def emotion_analyze(text: str = Query("")):
 
 
 @router.get("/knowledge/search")
-async def cognitive_knowledge_search(query: str = Query(""), category: Optional[str] = None):
+async def cognitive_knowledge_search(
+    query: str = Query(""),
+    category: Optional[str] = None,
+    user: Dict[str, Any] = Depends(get_current_user),
+):
     items = get_store("knowledge").load()
+    owner_id = _owner_id(user)
     ql = query.lower()
     results = [
         item for item in items.values()
-        if not ql or ql in item.get("key", "").lower()
-        or ql in item.get("value", "").lower()
+        if isinstance(item, dict)
+        and (
+            item.get("user_id") == owner_id
+            or item.get("user_id") == "system"
+            or (
+                item.get("user_id") in (None, "")
+                and item.get("visibility") == "public"
+            )
+        )
+        and (
+            not ql
+            or ql in str(item.get("key") or "").lower()
+            or ql in str(item.get("value") or "").lower()
+        )
+        and (not category or item.get("category") == category)
     ]
     return {"results": results, "count": len(results)}
 

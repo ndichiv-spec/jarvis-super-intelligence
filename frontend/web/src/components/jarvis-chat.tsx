@@ -40,7 +40,7 @@ export default function JarvisChat() {
 
   const loadSessions = async () => {
     try {
-      const response = await fetch(getApiUrl('/api/chat/sessions'));
+      const response = await fetch(getApiUrl('/api/chat/sessions'), { credentials: 'include' });
       const data = await response.json();
       setSessions(data);
     } catch (error) {
@@ -50,7 +50,9 @@ export default function JarvisChat() {
 
   const loadSession = async (sessionId: string) => {
     try {
-      const response = await fetch(getApiUrl(`/api/chat/history/${encodeURIComponent(sessionId)}`));
+      const response = await fetch(getApiUrl(`/api/chat/history/${encodeURIComponent(sessionId)}`), {
+        credentials: 'include',
+      });
       const data = await response.json();
       setMessages(data.messages);
       setCurrentSession(sessionId);
@@ -83,6 +85,7 @@ export default function JarvisChat() {
     const response = await fetch(getApiUrl('/api/chat'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({
         message,
         session_id: currentSession,
@@ -107,6 +110,7 @@ export default function JarvisChat() {
     const response = await fetch(getApiUrl('/api/chat/stream'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({
         message,
         session_id: currentSession,
@@ -163,6 +167,7 @@ export default function JarvisChat() {
       const response = await fetch(getApiUrl('/api/chat/switch'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ model })
       });
       const data = await response.json();
@@ -179,7 +184,10 @@ export default function JarvisChat() {
 
   const deleteSession = async (sessionId: string) => {
     try {
-      await fetch(getApiUrl(`/api/chat/history/${encodeURIComponent(sessionId)}`), { method: 'DELETE' });
+      await fetch(getApiUrl(`/api/chat/history/${encodeURIComponent(sessionId)}`), {
+        method: 'DELETE',
+        credentials: 'include',
+      });
       if (currentSession === sessionId) {
         newSession();
       }

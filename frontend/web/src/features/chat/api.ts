@@ -1,4 +1,4 @@
-import apiClient, { getAuthToken, ApiClientError } from '@/lib/api-client';
+import apiClient, { ApiClientError } from '@/lib/api-client';
 import API_ENDPOINTS from '@/config/api';
 import type {
   ChatResponse,
@@ -19,11 +19,18 @@ function newClientMessageId(): string {
   return `cm-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+let activeStreamController: AbortController | null = null;
+
+export function cancelStreamingMessage(): void {
+  activeStreamController?.abort('user');
+}
+
 function toMessageTurnResult(data: Record<string, unknown>): MessageTurnResult {
   return {
     session_id: data.session_id as string,
     message: (data.reply as string) ?? (data.message as string) ?? null,
     model: data.model as string,
+    provider: data.provider as string | undefined,
     latency_ms: data.latency_ms as number | null,
     sources: data.sources as string[],
     status: (data.status as string) ?? 'COMPLETED',
@@ -55,17 +62,18 @@ export const chatApi = {
     onError: (error: Error, info?: ChatErrorInfo) => void,
     onComplete: () => void
   ): Promise<void> {
+    const controller = new AbortController();
+    activeStreamController?.abort();
+    activeStreamController = controller;
+    const timeoutId = setTimeout(() => controller.abort('timeout'), 120000);
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000);
-
       const response = await fetch(API_ENDPOINTS.chat.stream, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {}),
         },
         signal: controller.signal,
+        credentials: 'include',
         body: JSON.stringify({
           message: request.message,
           session_id: request.session_id,
@@ -75,8 +83,6 @@ export const chatApi = {
         }),
       });
 
-      clearTimeout(timeoutId);
-
       if (!response.ok) {
         let info: ChatErrorInfo | undefined;
         try {
@@ -84,10 +90,11 @@ export const chatApi = {
           const err = body?.error;
           if (err) {
             info = {
-              category: err.category,
+              category: err.category || err.code,
               message: err.message,
               request_id: err.request_id,
               retryable: err.retryable,
+              status_code: err.status_code,
             };
           }
         } catch {
@@ -108,6 +115,24 @@ export const chatApi = {
 
       const decoder = new TextDecoder();
       let buffer = '';
+      let terminalReceived = false;
+
+      const dispatchChunk = (raw: string) => {
+        try {
+          const chunk = JSON.parse(raw) as ChatStreamChunk;
+          if (
+            chunk.type === 'complete'
+            || chunk.type === 'done'
+            || chunk.type === 'error'
+            || (chunk.type === 'status' && chunk.status === 'STREAM_INTERRUPTED')
+          ) {
+            terminalReceived = true;
+          }
+          onChunk(chunk);
+        } catch {
+          // Skip malformed chunks; EOF without a terminal frame is surfaced below.
+        }
+      };
 
       while (true) {
         const { done, value } = await reader.read();
@@ -119,26 +144,39 @@ export const chatApi = {
 
         for (const line of lines) {
           if (line.startsWith('data: ')) {
-            try {
-              const chunk = JSON.parse(line.slice(6)) as ChatStreamChunk;
-              onChunk(chunk);
-            } catch {
-              // skip malformed chunks
-            }
+            dispatchChunk(line.slice(6));
           }
         }
       }
 
       if (buffer.startsWith('data: ')) {
-        try {
-          onChunk(JSON.parse(buffer.slice(6)) as ChatStreamChunk);
-        } catch {
-          // skip
-        }
+        dispatchChunk(buffer.slice(6));
+      }
+
+      if (!terminalReceived) {
+        onError(
+          new Error('The response stream ended before JARVIS reported a final status.'),
+          {
+            category: 'STREAM_INTERRUPTED',
+            message: 'The response stream ended before completion.',
+            request_id: '',
+            retryable: true,
+          },
+        );
+        return;
       }
 
       onComplete();
     } catch (error) {
+      if (controller.signal.reason === 'user') {
+        onError(new Error('Response stopped. Your message is saved and can be retried.'), {
+          category: 'CANCELLED',
+          message: 'The response was cancelled.',
+          request_id: '',
+          retryable: true,
+        });
+        return;
+      }
       const msg = error instanceof Error ? error.message : String(error);
       onError(
         new Error('Connection lost while streaming. Your message is safe and can be retried.'),
@@ -149,6 +187,11 @@ export const chatApi = {
           retryable: true,
         }
       );
+    } finally {
+        clearTimeout(timeoutId);
+        if (activeStreamController === controller) {
+        activeStreamController = null;
+      }
     }
   },
 

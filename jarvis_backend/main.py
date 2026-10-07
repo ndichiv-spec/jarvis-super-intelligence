@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 
 from dotenv import load_dotenv
 
@@ -84,6 +85,18 @@ SILVERWING_BACKEND = SILVERWING_BACKEND_ROOT
 _silverwing_app = None
 _silverwing_error = None
 try:  # pragma: no cover - defensive integration
+    # Several JARVIS routers add jarvis_backend/ to sys.path for legacy
+    # top-level imports. Put the Silverwing root first so `import main`
+    # resolves to Silverwing's app, not jarvis_backend/main.py itself.
+    _silverwing_root = str(SILVERWING_BACKEND.resolve())
+    if _silverwing_root in sys.path:
+        sys.path.remove(_silverwing_root)
+    sys.path.insert(0, _silverwing_root)
+    _existing_main = sys.modules.get("main")
+    if _existing_main is not None and os.path.realpath(
+        getattr(_existing_main, "__file__", "")
+    ) != os.path.realpath(os.path.join(_silverwing_root, "main.py")):
+        raise ImportError("another top-level 'main' module is already loaded")
     import main as silverwing_main  # type: ignore
 
     _silverwing_app = silverwing_main.app
@@ -317,6 +330,9 @@ async def _jarvis_startup():
 
 @app.on_event("shutdown")
 async def _jarvis_shutdown():
+    from .grpc_server import stop_grpc_server
+
+    await stop_grpc_server()
     from .bio_growth_worker import stop_bio_growth_worker
 
     await stop_bio_growth_worker()

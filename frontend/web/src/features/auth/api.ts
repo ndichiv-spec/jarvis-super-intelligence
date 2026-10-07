@@ -5,13 +5,13 @@ import type { LoginResponse, LoginRequest, RegisterRequest, User, SessionInfo, A
 export const authApi = {
   async login(credentials: LoginRequest): Promise<LoginResponse> {
     const response = await apiClient.post<LoginResponse>(API_ENDPOINTS.auth.login, credentials);
-    setAuthToken(response.access_token);
+    setAuthToken(null);
     return response;
   },
 
   async register(data: RegisterRequest): Promise<LoginResponse> {
     const response = await apiClient.post<LoginResponse>(API_ENDPOINTS.auth.register, data);
-    setAuthToken(response.access_token);
+    setAuthToken(null);
     return response;
   },
 

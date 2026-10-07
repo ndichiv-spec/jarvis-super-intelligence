@@ -474,7 +474,11 @@ def install_observability(app: FastAPI) -> None:
               "Rate limit exceeded. Please retry after a short delay.", True),
         408: ("TIMEOUT", "The request timed out. Please try again.", True),
         504: ("TIMEOUT", "The upstream request timed out. Please try again.", True),
-        501: ("NOT_IMPLEMENTED", "This feature is not implemented.", False),
+        501: (
+            "CAPABILITY_NOT_CONFIGURED",
+            "This capability is not configured or implemented.",
+            False,
+        ),
         503: ("SERVICE_UNAVAILABLE", "The service is temporarily unavailable.", True),
     }
 

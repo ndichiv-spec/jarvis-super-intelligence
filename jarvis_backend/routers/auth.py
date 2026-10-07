@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import os
 import secrets
 import time
 import uuid
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from ..auth_mail import (
@@ -98,7 +99,7 @@ class ChangePasswordIn(BaseModel):
 
 
 class RefreshIn(BaseModel):
-    refresh_token: str
+    refresh_token: Optional[str] = None
 
 
 class ApiKeyCreate(BaseModel):
@@ -192,8 +193,48 @@ def _revoke_user_sessions(user_id: str) -> None:
     get_store("refresh_tokens").save()
 
 
+def _set_auth_cookies(response: Response, access: str, refresh: str) -> None:
+    secure = os.environ.get("JARVIS_ENV", "").strip().lower() in {"production", "prod"}
+    response.set_cookie(
+        "jarvis_access_token",
+        access,
+        max_age=3600,
+        httponly=True,
+        secure=secure,
+        samesite="lax",
+        path="/",
+    )
+    response.set_cookie(
+        "jarvis_refresh_token",
+        refresh,
+        max_age=60 * 24 * 60 * 60,
+        httponly=True,
+        secure=secure,
+        samesite="lax",
+        path="/api/v1/auth",
+    )
+
+
+def _clear_auth_cookies(response: Response) -> None:
+    secure = os.environ.get("JARVIS_ENV", "").strip().lower() in {"production", "prod"}
+    for name, path in (
+        ("jarvis_access_token", "/"),
+        ("jarvis_refresh_token", "/api/v1/auth"),
+    ):
+        response.delete_cookie(
+            name,
+            path=path,
+            httponly=True,
+            secure=secure,
+            samesite="lax",
+        )
+
+
 @router.post("/login")
-async def login(body: LoginIn):
+async def login(body: LoginIn, request: Request, response: Response):
+    from ..core import validate_cookie_origin
+
+    validate_cookie_origin(request, unsafe=False, reject_untrusted_origin=True)
     users = get_store("users").load()
     user = next(
         (u for u in users.values()
@@ -206,6 +247,16 @@ async def login(body: LoginIn):
     
     # Check email verification requirement
     require_email_verified(user)
+    if user.get("status") == "pending_authorization":
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "OWNER_AUTHORIZATION_REQUIRED",
+                "message": "The account is awaiting owner authorization.",
+            },
+        )
+    if user.get("status") in {"disabled", "suspended", "deleted"}:
+        raise HTTPException(status_code=403, detail="Account is disabled")
     
     user["last_login_at"] = now_iso()
     users[user["id"]] = user
@@ -222,11 +273,10 @@ async def login(body: LoginIn):
     get_store("sessions").save()
     token = create_token({"sub": user["id"], "sid": session_id})
     refresh = create_refresh_token(user["id"], session_id)
+    _set_auth_cookies(response, token, refresh)
     _audit(user["id"], "login")
     return {
-        "access_token": token,
-        "refresh_token": refresh,
-        "token_type": "bearer",
+        "authenticated": True,
         "expires_in": 3600,
         "user": make_user_payload(user),
     }
@@ -255,7 +305,7 @@ async def register(body: RegisterIn):
         "password_hash": hash_password(body.password),
         "full_name": body.full_name or body.username,
         "avatar_url": None,
-        "status": "active",
+        "status": "pending_authorization",
         "tenant_id": None,
         "roles": ["user"],
         "last_login_at": None,
@@ -293,9 +343,18 @@ async def register(body: RegisterIn):
 
 @router.post("/logout")
 async def logout(
+    request: Request,
+    response: Response,
     authorization: Optional[str] = Header(default=None),
     refresh_token: Optional[str] = Body(default=None, embed=True),
 ):
+    from ..core import validate_cookie_origin
+
+    validate_cookie_origin(request, unsafe=True, reject_untrusted_origin=True)
+    cookie_token = request.cookies.get("jarvis_access_token")
+    if not authorization and cookie_token:
+        authorization = f"Bearer {cookie_token}"
+    refresh_token = refresh_token or request.cookies.get("jarvis_refresh_token")
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization[7:].strip()
         payload = decode_token(token)
@@ -307,19 +366,28 @@ async def logout(
             if refresh_token:
                 revoke_refresh_token(refresh_token)
             _audit(payload.get("sub"), "logout")
+    _clear_auth_cookies(response)
     return {"success": True}
 
 
 @router.post("/refresh")
-async def refresh(body: RefreshIn):
-    rotated = rotate_refresh_token(body.refresh_token)
+async def refresh(request: Request, response: Response, body: Optional[RefreshIn] = None):
+    from ..core import validate_cookie_origin
+
+    validate_cookie_origin(request, unsafe=True, reject_untrusted_origin=True)
+    refresh_token = (
+        (body.refresh_token if body else None)
+        or request.cookies.get("jarvis_refresh_token")
+    )
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+    rotated = rotate_refresh_token(refresh_token)
     if not rotated:
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
     access, refresh_token = rotated
+    _set_auth_cookies(response, access, refresh_token)
     return {
-        "access_token": access,
-        "refresh_token": refresh_token,
-        "token_type": "bearer",
+        "authenticated": True,
         "expires_in": 3600,
     }
 

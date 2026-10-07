@@ -91,27 +91,30 @@ import {
   Home, CheckCircle
 } from 'lucide-react';
 
+const fetchWithSession = (input: RequestInfo | URL, init: RequestInit = {}) =>
+  fetch(input, { ...init, credentials: 'include' });
+
 interface SystemStatus {
-  status: 'online' | 'offline' | 'warning';
+  status: 'online' | 'offline' | 'warning' | 'unknown';
   uptime: string;
-  components: number;
-  active_processes: number;
-  cpu_usage: number;
-  memory_usage: number;
-  disk_usage: number;
-  network_status: 'connected' | 'disconnected';
+  components: number | null;
+  active_processes: number | null;
+  cpu_usage: number | null;
+  memory_usage: number | null;
+  disk_usage: number | null;
+  network_status: 'connected' | 'disconnected' | 'unknown';
   last_update: string;
 }
 
 interface DriveEngineStatus {
   initialized: boolean;
-  components_loaded: number;
+  components_loaded: number | null;
   ai_capabilities: string[];
   performance_metrics: {
-    response_time: number;
-    throughput: number;
-    error_rate: number;
-  };
+    response_time: number | null;
+    throughput: number | null;
+    error_rate: number | null;
+  } | null;
   active_tasks: number;
   completed_tasks: number;
   failed_tasks: number;
@@ -138,26 +141,22 @@ interface AICapability {
 
 export default function JarvisCompleteDashboard() {
   const [systemStatus, setSystemStatus] = useState<SystemStatus>({
-    status: 'online',
-    uptime: '0h 0m 0s',
-    components: 209,
-    active_processes: 0,
-    cpu_usage: 0,
-    memory_usage: 0,
-    disk_usage: 0,
-    network_status: 'connected',
-    last_update: new Date().toISOString()
+    status: 'unknown',
+    uptime: '—',
+    components: null,
+    active_processes: null,
+    cpu_usage: null,
+    memory_usage: null,
+    disk_usage: null,
+    network_status: 'unknown',
+    last_update: ''
   });
 
   const [driveEngineStatus, setDriveEngineStatus] = useState<DriveEngineStatus>({
     initialized: false,
-    components_loaded: 0,
+    components_loaded: null,
     ai_capabilities: [],
-    performance_metrics: {
-      response_time: 0,
-      throughput: 0,
-      error_rate: 0
-    },
+    performance_metrics: null,
     active_tasks: 0,
     completed_tasks: 0,
     failed_tasks: 0
@@ -201,13 +200,13 @@ export default function JarvisCompleteDashboard() {
   const handleComponentAction = async (componentId: string, action: 'start' | 'stop' | 'restart') => {
     setComponentAction({ id: componentId, action });
     try {
-      const response = await fetch(getApiUrl(`/api/v1/components/${componentId}/${action}`), {
+      const response = await fetchWithSession(getApiUrl(`/api/v1/components/${componentId}/${action}`), {
         method: 'POST'
       });
       const result = await response.json();
       if (result.success) {
         // Refresh components
-        const componentsResponse = await fetch(getApiUrl('/api/v1/components'));
+        const componentsResponse = await fetchWithSession(getApiUrl('/api/v1/components'));
         const componentsData = await componentsResponse.json();
         setComponents(componentsData.components || []);
       }
@@ -220,12 +219,12 @@ export default function JarvisCompleteDashboard() {
 
   const handleStartAll = async () => {
     try {
-      const response = await fetch(getApiUrl('/api/v1/components/start-all'), {
+      const response = await fetchWithSession(getApiUrl('/api/v1/components/start-all'), {
         method: 'POST'
       });
       const result = await response.json();
       if (result.success) {
-        const componentsResponse = await fetch(getApiUrl('/api/v1/components'));
+        const componentsResponse = await fetchWithSession(getApiUrl('/api/v1/components'));
         const componentsData = await componentsResponse.json();
         setComponents(componentsData.components || []);
       }
@@ -236,12 +235,12 @@ export default function JarvisCompleteDashboard() {
 
   const handleStopAll = async () => {
     try {
-      const response = await fetch(getApiUrl('/api/v1/components/stop-all'), {
+      const response = await fetchWithSession(getApiUrl('/api/v1/components/stop-all'), {
         method: 'POST'
       });
       const result = await response.json();
       if (result.success) {
-        const componentsResponse = await fetch(getApiUrl('/api/v1/components'));
+        const componentsResponse = await fetchWithSession(getApiUrl('/api/v1/components'));
         const componentsData = await componentsResponse.json();
         setComponents(componentsData.components || []);
       }
@@ -253,7 +252,7 @@ export default function JarvisCompleteDashboard() {
   // AI Task functions
   const handleCreateTask = async () => {
     try {
-      const response = await fetch(getApiUrl('/api/v1/ai/tasks'), {
+      const response = await fetchWithSession(getApiUrl('/api/v1/ai/tasks'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newTask)
@@ -270,7 +269,7 @@ export default function JarvisCompleteDashboard() {
 
   const fetchAITasks = async () => {
     try {
-      const response = await fetch(getApiUrl('/api/v1/ai/tasks'));
+      const response = await fetchWithSession(getApiUrl('/api/v1/ai/tasks'));
       const data = await response.json();
       setAiTasks(data.tasks || []);
     } catch (error) {
@@ -289,13 +288,13 @@ export default function JarvisCompleteDashboard() {
   const fetchAdvancedSystems = async () => {
     try {
       const [swarm, multimodal, causal, optimizer, quantum, neuroSymbolic, memory] = await Promise.all([
-        fetch(getApiUrl('/api/v1/swarm/status')).then(r => r.json()).catch(() => null),
-        fetch(getApiUrl('/api/v1/multimodal/status')).then(r => r.json()).catch(() => null),
-        fetch(getApiUrl('/api/v1/causal/status')).then(r => r.json()).catch(() => null),
-        fetch(getApiUrl('/api/v1/optimizer/status')).then(r => r.json()).catch(() => null),
-        fetch(getApiUrl('/api/v1/quantum/status')).then(r => r.json()).catch(() => null),
-        fetch(getApiUrl('/api/v1/neuro_symbolic/status')).then(r => r.json()).catch(() => null),
-        fetch(getApiUrl('/api/v1/memory/status')).then(r => r.json()).catch(() => null)
+        fetchWithSession(getApiUrl('/api/v1/swarm/status')).then(r => r.json()).catch(() => null),
+        fetchWithSession(getApiUrl('/api/v1/multimodal/status')).then(r => r.json()).catch(() => null),
+        fetchWithSession(getApiUrl('/api/v1/causal/status')).then(r => r.json()).catch(() => null),
+        fetchWithSession(getApiUrl('/api/v1/optimizer/status')).then(r => r.json()).catch(() => null),
+        fetchWithSession(getApiUrl('/api/v1/quantum/status')).then(r => r.json()).catch(() => null),
+        fetchWithSession(getApiUrl('/api/v1/neuro_symbolic/status')).then(r => r.json()).catch(() => null),
+        fetchWithSession(getApiUrl('/api/v1/memory/status')).then(r => r.json()).catch(() => null)
       ]);
 
       if (swarm && !swarm.error) setSwarmStatus(swarm);
@@ -341,7 +340,7 @@ export default function JarvisCompleteDashboard() {
   useEffect(() => {
     const fetchSystemData = async () => {
       try {
-        const statusResponse = await fetch('/api/v1/status');
+        const statusResponse = await fetchWithSession('/api/v1/status');
         if (statusResponse.ok) {
           const statusData = await statusResponse.json();
           setSystemStatus(prev => ({
@@ -351,20 +350,20 @@ export default function JarvisCompleteDashboard() {
           }));
         }
 
-        const componentsResponse = await fetch('/api/v1/components');
+        const componentsResponse = await fetchWithSession('/api/v1/components');
         if (componentsResponse.ok) {
           const componentsData = await componentsResponse.json();
           setComponents(componentsData.components || []);
         }
 
-        const metricsResponse = await fetch('/api/v1/metrics');
+        const metricsResponse = await fetchWithSession('/api/v1/metrics');
         if (metricsResponse.ok) {
           const metricsData = await metricsResponse.json();
           setDriveEngineStatus(prev => ({
             ...prev,
             initialized: true,
-            components_loaded: metricsData.components_loaded || 209,
-            performance_metrics: metricsData.performance_metrics || prev.performance_metrics
+            components_loaded: metricsData.components_loaded ?? null,
+            performance_metrics: metricsData.performance_metrics ?? null
           }));
         }
 
@@ -393,7 +392,7 @@ export default function JarvisCompleteDashboard() {
               <p className="text-green-100 text-sm">System Status</p>
               <p className="text-2xl font-bold text-white">{systemStatus.status}</p>
             </div>
-            <CheckCircle className="w-8 h-8 text-blue-200" />
+            <Activity className="w-8 h-8 text-blue-200" />
           </div>
           <div className="mt-4">
             <p className="text-blue-100 text-xs">Uptime: {systemStatus.uptime}</p>
@@ -409,12 +408,14 @@ export default function JarvisCompleteDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-green-100 text-sm">Components</p>
-              <p className="text-2xl font-bold text-white">{systemStatus.components}</p>
+              <p className="text-2xl font-bold text-white">{systemStatus.components ?? '—'}</p>
             </div>
             <Package className="w-8 h-8 text-green-200" />
           </div>
           <div className="mt-4">
-            <p className="text-green-100 text-xs">Active: {driveEngineStatus.components_loaded}</p>
+            <p className="text-green-100 text-xs">
+              Active: {driveEngineStatus.components_loaded ?? '—'}
+            </p>
           </div>
         </motion.div>
 
@@ -427,16 +428,18 @@ export default function JarvisCompleteDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-purple-100 text-sm">CPU Usage</p>
-              <p className="text-2xl font-bold text-white">{systemStatus.cpu_usage}%</p>
+              <p className="text-2xl font-bold text-white">
+                {systemStatus.cpu_usage === null ? '—' : `${systemStatus.cpu_usage}%`}
+              </p>
             </div>
             <Cpu className="w-8 h-8 text-purple-200" />
           </div>
           <div className="mt-4">
             <div className="w-full bg-purple-900 rounded-full h-2">
-              <div 
+              {systemStatus.cpu_usage !== null && <div
                 className="bg-purple-300 h-2 rounded-full transition-all duration-300"
                 style={{ width: `${systemStatus.cpu_usage}%` }}
-              />
+              />}
             </div>
           </div>
         </motion.div>
@@ -450,16 +453,18 @@ export default function JarvisCompleteDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-orange-100 text-sm">Memory Usage</p>
-              <p className="text-2xl font-bold text-white">{systemStatus.memory_usage}%</p>
+              <p className="text-2xl font-bold text-white">
+                {systemStatus.memory_usage === null ? '—' : `${systemStatus.memory_usage}%`}
+              </p>
             </div>
             <MemoryStick className="w-8 h-8 text-orange-200" />
           </div>
           <div className="mt-4">
             <div className="w-full bg-orange-900 rounded-full h-2">
-              <div 
+              {systemStatus.memory_usage !== null && <div
                 className="bg-orange-300 h-2 rounded-full transition-all duration-300"
                 style={{ width: `${systemStatus.memory_usage}%` }}
-              />
+              />}
             </div>
           </div>
         </motion.div>
@@ -488,7 +493,11 @@ export default function JarvisCompleteDashboard() {
           </div>
           <div className="bg-gray-700 p-4 rounded-lg">
             <p className="text-gray-400 text-sm">Response Time</p>
-            <p className="text-lg font-semibold text-white">{driveEngineStatus.performance_metrics.response_time}ms</p>
+            <p className="text-lg font-semibold text-white">
+              {driveEngineStatus.performance_metrics?.response_time == null
+                ? '—'
+                : `${driveEngineStatus.performance_metrics.response_time}ms`}
+            </p>
           </div>
         </div>
       </motion.div>
@@ -529,11 +538,19 @@ export default function JarvisCompleteDashboard() {
             <div className="space-y-3">
               <div className="bg-gray-700 p-3 rounded-lg">
                 <p className="text-gray-400 text-sm">Throughput</p>
-                <p className="text-lg font-semibold text-white">{driveEngineStatus.performance_metrics.throughput} req/s</p>
+                <p className="text-lg font-semibold text-white">
+                  {driveEngineStatus.performance_metrics?.throughput == null
+                    ? '—'
+                    : `${driveEngineStatus.performance_metrics.throughput} req/s`}
+                </p>
               </div>
               <div className="bg-gray-700 p-3 rounded-lg">
                 <p className="text-gray-400 text-sm">Error Rate</p>
-                <p className="text-lg font-semibold text-white">{driveEngineStatus.performance_metrics.error_rate}%</p>
+                <p className="text-lg font-semibold text-white">
+                  {driveEngineStatus.performance_metrics?.error_rate == null
+                    ? '—'
+                    : `${driveEngineStatus.performance_metrics.error_rate}%`}
+                </p>
               </div>
               <div className="bg-gray-700 p-3 rounded-lg">
                 <p className="text-gray-400 text-sm">Completed Tasks</p>
@@ -947,7 +964,7 @@ export default function JarvisCompleteDashboard() {
                 {systemStatus.status}
               </div>
               <div className="text-sm text-gray-400">
-                Last Update: {new Date(systemStatus.last_update).toLocaleTimeString()}
+                Last Update: {systemStatus.last_update ? new Date(systemStatus.last_update).toLocaleTimeString() : '—'}
               </div>
             </div>
           </div>

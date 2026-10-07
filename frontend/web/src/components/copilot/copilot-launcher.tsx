@@ -39,10 +39,9 @@ function isPublicRoute(pathname: string | null): boolean {
 export function CopilotLauncher() {
   const pathname = usePathname();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const token = useAuthStore((state) => state.token);
   const isReady = useSyncExternalStore(subscribeToNothing, getClientSnapshot, getServerSnapshot);
 
-  if (!isReady || !isAuthenticated || !token || isPublicRoute(pathname)) return null;
+  if (!isReady || !isAuthenticated || isPublicRoute(pathname)) return null;
   return <CopilotPanel />;
 }
 

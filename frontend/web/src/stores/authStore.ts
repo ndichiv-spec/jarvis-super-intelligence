@@ -3,9 +3,9 @@ import { persist } from 'zustand/middleware';
 import { jarvisAPI } from '@/lib/api';
 import { setAuthToken } from '@/lib/api-client';
 
-function syncToken(token: string | null, refresh: string | null = null) {
-  jarvisAPI.setToken(token || '');
-  setAuthToken(token, refresh);
+function clearClientCredentials() {
+  jarvisAPI.setToken('');
+  setAuthToken(null, null);
 }
 
 export interface User {
@@ -30,7 +30,7 @@ interface AuthState {
   refreshToken: string | null;
   user: User | null;
   isAuthenticated: boolean;
-  login: (token: string, refreshToken: string | null, user: User) => void;
+  login: (token: string | null, refreshToken: string | null, user: User) => void;
   logout: () => Promise<void>;
   updateUser: (updates: Partial<User>) => void;
 }
@@ -43,13 +43,11 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       isAuthenticated: false,
 
-      login: (token: string, refreshToken: string | null, user: User) => {
-        // Persist both tokens so the session outlives the 7-day access-token
-        // TTL (silent refresh) instead of bouncing back to first login.
-        syncToken(token, refreshToken);
+      login: (_token: string | null, _refreshToken: string | null, user: User) => {
+        clearClientCredentials();
         set({
-          token,
-          refreshToken,
+          token: null,
+          refreshToken: null,
           user,
           isAuthenticated: true,
         });
@@ -62,7 +60,7 @@ export const useAuthStore = create<AuthState>()(
           console.error('Logout error:', error);
         }
         // Wipe both tokens from the in-memory API client AND persisted storage.
-        syncToken(null, null);
+        clearClientCredentials();
         set({
           token: null,
           refreshToken: null,
@@ -80,21 +78,29 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'jarvis-auth-storage',
+      version: 2,
+      migrate: (persistedState) => {
+        const state = persistedState as Partial<AuthState> | undefined;
+        return {
+          token: null,
+          refreshToken: null,
+          user: state?.user ?? null,
+          isAuthenticated: state?.isAuthenticated ?? false,
+        };
+      },
       partialize: (state) => ({
-        token: state.token,
-        refreshToken: state.refreshToken,
         user: state.user,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        clearClientCredentials();
+        if (!state?.isAuthenticated) return;
+        void jarvisAPI.getMe().then((user) => {
+          useAuthStore.setState({ token: null, refreshToken: null, user, isAuthenticated: true });
+        }).catch(() => {
+          useAuthStore.setState({ token: null, refreshToken: null, user: null, isAuthenticated: false });
+        });
+      },
     }
   )
 );
-
-// Initialize the in-memory API client token from persisted storage on
-// startup so protected requests are authenticated on first render.
-if (typeof window !== 'undefined') {
-  const state = useAuthStore.getState();
-  if (state.token) {
-    syncToken(state.token, state.refreshToken);
-  }
-}

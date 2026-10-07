@@ -68,6 +68,55 @@ class TestBrowserAuth:
         assert resp.status_code == 401
 
 
+class TestBrowserDownloadPath:
+    @pytest.mark.parametrize(
+        "filename",
+        [
+            "../outside.html",
+            "..\\outside.html",
+            "C:\\outside.html",
+            "/outside.html",
+            ".",
+            "..",
+        ],
+    )
+    def test_rejects_path_components(self, filename):
+        with pytest.raises(HTTPException) as exc:
+            browser_router._download_destination(filename, "test-user")
+        assert exc.value.status_code == 400
+
+    def test_resolves_plain_filename_under_upload_directory(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(browser_router, "UPLOADS_DIR", tmp_path)
+
+        destination = browser_router._download_destination("example.html", "test-user")
+
+        assert destination.name == "example.html"
+        assert destination.parent.parent == tmp_path.resolve() / "browser-downloads"
+
+    def test_users_get_isolated_download_directories(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(browser_router, "UPLOADS_DIR", tmp_path)
+
+        first = browser_router._download_destination("example.html", "user-one")
+        second = browser_router._download_destination("example.html", "user-two")
+
+        assert first != second
+
+    def test_rejects_symlink_target_outside_upload_directory(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(browser_router, "UPLOADS_DIR", tmp_path)
+        destination = browser_router._download_destination("link.html", "test-user")
+        outside = tmp_path / "outside.html"
+        outside.write_text("protected", encoding="utf-8")
+        try:
+            destination.symlink_to(outside)
+        except OSError as exc:
+            pytest.skip(f"Symlinks are unavailable: {exc}")
+
+        with pytest.raises(HTTPException) as exc:
+            browser_router._download_destination("link.html", "test-user")
+
+        assert exc.value.status_code == 400
+
+
 # --------------------------------------------------------------------------- #
 # Session management
 # --------------------------------------------------------------------------- #

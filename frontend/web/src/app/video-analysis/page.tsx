@@ -24,6 +24,18 @@ interface VideoAnalysisResult {
   error?: string;
 }
 
+async function readVideoResponse(response: Response): Promise<VideoAnalysisResult> {
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message =
+      data?.error?.message ??
+      data?.detail ??
+      `Video request failed (HTTP ${response.status})`;
+    throw new Error(typeof message === "string" ? message : `Video request failed (HTTP ${response.status})`);
+  }
+  return data as VideoAnalysisResult;
+}
+
 export default function VideoAnalysisPage() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState("");
@@ -51,34 +63,32 @@ export default function VideoAnalysisPage() {
     setIsAnalyzing(true);
 
     try {
-      let endpoint = "";
-      let body: any = {};
-
       if (analysisMode === "upload" && videoFile) {
         const formData = new FormData();
         formData.append("file", videoFile);
         
         const response = await fetch(
           getApiUrl('/api/v1/video/analyze'),
-          { method: "POST", body: formData }
+          { method: "POST", body: formData, credentials: "include" }
         );
-        const data = await response.json();
+        const data = await readVideoResponse(response);
         setResult(data);
       } else {
-        endpoint = getApiUrl('/api/v1/video/analyze');
-        body = { video_url: videoUrl };
+        const body = new FormData();
+        body.append("video_url", videoUrl);
         
-        const response = await fetch(endpoint, {
+        const response = await fetch(getApiUrl('/api/v1/video/analyze'), {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
+          body,
+          credentials: "include",
         });
-        const data = await response.json();
+        const data = await readVideoResponse(response);
         setResult(data);
       }
 
       toast.success("Video analysis complete");
     } catch (error: any) {
+      setResult({ success: false, error: error.message || "Video analysis failed." });
       toast.error(`Analysis failed: ${error.message}`);
     } finally {
       setIsAnalyzing(false);
@@ -102,12 +112,13 @@ export default function VideoAnalysisPage() {
 
       const response = await fetch(
         getApiUrl('/api/v1/video/extract-frames'),
-        { method: "POST", body: formData }
+        { method: "POST", body: formData, credentials: "include" }
       );
-      const data = await response.json();
+      const data = await readVideoResponse(response);
       setResult(data);
       toast.success(`Extracted ${data.frame_count} frames`);
     } catch (error: any) {
+      setResult({ success: false, error: error.message || "Frame extraction failed." });
       toast.error(`Extraction failed: ${error.message}`);
     } finally {
       setIsAnalyzing(false);
@@ -130,12 +141,13 @@ export default function VideoAnalysisPage() {
 
       const response = await fetch(
         getApiUrl('/api/v1/video/info'),
-        { method: "POST", body: formData }
+        { method: "POST", body: formData, credentials: "include" }
       );
-      const data = await response.json();
+      const data = await readVideoResponse(response);
       setResult(data);
       toast.success("Got video info");
     } catch (error: any) {
+      setResult({ success: false, error: error.message || "Video information is unavailable." });
       toast.error(`Failed: ${error.message}`);
     } finally {
       setIsAnalyzing(false);

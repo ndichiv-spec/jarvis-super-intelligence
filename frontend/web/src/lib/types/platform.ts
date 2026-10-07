@@ -99,10 +99,8 @@ export interface NotificationItem {
   action?: { label: string; onClick: () => void };
 }
 
-/** Workspace-level persisted state (what we actually need to remember). */
+/** Workspace-level persisted UI state. */
 export interface WorkspaceState {
-  selectedModel: string;
-  selectedProvider: string;
   activeMission?: string;
   activeResearchSession?: string;
   selectedAgent?: string;

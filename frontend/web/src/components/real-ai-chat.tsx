@@ -35,7 +35,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { getAuthToken } from "@/lib/api-client";
 import { getApiUrl } from "@/lib/runtime-url";
 import { useChatStore } from "@/features/chat/store";
 import { MarkdownMessage } from "@/components/chat/markdown-message";
@@ -46,12 +45,11 @@ import ChatSettingsPanel from "@/components/chat-settings-panel";
 import type { ToolCall } from "@/features/chat/types";
 
 const authHeaders = (json = false): Record<string, string> => {
-  const token = getAuthToken();
-  const headers: Record<string, string> = {};
-  if (json) headers["Content-Type"] = "application/json";
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  return headers;
+  return json ? { "Content-Type": "application/json" } : {};
 };
+
+const sessionFetch = (input: RequestInfo | URL, init: RequestInit = {}) =>
+  fetch(input, { ...init, credentials: "include" });
 
 const safeJson = async (response: Response): Promise<any | null> => {
   if (!response.ok) return null;
@@ -276,13 +274,15 @@ interface SystemStatus {
   status: string;
   enabled?: boolean;
   provider?: string;
+  configured_provider_count?: number;
+  provider_available?: boolean;
   ollama_model?: string;
   ollama_base_url?: string;
   silverwing_model?: string;
-  silverwing_endpoint?: string | null;
+  silverwing_endpoint_configured?: boolean;
   silverwing?: SilverwingStatus;
   brain_model?: string;
-  brain_endpoint?: string | null;
+  brain_endpoint_configured?: boolean;
   brain?: { configured: boolean; healthy: boolean; detail?: string; latency_ms?: number | null };
   capabilities?: string[];
 }
@@ -326,7 +326,7 @@ const uploadFile = async (
   formData.append("file", file);
   try {
     // Use fetch with a progress-tracking wrapper for upload
-    const response = await fetch(getApiUrl('/api/v1/multimodal/upload/image'), {
+    const response = await sessionFetch(getApiUrl('/api/v1/multimodal/upload/image'), {
       method: "POST",
       headers: {
         ...authHeaders(),
@@ -357,6 +357,7 @@ export default function RealAIChat() {
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [backendConnected, setBackendConnected] = useState(true);
   const [usingLocalFallback, setUsingLocalFallback] = useState(false);
+  const [providerConfigured, setProviderConfigured] = useState(false);
   const [verifyMode, setVerifyMode] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sessionIdRef = useRef<string | undefined>(undefined);
@@ -430,7 +431,7 @@ export default function RealAIChat() {
 
   const loadSystemStatus = async () => {
     try {
-      const response = await fetch(getApiUrl('/api/v1/ai/status'), {
+      const response = await sessionFetch(getApiUrl('/api/v1/ai/status'), {
         headers: authHeaders(),
       });
       const data = await safeJson(response);
@@ -440,10 +441,12 @@ export default function RealAIChat() {
         status: data.status === "ready" ? "online" : (data.status === "degraded" ? "degraded" : "offline"),
         enabled: Boolean(data.enabled),
         provider: data.provider,
+        configured_provider_count: data.configured_provider_count,
+        provider_available: data.provider_available,
         ollama_model: data.ollama_model,
         ollama_base_url: data.ollama_base_url,
         silverwing_model: data.silverwing_model,
-        silverwing_endpoint: data.silverwing_endpoint,
+        silverwing_endpoint_configured: data.silverwing_endpoint_configured,
         silverwing: data.silverwing || {
           configured: false,
           reachable: false,
@@ -454,19 +457,17 @@ export default function RealAIChat() {
           model: data.silverwing_model || "silverwing-120m-base-v1",
         },
         brain_model: data.brain_model,
-        brain_endpoint: data.brain_endpoint,
+        brain_endpoint_configured: data.brain_endpoint_configured,
         brain: data.brain || { configured: false, healthy: false },
         capabilities: data.capabilities || ["chat", "code generation", "analysis"],
       });
-      setUsingLocalFallback(!data.enabled);
-      // When the platform is degraded (no real provider can execute),
-      // reflect this in the UI so the user knows replies may not be real.
-      if (data.status === "degraded" && !data.enabled) {
-        setUsingLocalFallback(true);
-      }
+      const hasConfiguredProvider = Number(data.configured_provider_count) > 0;
+      setProviderConfigured(hasConfiguredProvider);
+      setUsingLocalFallback(!hasConfiguredProvider);
     } catch (error) {
       console.error("Failed to load system status:", error);
       setBackendConnected(false);
+      setProviderConfigured(false);
       setUsingLocalFallback(true);
     }
   };
@@ -554,7 +555,7 @@ export default function RealAIChat() {
     let received = "";
 
     try {
-      const response = await fetch(
+      const response = await sessionFetch(
         getApiUrl(`/api/chat/messages/${encodeURIComponent(currentSessionId)}/${encodeURIComponent(messageId)}/regenerate`),
         {
           method: "POST",
@@ -645,7 +646,7 @@ export default function RealAIChat() {
   const switchModel = async (providerModel: string) => {
     setActiveModel(providerModel);
     try {
-      await fetch(getApiUrl('/api/chat/switch'), {
+      await sessionFetch(getApiUrl('/api/chat/switch'), {
         method: "POST",
         headers: authHeaders(true),
         body: JSON.stringify({ model: providerModel }),
@@ -679,7 +680,7 @@ export default function RealAIChat() {
     };
 
     try {
-      const response = await fetch(getApiUrl('/api/chat/stream'), {
+      const response = await sessionFetch(getApiUrl('/api/chat/stream'), {
         method: "POST",
         headers: authHeaders(true),
         signal: controller.signal,
@@ -937,7 +938,7 @@ export default function RealAIChat() {
     setIsLoading(true);
 
     try {
-      const response = await fetch(getApiUrl('/api/v1/codegen/generate'), {
+      const response = await sessionFetch(getApiUrl('/api/v1/codegen/generate'), {
         method: "POST",
         headers: authHeaders(true),
         body: JSON.stringify({
@@ -983,7 +984,7 @@ export default function RealAIChat() {
     setIsLoading(true);
 
     try {
-      const response = await fetch(getApiUrl('/api/v1/ai/process'), {
+      const response = await sessionFetch(getApiUrl('/api/v1/ai/process'), {
         method: "POST",
         headers: authHeaders(true),
         body: JSON.stringify({
@@ -1028,7 +1029,7 @@ export default function RealAIChat() {
     setIsLoading(true);
 
     try {
-      const response = await fetch(getApiUrl('/api/v1/ai/status'), {
+      const response = await sessionFetch(getApiUrl('/api/v1/ai/status'), {
         method: "GET",
         headers: authHeaders(),
       });
@@ -1113,7 +1114,12 @@ export default function RealAIChat() {
             {usingLocalFallback ? (
               <span className="text-yellow-400 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4" />
-                Offline â no AI provider configured
+                No provider configured
+              </span>
+            ) : providerConfigured && !systemStatus?.enabled ? (
+              <span className="text-yellow-400 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
+                Provider configured - live inference not yet verified
               </span>
             ) : (
               <span className="text-green-400 flex items-center gap-2">

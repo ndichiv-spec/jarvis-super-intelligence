@@ -2,9 +2,6 @@ import { getApiUrl, getWsUrl } from './runtime-url';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
-/** localStorage key used by the zustand-persisted auth stores. */
-const AUTH_STORAGE_KEY = 'jarvis-auth-storage';
-
 /**
  * Per-request timeout budget. A live provider completion takes tens of seconds
  * (measured ~50s for POST /api/v1/ai/process), so this is set well above the
@@ -352,6 +349,11 @@ export interface ProviderFeatureStatus {
   configured: boolean;
 }
 
+export interface ImageProviderStatus {
+  configured: boolean;
+  status: 'CONFIGURED' | 'NOT_CONFIGURED';
+}
+
 export interface ProviderSettingsResponse {
   success: boolean;
   settings: ProviderSettings;
@@ -363,8 +365,8 @@ export interface ProviderSettingsResponse {
 }
 
 export interface LoginResponse {
-  access_token: string;
-  token_type: string;
+  access_token?: string;
+  token_type?: string;
   user: {
     id: string;
     email: string;
@@ -473,54 +475,22 @@ export interface AuditLogFilters {
   per_page?: number;
 }
 
+class ApiRequestError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'ApiRequestError';
+  }
+}
+
 class JarvisAPI {
   private baseUrl: string;
-  private token: string | null = null;
 
   constructor(baseUrl: string = API_BASE) {
     this.baseUrl = baseUrl;
   }
 
-  setToken(token: string) {
-    this.token = token;
-  }
-
-  /**
-   * Resolve the bearer token to send with a request.
-   *
-   * The auth stores persist the JWT to localStorage under 'jarvis-auth-storage',
-   * but this client kept its own in-memory copy that was only populated by
-   * setToken() during a login performed in the same JS context. After any page
-   * load or reload the module is re-evaluated, `this.token` starts as null, and
-   * every authenticated request went out with no Authorization header -- the
-   * backend answered 401 for e.g. POST /api/v1/ai/process and
-   * GET /api/v1/search/status even though the user was logged in.
-   *
-   * Fall back to the persisted value so the client is usable immediately after
-   * a reload. Both zustand persist shapes are accepted (nested `state` object
-   * and flat object).
-   */
-  private resolveToken(): string | null {
-    if (this.token) {
-      return this.token;
-    }
-    if (typeof window === 'undefined') {
-      return null;
-    }
-    try {
-      const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
-      if (!raw) {
-        return null;
-      }
-      const parsed = JSON.parse(raw) as { token?: string; access_token?: string; state?: { token?: string } };
-      const token = parsed?.state?.token ?? parsed?.token ?? parsed?.access_token ?? null;
-      if (token) {
-        this.token = token;
-      }
-      return token ?? null;
-    } catch {
-      return null;
-    }
+  setToken(_token: string | undefined) {
+    // Authentication uses server-managed HttpOnly cookies only.
   }
 
   async openAuthenticatedWebSocket(endpoint: string): Promise<WebSocket> {
@@ -538,11 +508,6 @@ class JarvisAPI {
       ...(options.headers as Record<string, string>),
     };
 
-    const token = this.resolveToken();
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt < retries; attempt++) {
@@ -550,6 +515,7 @@ class JarvisAPI {
         const response = await fetch(getApiUrl(endpoint, undefined, this.baseUrl), {
           ...options,
           headers,
+          credentials: 'include',
           // Timeout. Must exceed real provider latency: a live chat completion via
           // POST /api/v1/ai/process measured ~50s end to end (model latency ~39s).
           // The previous 30s budget aborted every attempt and then retried, so the
@@ -566,8 +532,26 @@ class JarvisAPI {
         });
 
         if (!response.ok) {
-          const error = await response.json().catch(() => ({ error: response.statusText }));
-          throw new Error(error.error || error.detail || `API error: ${response.status}`);
+          const payload: unknown = await response.json().catch(() => null);
+          const errorBody = payload && typeof payload === 'object'
+            ? payload as Record<string, unknown>
+            : {};
+          const errorValue = errorBody.error;
+          const detailValue = errorBody.detail;
+          const nestedError = errorValue && typeof errorValue === 'object'
+            ? errorValue as Record<string, unknown>
+            : {};
+          const nestedDetail = detailValue && typeof detailValue === 'object'
+            ? detailValue as Record<string, unknown>
+            : {};
+          const message = [
+            errorValue,
+            nestedError.message,
+            detailValue,
+            nestedDetail.message,
+            response.statusText,
+          ].find((value): value is string => typeof value === 'string' && value.length > 0);
+          throw new ApiRequestError(message || `API error: ${response.status}`, response.status);
         }
 
         const data = await response.json();
@@ -585,7 +569,7 @@ class JarvisAPI {
         });
 
         // Don't retry for client errors (4xx)
-        if (error.message.includes('401') || error.message.includes('403') || error.message.includes('404')) {
+        if (error instanceof ApiRequestError && error.status >= 400 && error.status < 500) {
           throw error;
         }
 
@@ -743,19 +727,40 @@ class JarvisAPI {
     return this.request('/api/v1/system/provider-settings');
   }
 
+  async getImageProviderStatus(): Promise<{ providers: Record<string, ImageProviderStatus> }> {
+    return this.request('/api/v1/image/providers');
+  }
+
   async generateImage(input: {
     prompt: string;
+    session_id?: string;
     provider: string;
     size: string;
     quality: string;
-    style: string;
+    style: string | null;
     negative_prompt: string | null;
     num_images: number;
   }): Promise<{
     success: boolean;
-    images: Array<{ url?: string; base64?: string; prompt: string; model: string; width: number; height: number }>;
+    images: Array<{
+      artifact_id: string;
+      url: string;
+      prompt: string;
+      model: string;
+      width: number;
+      height: number;
+      mime_type: string;
+    }>;
     count: number;
     detail?: string;
+    conversation_messages?: Array<{
+      id: string;
+      role: 'user' | 'assistant';
+      content: string;
+      timestamp: string;
+      provider?: string;
+      metadata?: Record<string, unknown>;
+    }> | null;
   }> {
     return this.request('/api/v1/image/generate', {
       method: 'POST',
@@ -850,8 +855,8 @@ class JarvisAPI {
 
     const response = await fetch(`${this.baseUrl}/api/v1/multimodal/upload/image`, {
       method: 'POST',
-      headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
       body: formData,
+      credentials: 'include',
     });
 
     return response.json();
@@ -864,8 +869,8 @@ class JarvisAPI {
 
     const response = await fetch(`${this.baseUrl}/api/v1/multimodal/upload/document`, {
       method: 'POST',
-      headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
       body: formData,
+      credentials: 'include',
     });
 
     return response.json();
@@ -1085,8 +1090,8 @@ class JarvisAPI {
 
     const response = await fetch(`${this.baseUrl}/api/v1/voice/transcribe`, {
       method: 'POST',
-      headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
       body: formData,
+      credentials: 'include',
     });
 
     return response.json();
@@ -1466,7 +1471,7 @@ class JarvisAPI {
       if (filters.action) params.append('action', filters.action);
       if (filters.resource_type) params.append('resource_type', filters.resource_type);
       const response = await fetch(`${this.baseUrl}/api/v1/rbac/audit-logs/export?${params}`, {
-        headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
+        credentials: 'include',
       });
       if (!response.ok) throw new Error('Export failed');
       return response.blob();

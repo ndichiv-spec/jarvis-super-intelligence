@@ -1,3 +1,4 @@
+import subprocess
 import sys
 
 from jarvis_runtime import (
@@ -22,6 +23,28 @@ def test_entrypoints_share_application():
 
     assert start_jarvis.app is jarvis_api.app
     assert unified_jarvis_api.app is jarvis_api.app
+
+
+def test_silverwing_subapp_loads_from_its_backend_root():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "from pathlib import Path; "
+                "import jarvis_backend.main as jarvis_main; "
+                "import sys; "
+                "assert jarvis_main._silverwing_error is None; "
+                "assert jarvis_main._silverwing_app is not None; "
+                "print(Path(sys.modules['main'].__file__).resolve())"
+            ),
+        ],
+        cwd=PROJECT_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert str((SILVERWING_BACKEND_ROOT / "main.py").resolve()) in result.stdout
 
 
 def test_usage_serializes_all_token_counts():

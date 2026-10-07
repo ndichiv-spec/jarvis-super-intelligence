@@ -166,7 +166,6 @@ async def _probe_silverwing() -> dict:
     result = {
         "configured": bool(endpoint),
         "reachable": False,
-        "endpoint": endpoint or None,
     }
 
     # Single-process deployment integrates silverwing-backend *in-process*
@@ -179,7 +178,6 @@ async def _probe_silverwing() -> dict:
         from ..main import _silverwing_app, _silverwing_error  # deferred: avoids import cycle
         if _silverwing_app is not None and _silverwing_error is None:
             result["reachable"] = True
-            result["endpoint"] = endpoint or "/silverwing (in-process)"
             result["status_code"] = 200
             return result
     except Exception:
@@ -229,6 +227,8 @@ async def _readiness_snapshot() -> dict:
         _probe_silverwing(),
         check_database_status(),
     )
+    if isinstance(brain, dict):
+        brain.pop("endpoint", None)
     queue = await asyncio.to_thread(get_queue_runtime_status)
     ready_providers = []
     for provider in (catalog or {}).get("providers", []):
@@ -243,7 +243,6 @@ async def _readiness_snapshot() -> dict:
     runtime_available = bool(
         brain.get("healthy")
         or ready_providers
-        or silverwing.get("reachable")
     )
     service_ready = database.get("status") == "AVAILABLE"
     return {
@@ -297,7 +296,10 @@ async def root():
         "providers": {
             "nvidia": "healthy" if brain.get("provider") == "nvidia" else ("configured" if brain_ep else "not_configured"),
             "huggingface": "not_configured",
-            "silverwing": "offline" if not _os.environ.get("SILVERWING_ENDPOINT") else "healthy",
+            "silverwing": (
+                "unverified" if _os.environ.get("SILVERWING_ENDPOINT")
+                else "not_configured"
+            ),
         },
         "documentation": {"swagger": "/docs", "redoc": "/redoc", "openapi": "/openapi.json"},
     }
@@ -311,7 +313,7 @@ async def api_status():
     from ..gateway import ProviderGateway
     data = {"status": "operational", **ai_service.settings()}
     brain_ep = _os.environ.get("JARVIS_BRAIN_ENDPOINT", "").strip()
-    data["brain_endpoint"] = brain_ep or None
+    data["brain_endpoint_configured"] = bool(brain_ep)
     data["brain_model"] = _os.environ.get("JARVIS_BRAIN_MODEL")
     if brain_ep:
         data["brain"] = await ProviderGateway().probe_brain()
@@ -348,12 +350,14 @@ async def api_providers():
     brain_ep = _os.environ.get("JARVIS_BRAIN_ENDPOINT", "").strip()
     if brain_ep:
         brain = await ProviderGateway().probe_brain()
+        brain.pop("endpoint", None)
         catalog["providers"].append({
             "provider": "jarvis-brain",
             "available": brain.get("healthy", False),
             "authorized": True,
+            "configured": True,
+            "inference_verified": brain.get("healthy", False),
             "model": brain.get("model"),
-            "endpoint": brain_ep,
             "backend": brain.get("backend"),
             "provider": brain.get("provider"),
             "latency_ms": brain.get("latency_ms"),
@@ -379,7 +383,9 @@ async def api_models():
 async def api_brain_status():
     """Detailed Brain status — real probe only (spec Part A, Part P)."""
     from ..gateway import ProviderGateway
-    return await ProviderGateway().probe_brain()
+    result = await ProviderGateway().probe_brain()
+    result.pop("endpoint", None)
+    return result
 
 
 @router.get("/api/brain/models")
