@@ -15,7 +15,9 @@ interface SystemState {
   loadCapabilities: () => Promise<void>;
   loadProcesses: () => Promise<void>;
   loadProviderSettings: () => Promise<void>;
-  updateProviderSettings: (data: Record<string, string>) => Promise<void>;
+  updateProviderSettings: (
+    data: Partial<Pick<ProviderSettingsResponse['settings'], 'ollama_base_url' | 'ollama_model' | 'aws_region'>>,
+  ) => Promise<void>;
   listFiles: (path?: string) => Promise<void>;
   killProcess: (pid: number) => Promise<void>;
   clearError: () => void;

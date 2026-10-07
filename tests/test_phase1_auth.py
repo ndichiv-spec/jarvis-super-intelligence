@@ -32,18 +32,29 @@ def _verified_login(client, email, username, account_email_outbox):
     assert registered.status_code == 200
     assert registered.json()["status"] == "verification_required"
     assert "access_token" not in registered.json()
+    assert "refresh_token" not in registered.json()
+
     verification = account_email_outbox[-1][2]
     assert client.post(
         "/api/v1/auth/verify-email",
         json={"token": verification},
     ).status_code == 200
+
+    # New accounts require separate owner approval in addition to email proof.
+    from jarvis_backend.core import get_store
+
+    users = get_store("users").load()
+    user = next(u for u in users.values() if u.get("email") == email)
+    user["status"] = "active"
+    get_store("users").save()
+
     return client.post(
         "/api/v1/auth/login",
         json={"identifier": email, "password": "S3cret!pass"},
-    ).json()
+    )
 
 
-def test_registration_issues_no_credentials_until_verified(
+def test_registration_issues_credentials_only_as_http_only_cookies(
     client, account_email_outbox
 ):
     registered = _register(client, "a@example.test", "a")
@@ -58,31 +69,48 @@ def test_registration_issues_no_credentials_until_verified(
     ).status_code == 401
 
     login = _verified_login(client, "b@example.test", "b", account_email_outbox)
-    assert login["access_token"]
-    assert login["refresh_token"]
-    assert login["token_type"] == "bearer"
-    assert login["expires_in"] == 3600
-    payload = decode_token(login["access_token"])
+    assert login.status_code == 200
+    assert login.json()["authenticated"] is True
+    assert "access_token" not in login.json()
+    assert "refresh_token" not in login.json()
+    set_cookie_headers = login.headers.get_list("set-cookie")
+    for name in ("jarvis_access_token", "jarvis_refresh_token"):
+        cookie = login.cookies.get(name)
+        assert cookie
+        assert any(
+            header.lower().startswith(name.lower() + "=")
+            and "httponly" in header.lower()
+            for header in set_cookie_headers
+        )
+    access = login.cookies["jarvis_access_token"]
+    payload = decode_token(access)
     assert payload["sub"]
     assert "jti" not in payload
 
 
-def test_refresh_rotates_tokens_and_rejects_reuse(client, account_email_outbox):
+def test_refresh_rotates_http_only_cookies_and_rejects_reuse(
+    client, account_email_outbox
+):
     login = _verified_login(client, "a@example.test", "a", account_email_outbox)
+    assert login.status_code == 200
+    old_access = login.cookies["jarvis_access_token"]
+    old_refresh = login.cookies["jarvis_refresh_token"]
+
     response = client.post(
         "/api/v1/auth/refresh",
-        json={"refresh_token": login["refresh_token"]},
+        headers={"Origin": "http://localhost:3000"},
     )
     assert response.status_code == 200
-    body = response.json()
-    assert body["access_token"]
-    assert body["token_type"] == "bearer"
-    assert decode_token(body["access_token"])["sub"] == decode_token(
-        login["access_token"]
-    )["sub"]
+    assert response.json()["authenticated"] is True
+    new_access = response.cookies["jarvis_access_token"]
+    new_refresh = response.cookies["jarvis_refresh_token"]
+    assert new_refresh != old_refresh
+    assert decode_token(new_access)["sub"] == decode_token(old_access)["sub"]
+
     assert client.post(
         "/api/v1/auth/refresh",
-        json={"refresh_token": login["refresh_token"]},
+        headers={"Origin": "http://localhost:3000"},
+        cookies={"jarvis_refresh_token": old_refresh},
     ).status_code == 401
 
 
@@ -93,16 +121,28 @@ def test_refresh_rejected_for_invalid_token(client):
     ).status_code == 401
 
 
-def test_logout_revokes_refresh_token(client, account_email_outbox):
+def test_logout_revokes_cookie_session_and_refresh_token(
+    client, account_email_outbox
+):
     login = _verified_login(client, "a@example.test", "a", account_email_outbox)
-    client.post(
+    assert login.status_code == 200
+    access = login.cookies["jarvis_access_token"]
+    refresh = login.cookies["jarvis_refresh_token"]
+    session_id = decode_token(access)["sid"]
+
+    response = client.post(
         "/api/v1/auth/logout",
-        json={"refresh_token": login["refresh_token"]},
-        headers={"Authorization": f"Bearer {login['access_token']}"},
+        headers={"Origin": "http://localhost:3000"},
     )
+
+    assert response.status_code == 200
+    from jarvis_backend.core import get_store
+
+    assert session_id not in get_store("sessions").load()
     assert client.post(
         "/api/v1/auth/refresh",
-        json={"refresh_token": login["refresh_token"]},
+        headers={"Origin": "http://localhost:3000"},
+        cookies={"jarvis_refresh_token": refresh},
     ).status_code == 401
 
 
@@ -116,18 +156,21 @@ def test_expired_access_token_is_rejected(client):
 
 
 def test_users_get_isolated_principals(client, account_email_outbox):
-    a = _verified_login(client, "a@example.test", "a", account_email_outbox)
-    b = _verified_login(client, "b@example.test", "b", account_email_outbox)
-    me_as_a = client.get(
+    login_a = _verified_login(client, "a@example.test", "a", account_email_outbox)
+    login_b = _verified_login(client, "b@example.test", "b", account_email_outbox)
+    assert login_a.status_code == login_b.status_code == 200
+
+    me_a = client.get(
         "/api/v1/auth/me",
-        headers={"Authorization": f"Bearer {a['access_token']}"},
-    ).json()
-    me_as_b = client.get(
+        cookies={"jarvis_access_token": login_a.cookies["jarvis_access_token"]},
+    )
+    me_b = client.get(
         "/api/v1/auth/me",
-        headers={"Authorization": f"Bearer {b['access_token']}"},
-    ).json()
-    assert me_as_a["email"] == "a@example.test"
-    assert me_as_b["email"] == "b@example.test"
-    assert decode_token(a["refresh_token"])["sub"] != decode_token(
-        b["refresh_token"]
+        cookies={"jarvis_access_token": login_b.cookies["jarvis_access_token"]},
+    )
+
+    assert me_a.json()["email"] == "a@example.test"
+    assert me_b.json()["email"] == "b@example.test"
+    assert decode_token(login_a.cookies["jarvis_access_token"])["sub"] != decode_token(
+        login_b.cookies["jarvis_access_token"]
     )["sub"]

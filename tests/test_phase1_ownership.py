@@ -1,82 +1,114 @@
-"""Phase 1 — data ownership & cross-user access denial.
-
-Spec (section 2): "Never trust client `user_id`."  Every chat/note/reminder
-route derives the caller identity from the bearer token; sessions are keyed to
-the authenticated user and cross-user access returns an authorization failure.
-"""
+"""Ownership boundaries for authenticated chat sessions."""
 from __future__ import annotations
 
+from jarvis_backend.core import create_token, get_store
 
-def _register(client, email, username, password="S3cret!pass"):
-    return client.post("/api/v1/auth/register", json={
-        "email": email, "username": username, "password": password}).json()
+
+def _principal_token(user_id):
+    users = get_store("users").load()
+    users[user_id] = {
+        "id": user_id,
+        "email": f"{user_id}@example.test",
+        "email_verified": True,
+        "status": "active",
+        "roles": ["user"],
+    }
+    get_store("users").save()
+    return create_token({"sub": user_id})
 
 
 def _new_session(client, token):
-    r = client.post("/api/chat", json={"message": "hello"},
-                    headers={"Authorization": f"Bearer {token}"})
-    assert r.status_code == 200
-    return r.json()["session_id"]
+    response = client.post(
+        "/api/chat",
+        json={"message": "hello"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    return response.json()["session_id"]
 
 
 def test_cross_user_send_into_session_is_denied(client):
-    a = _register(client, "a@example.com", "a")
-    b = _register(client, "b@example.com", "b")
-    sid = _new_session(client, a["access_token"])
-    # User B attempts to send a message into A's session.
-    r = client.post("/api/chat", json={"message": "hi", "session_id": sid},
-                    headers={"Authorization": f"Bearer {b['access_token']}"})
-    assert r.status_code == 403
-    assert r.json()["error"]["category"] == "AUTHORIZATION_ERROR"
+    token_a = _principal_token("user-a")
+    token_b = _principal_token("user-b")
+    session_id = _new_session(client, token_a)
+
+    response = client.post(
+        "/api/chat",
+        json={"message": "hi", "session_id": session_id},
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["category"] == "AUTHORIZATION_ERROR"
 
 
 def test_cross_user_history_is_denied(client):
-    a = _register(client, "a@example.com", "a")
-    b = _register(client, "b@example.com", "b")
-    sid = _new_session(client, a["access_token"])
-    r = client.get(f"/api/chat/history/{sid}",
-                   headers={"Authorization": f"Bearer {b['access_token']}"})
-    assert r.status_code == 403
-    assert r.json()["error"]["category"] == "AUTHORIZATION_ERROR"
+    token_a = _principal_token("user-a")
+    token_b = _principal_token("user-b")
+    session_id = _new_session(client, token_a)
+
+    response = client.get(
+        f"/api/chat/history/{session_id}",
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["category"] == "AUTHORIZATION_ERROR"
 
 
 def test_cross_user_delete_is_denied(client):
-    a = _register(client, "a@example.com", "a")
-    b = _register(client, "b@example.com", "b")
-    sid = _new_session(client, a["access_token"])
-    r = client.delete(f"/api/chat/history/{sid}",
-                      headers={"Authorization": f"Bearer {b['access_token']}"})
-    assert r.status_code == 403
-    assert r.json()["error"]["category"] == "AUTHORIZATION_ERROR"
+    token_a = _principal_token("user-a")
+    token_b = _principal_token("user-b")
+    session_id = _new_session(client, token_a)
+
+    response = client.delete(
+        f"/api/chat/history/{session_id}",
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["category"] == "AUTHORIZATION_ERROR"
 
 
 def test_unknown_session_returns_404_not_403(client, auth_headers):
-    """Genuine not-found is INVALID_REQUEST/404 (no existence leak)."""
-    r = client.get("/api/chat/history/does-not-exist", headers=auth_headers)
-    assert r.status_code == 404
-    assert r.json()["error"]["category"] == "INVALID_REQUEST"
+    """A missing session has a not-found response without leaking ownership."""
+    response = client.get(
+        "/api/chat/history/does-not-exist",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 404
+    assert response.json()["error"]["category"] == "INVALID_REQUEST"
 
 
 def test_users_only_see_own_sessions(client):
-    a = _register(client, "a@example.com", "a")
-    b = _register(client, "b@example.com", "b")
-    _new_session(client, a["access_token"])
-    sa = client.get("/api/chat/sessions",
-                    headers={"Authorization": f"Bearer {a['access_token']}"}).json()
-    sb = client.get("/api/chat/sessions",
-                    headers={"Authorization": f"Bearer {b['access_token']}"}).json()
-    assert len(sa["sessions"]) == 1
-    assert len(sb["sessions"]) == 0
+    token_a = _principal_token("user-a")
+    token_b = _principal_token("user-b")
+    _new_session(client, token_a)
+
+    sessions_a = client.get(
+        "/api/chat/sessions",
+        headers={"Authorization": f"Bearer {token_a}"},
+    ).json()
+    sessions_b = client.get(
+        "/api/chat/sessions",
+        headers={"Authorization": f"Bearer {token_b}"},
+    ).json()
+
+    assert len(sessions_a["sessions"]) == 1
+    assert len(sessions_b["sessions"]) == 0
 
 
 def test_client_supplied_user_id_is_not_honored(client, auth_headers):
-    """ChatIn has no user_id field; an injected user_id must not impersonate."""
-    r = client.post("/api/chat", json={"message": "hi", "user_id": "victim-id"},
-                    headers=auth_headers)
-    assert r.status_code == 200
-    data = r.json()
+    response = client.post(
+        "/api/chat",
+        json={"message": "hi", "user_id": "victim-id"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
     from jarvis_backend.chat_service import chat_service
 
-    session = chat_service.get_session("testuser", data["session_id"])
+    session = chat_service.get_session("testuser", response.json()["session_id"])
     assert session["user_id"] == "testuser"
     assert "victim-id" not in session.values()

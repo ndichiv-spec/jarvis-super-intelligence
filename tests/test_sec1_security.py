@@ -184,6 +184,24 @@ class TestFileBoundary:
 # P6/P7: provider settings — scrubbed read, secret-shape rejection, migration
 # --------------------------------------------------------------------------- #
 class TestProviderSettingsBoundary:
+    def test_put_saves_non_secret_provider_preferences(self, client, admin_headers):
+        response = client.put(
+            "/api/v1/system/provider-settings",
+            json={
+                "ollama_base_url": "http://localhost:11434",
+                "ollama_model": "mistral",
+                "aws_region": "eu-west-1",
+            },
+            headers=admin_headers,
+        )
+
+        assert response.status_code == 200
+        settings = get_store("misc").load()["provider_settings"]
+        assert settings["ollama_model"] == "mistral"
+        assert settings["aws_region"] == "eu-west-1"
+        assert response.json()["settings"]["ollama_model"] == "mistral"
+        assert response.json()["settings"]["openai_api_key"] is None
+
     def test_put_rejects_secret_shaped_fields(self, client, admin_headers):
         for field in ("openai_api_key", "google_gemini_api_key", "aws_secret_token",
                       "anthropic_api_key"):

@@ -19,8 +19,14 @@ export const systemApi = {
     return apiClient.get<ProviderSettingsResponse>(API_ENDPOINTS.system.providerSettings);
   },
 
-  updateProviderSettings(data: Record<string, string>): Promise<ProviderSettingsResponse> {
-    return apiClient.put<ProviderSettingsResponse>(API_ENDPOINTS.system.providerSettings, data);
+  updateProviderSettings(
+    data: Partial<Pick<ProviderSettingsResponse['settings'], 'ollama_base_url' | 'ollama_model' | 'aws_region'>>,
+  ): Promise<ProviderSettingsResponse> {
+    return apiClient.put<ProviderSettingsResponse>(API_ENDPOINTS.system.providerSettings, {
+      ollama_base_url: data.ollama_base_url,
+      ollama_model: data.ollama_model,
+      aws_region: data.aws_region,
+    });
   },
 
   listFiles(path: string = '.'): Promise<{ files: FileInfo[] }> {

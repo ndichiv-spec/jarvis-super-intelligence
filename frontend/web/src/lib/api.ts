@@ -771,7 +771,11 @@ class JarvisAPI {
   async updateProviderSettings(data: Partial<ProviderSettings>): Promise<ProviderSettingsResponse> {
     return this.request('/api/v1/system/provider-settings', {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body: JSON.stringify({
+        ollama_base_url: data.ollama_base_url,
+        ollama_model: data.ollama_model,
+        aws_region: data.aws_region,
+      }),
     });
   }
 

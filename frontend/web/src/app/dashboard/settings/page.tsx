@@ -58,6 +58,21 @@ const DEFAULT_PROVIDER_SETTINGS: ProviderSettings = {
   openweathermap_api_key: '',
 };
 
+function editableProviderSettings(raw?: Partial<ProviderSettings>): ProviderSettings {
+  return {
+    ...DEFAULT_PROVIDER_SETTINGS,
+    ollama_base_url: typeof raw?.ollama_base_url === 'string'
+      ? raw.ollama_base_url
+      : DEFAULT_PROVIDER_SETTINGS.ollama_base_url,
+    ollama_model: typeof raw?.ollama_model === 'string'
+      ? raw.ollama_model
+      : DEFAULT_PROVIDER_SETTINGS.ollama_model,
+    aws_region: typeof raw?.aws_region === 'string'
+      ? raw.aws_region
+      : DEFAULT_PROVIDER_SETTINGS.aws_region,
+  };
+}
+
 type LocalSettings = {
   watchdogInterval: number;
   autoRecovery: boolean;
@@ -151,7 +166,7 @@ export default function SettingsPage() {
     try {
       const response = await jarvisAPI.getProviderSettings();
       const rawSettings = (response && response.settings) || response || DEFAULT_PROVIDER_SETTINGS;
-      setProviderSettings({ ...DEFAULT_PROVIDER_SETTINGS, ...rawSettings });
+      setProviderSettings(editableProviderSettings(rawSettings));
       setProviderStatus((response && response.providers) || {});
       setEnvPath((response && response.env_path) || '');
     } catch (error: any) {
@@ -184,9 +199,13 @@ export default function SettingsPage() {
       };
       localStorage.setItem('jarvis-settings', JSON.stringify(localSettings));
 
-      const response = await jarvisAPI.updateProviderSettings(providerSettings);
+      const response = await jarvisAPI.updateProviderSettings({
+        ollama_base_url: providerSettings.ollama_base_url,
+        ollama_model: providerSettings.ollama_model,
+        aws_region: providerSettings.aws_region,
+      });
       const rawSettings = (response && response.settings) || response || DEFAULT_PROVIDER_SETTINGS;
-      setProviderSettings({ ...DEFAULT_PROVIDER_SETTINGS, ...rawSettings });
+      setProviderSettings(editableProviderSettings(rawSettings));
       setProviderStatus((response && response.providers) || {});
       setEnvPath((response && response.env_path) || '');
       toast.success('Settings saved successfully');
@@ -435,7 +454,7 @@ export default function SettingsPage() {
         <CardHeader>
           <CardTitle>Provider Features</CardTitle>
           <CardDescription>
-            These values are written to the backend `.env` file and applied to new provider clients immediately.
+            Provider status reflects backend-side configuration. Credentials remain server-side and are not editable in the browser.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-8">
@@ -477,82 +496,14 @@ export default function SettingsPage() {
                       placeholder="llama3"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label>OpenAI API Key</Label>
-                    <Input
-                      type="password"
-                      value={providerSettings.openai_api_key}
-                      onChange={(e) => updateProviderField('openai_api_key', e.target.value)}
-                      placeholder="sk-..."
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Google Gemini API Key</Label>
-                    <Input
-                      type="password"
-                      value={providerSettings.google_gemini_api_key}
-                      onChange={(e) => updateProviderField('google_gemini_api_key', e.target.value)}
-                      placeholder="AIza..."
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Anthropic API Key</Label>
-                    <Input
-                      type="password"
-                      value={providerSettings.anthropic_api_key}
-                      onChange={(e) => updateProviderField('anthropic_api_key', e.target.value)}
-                      placeholder="sk-ant-..."
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Hugging Face Token</Label>
-                    <Input
-                      type="password"
-                      value={providerSettings.huggingface_api_key}
-                      onChange={(e) => updateProviderField('huggingface_api_key', e.target.value)}
-                      placeholder="hf_..."
-                    />
-                  </div>
+                  <p className="text-sm text-muted-foreground md:col-span-2 xl:col-span-3">
+                    OpenAI, Google, Anthropic, and Hugging Face credentials are configured by the server operator. Their availability is shown above.
+                  </p>
                 </div>
               )}
 
               {group.title === 'Image & Vision Providers' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label>Stability AI Key</Label>
-                    <Input
-                      type="password"
-                      value={providerSettings.stability_api_key}
-                      onChange={(e) => updateProviderField('stability_api_key', e.target.value)}
-                      placeholder="sk-..."
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Replicate API Token</Label>
-                    <Input
-                      type="password"
-                      value={providerSettings.replicate_api_key}
-                      onChange={(e) => updateProviderField('replicate_api_key', e.target.value)}
-                      placeholder="r8_..."
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>AWS Access Key ID</Label>
-                    <Input
-                      value={providerSettings.aws_access_key_id}
-                      onChange={(e) => updateProviderField('aws_access_key_id', e.target.value)}
-                      placeholder="AKIA..."
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>AWS Secret Access Key</Label>
-                    <Input
-                      type="password"
-                      value={providerSettings.aws_secret_access_key}
-                      onChange={(e) => updateProviderField('aws_secret_access_key', e.target.value)}
-                      placeholder="Secret key"
-                    />
-                  </div>
                   <div className="space-y-2">
                     <Label>AWS Region</Label>
                     <Input
@@ -561,48 +512,16 @@ export default function SettingsPage() {
                       placeholder="us-east-1"
                     />
                   </div>
+                  <p className="text-sm text-muted-foreground md:col-span-2">
+                    Image-provider credentials are configured by the server operator. Provider availability is shown above.
+                  </p>
                 </div>
               )}
 
               {group.title === 'Search & Intelligence Providers' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label>Tavily API Key</Label>
-                    <Input
-                      type="password"
-                      value={providerSettings.tavily_api_key}
-                      onChange={(e) => updateProviderField('tavily_api_key', e.target.value)}
-                      placeholder="tvly_..."
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Serper API Key</Label>
-                    <Input
-                      type="password"
-                      value={providerSettings.serper_api_key}
-                      onChange={(e) => updateProviderField('serper_api_key', e.target.value)}
-                      placeholder="serper_..."
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>News API Key</Label>
-                    <Input
-                      type="password"
-                      value={providerSettings.news_api_key}
-                      onChange={(e) => updateProviderField('news_api_key', e.target.value)}
-                      placeholder="newsapi_..."
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>OpenWeatherMap API Key</Label>
-                    <Input
-                      type="password"
-                      value={providerSettings.openweathermap_api_key}
-                      onChange={(e) => updateProviderField('openweathermap_api_key', e.target.value)}
-                      placeholder="OWM key"
-                    />
-                  </div>
-                </div>
+                <p className="text-sm text-muted-foreground">
+                  Search and intelligence credentials are configured by the server operator. Provider availability is shown above.
+                </p>
               )}
             </div>
           ))}

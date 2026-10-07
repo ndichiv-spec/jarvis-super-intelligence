@@ -186,9 +186,17 @@ async def get_connector(kind: str, user: Dict[str, Any] = Depends(get_current_us
         "kind": kind,
         "label": cls.label,
         "possible_capabilities": cls.possible_capabilities,
-        "actions": [a.__dict__ for a in cls.actions],
+        "actions": (
+            [a.__dict__ for a in cls.actions]
+            if getattr(cls, "implemented", True) else []
+        ),
+        "available": bool(getattr(cls, "implemented", True)),
         "config": registry.public_config(raw),
-        "connection_status": _oauth_status(kind, raw),
+        "connection_status": (
+            _oauth_status(kind, raw)
+            if getattr(cls, "implemented", True)
+            else "Unavailable"
+        ),
     }
 
 

@@ -448,7 +448,10 @@ def get_current_user(
 ) -> Dict[str, Any]:
     cookie_token = request.cookies.get("jarvis_access_token") if request else None
     if not authorization and cookie_token:
-        validate_cookie_origin(request, unsafe=True)
+        unsafe_method = bool(
+            request and request.method.upper() not in {"GET", "HEAD", "OPTIONS"}
+        )
+        validate_cookie_origin(request, unsafe=unsafe_method)
         authorization = f"Bearer {cookie_token}"
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Not authenticated")

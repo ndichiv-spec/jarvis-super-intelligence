@@ -93,6 +93,12 @@ def test_registration_requires_email_verification_before_login(
 
     token = account_email_outbox[-1][2]
     assert client.post("/api/v1/auth/verify-email", json={"token": token}).status_code == 200
+    from jarvis_backend.core import get_store
+
+    users = get_store("users").load()
+    user = next(u for u in users.values() if u.get("email") == "a@example.test")
+    user["status"] = "active"
+    get_store("users").save()
     login = client.post(
         "/api/v1/auth/login",
         json={"identifier": "a@example.test", "password": "S3cret!pass"},
@@ -101,7 +107,7 @@ def test_registration_requires_email_verification_before_login(
     assert login.json()["expires_in"] == 3600
     me = client.get(
         "/api/v1/auth/me",
-        headers={"Authorization": f"Bearer {login.json()['access_token']}"},
+        cookies={"jarvis_access_token": login.cookies["jarvis_access_token"]},
     )
     assert me.status_code == 200
     assert me.json()["email"] == "a@example.test"

@@ -22,16 +22,9 @@ import { toast } from "sonner";
 import { apiClient } from "@/lib/api-client";
 
 interface ProviderSettings {
-  openai_api_key: string;
-  google_gemini_api_key: string;
-  anthropic_api_key: string;
-  huggingface_api_key: string;
   ollama_base_url: string;
   ollama_model: string;
-  aws_access_key_id: string;
-  aws_secret_access_key: string;
   aws_region: string;
-  [key: string]: unknown;
 }
 
 interface LocalSettings {
@@ -59,12 +52,6 @@ const DEFAULT_LOCAL_SETTINGS: LocalSettings = {
 const DEFAULT_PROVIDER_SETTINGS: ProviderSettings = {
   ollama_base_url: "http://localhost:11434",
   ollama_model: "llama3",
-  openai_api_key: "",
-  google_gemini_api_key: "",
-  anthropic_api_key: "",
-  huggingface_api_key: "",
-  aws_access_key_id: "",
-  aws_secret_access_key: "",
   aws_region: "us-east-1",
 };
 
@@ -72,6 +59,7 @@ export function DeveloperTab() {
   const [settings, setSettings] = useState<ProviderSettings>(DEFAULT_PROVIDER_SETTINGS);
   const [localSettings, setLocalSettings] = useState<LocalSettings>(DEFAULT_LOCAL_SETTINGS);
   const [envPath, setEnvPath] = useState("");
+  const [configuredCount, setConfiguredCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,11 +76,28 @@ export function DeveloperTab() {
       }
 
       // Load backend provider settings
-      const response = await apiClient.get<{ settings?: ProviderSettings; env_path?: string }>(
+      const response = await apiClient.get<{
+        settings?: Partial<ProviderSettings>;
+        env_path?: string;
+        providers?: Record<string, { configured?: boolean }>;
+      }>(
         "/api/v1/system/provider-settings"
       );
-      const raw = (response && response.settings) || response || DEFAULT_PROVIDER_SETTINGS;
-      setSettings({ ...DEFAULT_PROVIDER_SETTINGS, ...(raw as ProviderSettings) });
+      const raw = response?.settings ?? {};
+      setSettings({
+        ollama_base_url: typeof raw.ollama_base_url === "string"
+          ? raw.ollama_base_url
+          : DEFAULT_PROVIDER_SETTINGS.ollama_base_url,
+        ollama_model: typeof raw.ollama_model === "string"
+          ? raw.ollama_model
+          : DEFAULT_PROVIDER_SETTINGS.ollama_model,
+        aws_region: typeof raw.aws_region === "string"
+          ? raw.aws_region
+          : DEFAULT_PROVIDER_SETTINGS.aws_region,
+      });
+      setConfiguredCount(
+        Object.values(response?.providers ?? {}).filter((provider) => provider.configured).length
+      );
       setEnvPath((response && response.env_path) || "");
     } catch (err: any) {
       setError(err.message || "Failed to load developer settings");
@@ -108,7 +113,16 @@ export function DeveloperTab() {
       localStorage.setItem("jarvis-settings", JSON.stringify(localSettings));
 
       // Save backend provider settings
-      await apiClient.put("/api/v1/system/provider-settings", settings);
+      const response = await apiClient.put<{
+        providers?: Record<string, { configured?: boolean }>;
+      }>("/api/v1/system/provider-settings", {
+        ollama_base_url: settings.ollama_base_url,
+        ollama_model: settings.ollama_model,
+        aws_region: settings.aws_region,
+      });
+      setConfiguredCount(
+        Object.values(response?.providers ?? {}).filter((provider) => provider.configured).length
+      );
       toast.success("Developer settings saved");
     } catch (err: any) {
       toast.error(`Save failed: ${err.message}`);
@@ -148,10 +162,6 @@ export function DeveloperTab() {
   const updateLocalField = (field: keyof LocalSettings, value: any) => {
     setLocalSettings((current) => ({ ...current, [field]: value }));
   };
-
-  const configuredCount = Object.entries(settings)
-    .filter(([k, v]) => k.endsWith("_api_key") || k.endsWith("_key") || k.includes("secret"))
-    .filter(([_, v]) => v && String(v).length > 0).length;
 
   return (
     <div className="space-y-6">
@@ -277,39 +287,13 @@ export function DeveloperTab() {
               Backend Provider Settings
             </CardTitle>
             <CardDescription>
-              {envPath ? `Env file: ${envPath}` : "Environment-managed configuration"} · {configuredCount} credentials configured
+              {envPath ? `Environment-managed configuration · ${configuredCount} providers configured` : `${configuredCount} providers configured`}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>OpenAI API Key</Label>
-              <Input
-                type="password"
-                placeholder="sk-..."
-                value={settings.openai_api_key || ""}
-                onChange={(e) => updateProviderField("openai_api_key", e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Google Gemini API Key</Label>
-              <Input
-                type="password"
-                placeholder="AIza..."
-                value={settings.google_gemini_api_key || ""}
-                onChange={(e) => updateProviderField("google_gemini_api_key", e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Anthropic API Key</Label>
-              <Input
-                type="password"
-                placeholder="sk-ant-..."
-                value={settings.anthropic_api_key || ""}
-                onChange={(e) => updateProviderField("anthropic_api_key", e.target.value)}
-              />
-            </div>
+            <p className="text-sm text-muted-foreground">
+              Provider credentials are configured by the server operator and are never returned to or editable in this browser.
+            </p>
 
             <Separator />
 
@@ -332,23 +316,6 @@ export function DeveloperTab() {
             <Separator />
 
             <div className="space-y-2">
-              <Label>AWS Access Key ID</Label>
-              <Input
-                value={settings.aws_access_key_id || ""}
-                onChange={(e) => updateProviderField("aws_access_key_id", e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>AWS Secret Access Key</Label>
-              <Input
-                type="password"
-                value={settings.aws_secret_access_key || ""}
-                onChange={(e) => updateProviderField("aws_secret_access_key", e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
               <Label>AWS Region</Label>
               <Input
                 value={settings.aws_region || ""}
@@ -356,15 +323,6 @@ export function DeveloperTab() {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label>Hugging Face Token</Label>
-              <Input
-                type="password"
-                placeholder="hf_..."
-                value={settings.huggingface_api_key || ""}
-                onChange={(e) => updateProviderField("huggingface_api_key", e.target.value)}
-              />
-            </div>
           </CardContent>
         </Card>
       </motion.div>

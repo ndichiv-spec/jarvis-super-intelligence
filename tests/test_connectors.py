@@ -350,6 +350,6 @@ def test_agent_act_email_refuses_when_unconfigured(client, iso_dirs, auth_header
     assert "not configured" in body["result"]["error"].lower()
 
 
-def test_coder_agent_has_email_capability(client):
-    agent = client.get("/api/v1/agents/coder").json()
+def test_coder_agent_has_email_capability(client, auth_headers):
+    agent = client.get("/api/v1/agents/coder", headers=auth_headers).json()
     assert "email" in agent.get("capabilities", [])

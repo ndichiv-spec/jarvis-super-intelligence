@@ -26,6 +26,7 @@ from ..core import now_iso
 class CalendarConnector(Connector):
     kind = "calendar"
     label = "Calendar"
+    implemented = False
     possible_capabilities = ["read", "write", "delete"]
     actions = [
         ActionSpec("calendar.list", "read", "List calendar events", {}),
@@ -34,15 +35,16 @@ class CalendarConnector(Connector):
     ]
 
     def test(self) -> Dict[str, Any]:
-        return {"ok": True, "message": "Calendar connector ready"}
+        return {"ok": False, "message": "Calendar actions are not implemented."}
 
     async def run_action(self, name: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        return {"result": f"Calendar action {name} executed", "params": params}
+        raise ConnectorError("Calendar actions are not implemented.")
 
 
 class FilesConnector(Connector):
     kind = "files"
     label = "Files"
+    implemented = False
     possible_capabilities = ["read", "write", "delete"]
     actions = [
         ActionSpec("files.list", "read", "List files", {"path": []}),
@@ -51,10 +53,10 @@ class FilesConnector(Connector):
     ]
 
     def test(self) -> Dict[str, Any]:
-        return {"ok": True, "message": "Files connector ready"}
+        return {"ok": False, "message": "File actions are not implemented."}
 
     async def run_action(self, name: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        return {"result": f"Files action {name} executed", "params": params}
+        raise ConnectorError("File actions are not implemented.")
 
 
 _CONNECTORS: Dict[str, type] = {
@@ -83,17 +85,23 @@ def list_connectors() -> list:
             bool(raw.get("password")) or bool(raw.get("api_key")) or bool(oauth_user_id)
         )
         status: Dict[str, Any] = {}
+        implemented = bool(getattr(cls, "implemented", True))
         if is_oauth and oauth_user_id:
             status = oauth_store.connection_metadata(kind, oauth_user_id)
         out.append({
             "kind": kind,
             "label": cls.label if cls else kind,
             "possible_capabilities": cls.possible_capabilities if cls else [],
-            "actions": [a.__dict__ for a in cls.actions] if cls else [],
+            "actions": (
+                [a.__dict__ for a in cls.actions]
+                if cls and implemented else []
+            ),
             "config": reg.public_config(raw),
             "configured": configured,
+            "available": implemented,
             "connection_status": status.get("status") or (
-                "Connected" if status.get("connected") else None),
+                "Connected" if status.get("connected") else
+                "Unavailable" if not implemented else None),
             "token_expires_at": status.get("token_expires_at"),
             "account": status.get("account"),
             "enabled": bool((raw or {}).get("enabled")) if raw else False,
@@ -135,6 +143,13 @@ async def execute_connector_action(
                 "error": f"{cls.label} is disabled (kill switch off in Connections)."}
 
     instance = cls(config)
+    if not getattr(instance, "implemented", True):
+        return {
+            "ok": False,
+            "connector": kind,
+            "action": action,
+            "error": f"{cls.label} actions are not implemented.",
+        }
     spec = instance.action_spec(action)
     if spec is None:
         return {"ok": False, "connector": kind, "error": f"unknown action '{action}' for {kind}."}
