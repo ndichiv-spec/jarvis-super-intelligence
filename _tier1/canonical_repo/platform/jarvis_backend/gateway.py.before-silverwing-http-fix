@@ -1,0 +1,791 @@
+"""Application/service boundary to the Silverwing model gateway.
+
+``ChatService`` delegates every real provider call to :class:`ProviderGateway`
+so the chat layer never talks to provider SDKs directly and never fabricates a
+reply.
+
+Two routing paths exist (both reuse the existing platform infrastructure):
+
+* **Silverwing runtime** (``SILVERWING_ENDPOINT`` set) — delegates to the
+  platform :class:`~backend.model_gateway.routing.ModelGateway`, which calls the
+  Silverwing runtime over HTTP at ``/v1/chat/completions``.  This is the
+  preferred path: the runtime serves the real 120 M parameter TorchBackend
+  weights (rev ``r1``, device ``cpu``, backend ``torch``).
+* **Cloud / local-rule fallback** (``SILVERWING_ENDPOINT`` unset) — falls back
+  to the existing Silverwing ``ModelRouter.route_and_chat`` entry point in
+  ``silverwing-backend/model_provider.py``.  An honesty guard requires at least
+  one cloud provider API key; if none is configured the gateway raises
+  ``PROVIDER_UNAVAILABLE`` rather than returning a deterministic echo.
+* **JARVIS Brain remote** (``JARVIS_BRAIN_ENDPOINT`` set) — the preferred
+  general-purpose path when a remote OpenAI-compatible endpoint (the Kaggle GPU
+  host serving Qwen3-4B / SFT adapter) is configured.  Calls ``/v1/chat/completions``
+  over HTTP; no weights live on the JARVIS PC.  If the Brain is confirmed
+  unreachable, the gateway falls back to the offline Silverwing runtime and
+  records ``fallback`` in the reply so provenance is never misrepresented.
+
+Honesty contract
+----------------
+* If no real provider is configured AND the Silverwing runtime endpoint is not
+  set, the gateway raises :class:`~jarvis_backend.errors.ChatError`
+  (PROVIDER_UNAVAILABLE).  It NEVER returns Silverwing's ``local-rule``
+  deterministic echo as a "real" answer.
+* If Silverwing itself falls back to ``local`` (e.g. a requested provider lacks
+  credentials), that response is rejected the same way.
+* Timeouts and transport errors are mapped to TIMEOUT / NETWORK_ERROR so the
+  chat service can retry them with bounded backoff.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import os
+import sys
+import time
+from pathlib import Path
+from typing import Any, Optional
+
+from .errors import ChatError, ErrorCategory, from_provider_exception
+from infrastructure.vault.manager import get_secrets_manager
+
+_HERE = Path(__file__).resolve().parent
+_SILVERWING_BACKEND = _HERE.parent / "silverwing-backend"
+
+_sw_module: Any | None = None
+
+
+def _load_silverwing() -> Any:
+    """Lazily import Silverwing's ``model_provider`` module (idempotent)."""
+    global _sw_module
+    if _sw_module is None:
+        sb = str(_SILVERWING_BACKEND)
+        if sb not in sys.path:
+            sys.path.insert(0, sb)
+        try:
+            import model_provider as sw  # type: ignore[import-not-found]
+        except Exception as exc:
+            raise ChatError(
+                ErrorCategory.PROVIDER_UNAVAILABLE,
+                "The model gateway is not available.",
+                detail=f"silverwing import failed: {type(exc).__name__}",
+                retryable=False,
+            )
+        _sw_module = sw
+    return _sw_module
+
+
+def _has_cloud_key(sw: Any) -> bool:
+    try:
+        return bool(sw.ModelConfig().any_cloud_key())
+    except Exception:
+        return False
+
+
+def _default_model() -> str:
+    return os.environ.get("JARVIS_MODEL") or "local-rule"
+
+
+def _resolve_router(sw: Any) -> Any:
+    """Get or build a Silverwing ModelRouter, tolerating constructor variance."""
+    for attr in ("model_router", "router", "MODEL_ROUTER", "_router"):
+        r = getattr(sw, attr, None)
+        if r is not None and hasattr(r, "route_and_chat"):
+            return r
+    ctor = getattr(sw, "ModelRouter", None)
+    if ctor is None:
+        raise ChatError(
+            ErrorCategory.PROVIDER_UNAVAILABLE,
+            "The model gateway does not expose a router.",
+            retryable=False,
+        )
+    # Try the simplest constructor first, then with a registry if required.
+    registry = getattr(sw, "ModelRegistry", None)
+    manager = getattr(sw, "ModelManager", None)
+    for kwargs in ({}, {"registry": registry}, {"registry": registry, "manager": manager}):
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        try:
+            return ctor(**kwargs)
+        except TypeError:
+            continue
+    raise ChatError(
+        ErrorCategory.PROVIDER_UNAVAILABLE,
+        "The model gateway router could not be initialised.",
+        retryable=False,
+    )
+
+
+def _silverwing_endpoint() -> str:
+    """Return the configured Silverwing runtime endpoint (empty if unset)."""
+    return os.environ.get("SILVERWING_ENDPOINT", "").strip()
+
+
+def _jarvis_brain_endpoint() -> str:
+    """Return the configured remote JARVIS Brain endpoint (empty if unset).
+
+    This is an OpenAI-compatible endpoint served by the Kaggle GPU host.
+    ``JARVIS_BRAIN_ENDPOINT`` may be ``https://host/v1`` or a bare host URL;
+    we normalise it to accept either form without double-slashing.
+    """
+    return os.environ.get("JARVIS_BRAIN_ENDPOINT", "").strip()
+
+
+def _jarvis_brain_api_key() -> str:
+    """JARVIS Brain API key loaded through the project secret vault.
+
+    Resolved via ``SecretsManager`` (env variables / ``.env`` / an encrypted
+    vault file in production) -- never read as a raw env var and never
+    persisted to the application KV store. Never logged.
+    """
+    try:
+        return (get_secrets_manager().get_or_none("brain_api_key") or "").strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _jarvis_brain_api_key_configured() -> bool:
+    """True iff a JARVIS Brain API key is present (safe to expose as a boolean)."""
+    return bool(_jarvis_brain_api_key())
+
+
+# --------------------------------------------------------------------------- #
+# Remote JARVIS Brain backend selection (spec sections 1 / 7 / 33).
+#
+# The remote Brain boundary is an OpenAI-compatible /v1/chat/completions
+# endpoint. Two credentials are NEVER merged (spec section 33):
+#   * JARVIS_BRAIN_API_KEY / vault 'brain_api_key'  -> authenticates the
+#     local JARVIS API -> Brain boundary (a local :8011-style gate).
+#   * NVIDIA_API_KEY / vault 'nvidia_api_key'       -> Brain -> NVIDIA NIM
+#     upstream. Selected automatically when JARVIS_BRAIN_ENDPOINT points at
+#     integrate.api.nvidia.com; otherwise the legacy brain key is used
+#     upstream (e.g. a Kaggle-hosted Qwen Brain).
+# --------------------------------------------------------------------------- #
+_NVIDIA_NIM_HOSTS = ("integrate.api.nvidia.com", "nvcf.nvidia.com", "nim.nvidia.com")
+
+
+def _brain_provider(endpoint: str) -> str:
+    """Provider name for the remote Brain backend, derived from the endpoint."""
+    ep = (endpoint or "").lower()
+    for host in _NVIDIA_NIM_HOSTS:
+        if host in ep:
+            return "nvidia"
+    return "jarvis-brain"
+
+
+def _brain_upstream_key(endpoint: str) -> str:
+    """Credential for Brain -> upstream (spec section 33).
+
+    NVIDIA NIM uses NVIDIA_API_KEY (vault 'nvidia_api_key' aliases
+    JARVIS_NVIDIA_API_KEY, else the raw NVIDIA_API_KEY env var). Non-NVIDIA
+    Brains use the local boundary key from the vault. The two are never merged.
+    Never logged.
+    """
+    if _brain_provider(endpoint) == "nvidia":
+        try:
+            val = get_secrets_manager().get_or_none("nvidia_api_key")
+        except Exception:  # noqa: BLE001 -- vault always best-effort
+            val = None
+        return (val or os.environ.get("NVIDIA_API_KEY") or "").strip()
+    return _jarvis_brain_api_key()
+
+
+def _brain_model() -> str:
+    """Remote Brain model (JARVIS_BRAIN_MODEL / JARVIS_NVIDIA_MODEL, then a
+    documented NVIDIA default). Honest: the live probe/validator confirms it."""
+    return (
+        os.environ.get("JARVIS_BRAIN_MODEL")
+        or os.environ.get("JARVIS_NVIDIA_MODEL")
+        or "nvidia/nemotron-3-ultra-550b-a55b"
+    )
+
+
+def _brain_backend() -> str:
+    """'remote' when a remote Brain endpoint is configured, else 'local'."""
+    return "remote" if _jarvis_brain_endpoint() else "local"
+
+
+def _endpoint(url: str, path: str = "/chat/completions") -> str:
+    """Join a base URL and a path without duplicating slashes."""
+    return url.rstrip("/") + "/" + path.lstrip("/")
+
+
+class ProviderGateway:
+    """The application boundary to the existing Silverwing model gateway.
+
+    ChatService owns one instance; tests may inject a fake gateway (or a fake
+    ``router``) to drive the chat/service-layer logic without a real provider.
+    """
+
+    def __init__(self, router: Any | None = None, *, max_retries: int = 0,
+                 timeout: float | None = None,
+                 brain_client: Any | None = None) -> None:
+        self._router = router  # injected test double (must have route_and_chat)
+        self._brain_client = brain_client  # injected BrainClient (or built lazily)
+        self.max_retries = max(0, int(max_retries))
+        # When the Silverwing runtime is configured, honour SILVERWING_TIMEOUT
+        # (CPU inference can take 5-15 s per request).  Override with the
+        # explicit ``timeout`` argument or JARVIS_GATEWAY_TIMEOUT for cloud
+        # providers.
+        if timeout is not None:
+            self.timeout = float(timeout)
+        else:
+            env_timeout = os.environ.get("JARVIS_GATEWAY_TIMEOUT")
+            if env_timeout:
+                self.timeout = float(env_timeout)
+            elif os.environ.get("SILVERWING_ENDPOINT"):
+                self.timeout = float(os.environ.get("SILVERWING_TIMEOUT", "300"))
+            else:
+                self.timeout = 30.0
+
+    def _get_router(self) -> Any:
+        if self._router is not None:
+            return self._router
+        sw = _load_silverwing()
+        if self._router is None:
+            self._router = _resolve_router(sw)
+        return self._router
+
+    async def chat(self, messages: list[dict[str, Any]], model: str | None = None,
+                   system: str | None = None,
+                   timeout: float | None = None,
+                   *, _bypass_gateway: bool = False) -> dict[str, Any]:
+        """Call the gateway once and return a normalized result dict.
+
+        Returns ``{"content", "model", "provider", "revision", "backend",
+        "device", "latency_ms", "usage"}``.
+        Never returns a local-rule/fallback answer; raises ChatError instead.
+        """
+        deadline = float(timeout if timeout is not None else self.timeout)
+
+        # ---- JARVIS Brain remote path (primary, when configured) ------------
+        # JARVIS BRAIN (Qwen3-4B) is the preferred general-purpose model when a
+        # remote OpenAI-compatible endpoint (Kaggle GPU host) is configured.
+        # Health is checked by an actual successful inference, never assumed.
+        brain_ep = _jarvis_brain_endpoint() if not _bypass_gateway else ""
+        if brain_ep:
+            try:
+                result = await self._chat_via_remote_brain(
+                    brain_ep, messages, model, system, deadline,
+                )
+                # Honesty gate: an empty brain reply is never a real answer.
+                if not (result.get("content") or "").strip():
+                    raise ChatError(
+                        ErrorCategory.PROVIDER_UNAVAILABLE,
+                        "The JARVIS Brain returned an empty reply.",
+                        detail=f"provider={result.get('provider')}",
+                        retryable=False,
+                    )
+                return result
+            except ChatError as exc:
+                # Honest fallback: only confirmed-unreachable is bridgeable to
+                # the offline Silverwing runtime; timeout is retryable.
+                if exc.category != ErrorCategory.PROVIDER_UNAVAILABLE:
+                    raise
+                # Record the fallback honestly in the returned reply.
+                try:
+                    fallback_ep = _silverwing_endpoint()
+                    if not fallback_ep:
+                        raise ChatError(
+                            ErrorCategory.PROVIDER_UNAVAILABLE,
+                            "JARVIS Brain unreachable and no offline Silverwing "
+                            "fallback is configured.",
+                            retryable=False,
+                        )
+                    result = await self._chat_via_model_gateway(
+                        messages, model, system, deadline,
+                    )
+                    result["fallback"] = {
+                        "from": os.environ.get("JARVIS_BRAIN_MODEL", "jarvis-brain-qwen3-4b-v1"),
+                        "to": result.get("model", ""),
+                        "reason": str(exc),
+                    }
+                    return result
+                except ChatError:
+                    raise
+
+
+        # ---- Silverwing runtime path (fallback) -----------------------------
+        # When the JARVIS Brain is not configured (or was confirmed down), the
+        # local Silverwing runtime is the offline path.  When SILVERWING_ENDPOINT
+        # is set, delegate to the platform ModelGateway which calls the real
+        # TorchBackend over HTTP.  This bypasses the cloud-key honesty guard
+        # because Silverwing is the platform's own model.
+        endpoint = _silverwing_endpoint() if not _bypass_gateway else ""
+        if endpoint:
+            try:
+                return await self._chat_via_model_gateway(
+                    messages, model, system, deadline,
+                )
+            except ChatError as exc:
+                # Only bridge a confirmed-unreachable runtime; timeouts/
+                # transient errors are retried by the chat service, and a
+                # local-rule / echo response from a live runtime must NOT be
+                # silently replaced by a cloud call.
+                if exc.category != ErrorCategory.PROVIDER_UNAVAILABLE:
+                    raise
+                # Self-resilient bridge: the local Silverwing runtime is
+                # unreachable, but a real cloud provider key is configured
+                # -- i.e. an extension (OpenAI, Claude, Gemini, ...) has been
+                # *connected* to the platform. Serve from that provider so
+                # /api/chat keeps returning real replies when :8010 is down
+                # ("Jarvis connected as an AI platform"). With no cloud key
+                # configured we re-raise so the honesty guard fires.
+                try:
+                    _sw = _load_silverwing()
+                except ChatError:
+                    _sw = None
+                if _sw is not None and _has_cloud_key(_sw):
+                    pass  # fall through to the cloud / local-rule path below
+                else:
+                    raise
+
+
+        # ---- Phase 6 provider fabric (intermediate tier) --------------------
+        # When JARVIS Brain and the Silverwing runtime are not available, route
+        # through the Phase 6 fabric (OpenAI, NVIDIA NIM, Google, AWS, HF).
+        # The fabric is imported lazily so the backend works without the
+        # providers package in minimal/local-only deployments.
+        fabric_result = await self._chat_via_phase6_fabric(
+            messages, model, system, deadline,
+        )
+        if fabric_result is not None:
+            return fabric_result
+        # Fall through to the Silverwing cloud / local-rule path below.
+
+
+        # ---- Cloud / local-rule path (fallback) ----------------------------
+        sw = _load_silverwing()
+
+        # Honesty guard #1: with no real provider configured, refuse rather
+        # than returning Silverwing's deterministic local echo.
+        if not _has_cloud_key(sw):
+            raise ChatError(
+                ErrorCategory.PROVIDER_UNAVAILABLE,
+                "No AI provider is configured (no cloud provider API key is set). "
+                "Responses are never faked; configure a provider key "
+                "(e.g. OPENAI_API_KEY) to receive real responses.",
+                retryable=False,
+            )
+
+        router = self._get_router()
+        request = sw.ModelRequest(
+            messages=list(messages),
+            model=model or _default_model(),
+            system=system,
+        )
+
+        try:
+            resp, _decision = await asyncio.wait_for(
+                router.route_and_chat(request, task="jarvis.chat"), timeout=deadline
+            )
+        except TimeoutError:
+            raise ChatError(
+                ErrorCategory.TIMEOUT,
+                "The AI provider did not respond within the time limit. "
+                "Please try again.",
+                retryable=True,
+            )
+        except ChatError:
+            raise
+        except Exception as exc:
+            raise from_provider_exception(exc)
+
+        # Honesty guard #2: a local-rule / empty response must never be
+        # presented as a real model answer.
+        provider = getattr(resp, "provider", "") or ""
+        if provider in ("local", "local-rule") or not (resp.content or "").strip():
+            raise ChatError(
+                ErrorCategory.PROVIDER_UNAVAILABLE,
+                "The AI provider could not generate a real response. "
+                "Your request was not answered by a model.",
+                retryable=False,
+            )
+
+        latency_ms = getattr(resp, "latency_ms", None)
+        usage = getattr(resp, "usage", {}) or {}
+        return {
+            "content": resp.content or "",
+            "model": f"{resp.provider}:{resp.model}",
+            "provider": resp.provider,
+            "latency_ms": int(latency_ms) if latency_ms is not None else None,
+            "usage": usage,
+        }
+
+    async def _chat_via_phase6_fabric(
+        self,
+        messages: list[dict[str, Any]],
+        model: str | None,
+        system: str | None,
+        deadline: float,
+    ) -> Optional[dict[str, Any]]:
+        """Route ``messages`` through the Phase 6 provider fabric.
+
+        Uses :func:`providers.bootstrap.bootstrap_fabric` to obtain the registry,
+        then :class:`providers.routing.ProviderRouter` to route to a configured +
+        healthy adapter (OpenAI, NVIDIA NIM, Google, AWS, Hugging Face).
+
+        Returns a normalized dict ``{"content", "model", "provider",
+        "latency_ms", "usage"}`` on success, or ``None`` when no Phase 6 provider
+        is configured/healthy (so the caller falls through to the
+        cloud/local-rule path).
+
+        ``model`` may carry a ``provider:model`` prefix (e.g.
+        ``"nvidia:meta/llama-3.3-70b-instruct"``); the prefix selects the
+        adapter and the remainder becomes the requested model.
+        """
+        # Lazily import the fabric so the backend is usable without it.
+        fabric_root = str(_SILVERWING_BACKEND.parent)
+        if fabric_root not in sys.path:
+            sys.path.insert(0, fabric_root)
+
+        try:
+            from providers.bootstrap import bootstrap_fabric  # type: ignore[import-not-found]
+            from providers.errors import ProviderError  # type: ignore[import-not-found]
+            from providers.routing import ProviderRouter  # type: ignore[import-not-found]
+            from providers.base import (  # type: ignore[import-not-found]
+                ProviderRequest,
+                Message,
+            )
+            from providers.routing import TaskClassifier  # type: ignore[import-not-found]
+        except ImportError:
+            return None
+
+        # Parse an optional "provider:model" prefix from the model parameter.
+        forced_provider: Optional[str] = None
+        resolved_model: Optional[str] = model
+        if model and ":" in model:
+            prefix, remainder = model.split(":", 1)
+            if prefix in ("openai", "nvidia", "google", "aws", "hf"):
+                forced_provider = prefix
+                resolved_model = remainder
+
+        registry = bootstrap_fabric()
+        router = ProviderRouter(registry=registry, priority=forced_provider or "")
+
+        # Classify the task and route.
+        task_text = messages[-1].get("content", "") if messages else ""
+        profile = TaskClassifier().classify(task_text or "chat")
+
+        # If a specific provider was requested, find a matching candidate.
+        selected_adapter = None
+        selected_model = resolved_model
+        if forced_provider is not None:
+            adapter = registry.get(forced_provider)
+            if adapter is not None and adapter.configured:
+                # Health-check the adapter (cached). Skip if not healthy.
+                health = adapter.health(force=False)
+                ok_statuses = ("healthy", "degraded")
+                if health.status.value in ok_statuses:
+                    selected_adapter = adapter
+        else:
+            decision = router.route(profile)
+            if decision.selected_provider:
+                selected_adapter = registry.get(decision.selected_provider)
+                selected_model = decision.selected_model or resolved_model
+
+        if selected_adapter is None:
+            return None
+
+        # Build the provider request.
+        msgs: list[Message] = [
+            Message.from_mapping(m) if isinstance(m, dict) else m
+            for m in messages
+        ]
+        if system:
+            msgs.insert(0, Message(role="system", content=system))
+
+        req = ProviderRequest(
+            messages=msgs,
+            model=selected_model,
+            stream=False,
+            timeout=deadline,
+        )
+
+        try:
+            resp = selected_adapter.chat(req)
+        except ProviderError:
+            return None
+        except Exception:  # noqa: BLE001
+            return None
+
+        # Normalize the ProviderResponse to the same dict shape as the other
+        # routing tiers.
+        usage = resp.usage.to_dict() if resp.usage else None
+        return {
+            "content": resp.text or "",
+            "model": resp.model or selected_model or "",
+            "provider": f"{resp.provider}",
+            "latency_ms": int(resp.latency_ms) if resp.latency_ms is not None else None,
+            "usage": usage,
+        }
+
+    async def _chat_via_model_gateway(
+        self,
+        messages: list[dict[str, Any]],
+        model: str | None,
+        system: str | None,
+        deadline: float,
+    ) -> dict[str, Any]:
+        """Delegate to the platform ModelGateway -> SilverwingClient -> runtime."""
+        from backend.model_gateway.models import (
+            GatewayError as PlatformGatewayError,
+        )
+        from backend.model_gateway.routing import ModelGateway, default_gateway
+
+        gw: ModelGateway = default_gateway if default_gateway is not None else ModelGateway()
+
+        try:
+            resp, _decision = await asyncio.wait_for(
+                gw.chat(
+                    messages,
+                    task="chat",
+                    model=model,
+                    system=system,
+                    timeout=deadline,
+                ),
+                timeout=deadline,
+            )
+        except TimeoutError:
+            raise ChatError(
+                ErrorCategory.TIMEOUT,
+                "The AI provider did not respond within the time limit. "
+                "Please try again.",
+                retryable=True,
+            )
+        except PlatformGatewayError as exc:
+            # Transient mid-chat failures are retryable; only a confirmed
+            # offline runtime (or missing fallback) is terminal.
+            if "gw_chat_transient" in str(getattr(exc, "code", "") or ""):
+                raise ChatError(
+                    ErrorCategory.TIMEOUT,
+                    "The model was briefly unreachable. Please retry your message.",
+                    retryable=True,
+                ) from exc
+            raise ChatError(
+                ErrorCategory.PROVIDER_UNAVAILABLE,
+                str(exc),
+                retryable=False,
+            ) from exc
+        except ChatError:
+            raise
+        except Exception as exc:
+            raise from_provider_exception(exc)
+
+        # Honesty guard: a local-rule / echo response must never masquerade.
+        gw_provider = resp.metadata.get("provider", "silverwing")
+        if gw_provider in ("local", "local-rule", "sw-echo", "sw-echo-dev") or not (resp.content or "").strip():
+            raise ChatError(
+                ErrorCategory.PROVIDER_UNAVAILABLE,
+                "The AI provider could not generate a real response. "
+                "Your request was not answered by a model.",
+                retryable=False,
+            )
+
+        return {
+            "content": resp.content or "",
+            "model": resp.model,
+            "provider": gw_provider,
+            "revision": resp.revision or "",
+            "backend": resp.metadata.get("backend", ""),
+            "device": resp.metadata.get("device", ""),
+            "latency_ms": int(resp.latency_ms) if resp.latency_ms else 0,
+            "usage": {
+                "prompt_tokens": resp.usage.prompt_tokens,
+                "completion_tokens": resp.usage.completion_tokens,
+                "total_tokens": resp.usage.total_tokens,
+            },
+        }
+
+    def _brain_client_for(self, endpoint: str) -> Any:
+        """Build/reuse a :class:`BrainClient` for the configured endpoint + key.
+
+        The API key comes from the vault (never a raw env var, never logged).
+        Tests inject a fake client via ``brain_client=``.
+        """
+        from backend.model_gateway.brain_client import BrainClient
+
+        if self._brain_client is not None:
+            return self._brain_client
+        return BrainClient(
+            endpoint=endpoint,
+            api_key=_jarvis_brain_api_key(),
+            model=os.environ.get("JARVIS_BRAIN_MODEL", "jarvis-brain-qwen3-4b-v1"),
+        )
+
+    async def _chat_via_remote_brain(
+        self,
+        endpoint: str,
+        messages: list[dict[str, Any]],
+        model: str | None,
+        system: str | None,
+        deadline: float,
+    ) -> dict[str, Any]:
+        """Call the remote JARVIS Brain via the existing OpenAI-compatible transport.
+
+        Reuses :func:`extensions._openai_compatible_post` -- the same shared
+        transport used by the OpenAI/NVIDIA adapter fabric -- so no second HTTP
+        client is introduced (spec section 6). The upstream credential is chosen
+        per endpoint by :func:`_brain_upstream_key`: ``NVIDIA_API_KEY`` when the
+        endpoint is NVIDIA NIM (spec section 33, distinct from
+        ``JARVIS_BRAIN_API_KEY``), the local Brain boundary key otherwise.
+
+        Health is proven by an actual (tiny) inference in :meth:`probe_brain`;
+        here a stub/unreachable/401 Brain raises PROVIDER_UNAVAILABLE so
+        :meth:`chat` honestly falls back to Silverwing instead of presenting a
+        stub reply as real.
+        """
+        from fastapi import HTTPException
+        from .routers import extensions as _ext
+
+        provider = _brain_provider(endpoint)
+        # Tolerate either "https://host/v1" or a bare host.
+        ep = (endpoint or "").strip()
+        if ep.lower().startswith(("http://", "https://")):
+            base = ep.rstrip("/")
+        else:
+            base = f"https://{ep.rstrip('/')}"
+        if not base.lower().endswith("/v1"):
+            base += "/v1"
+        post_url = f"{base}/chat/completions"
+
+        key = _brain_upstream_key(endpoint)
+        if not key:
+            raise ChatError(
+                ErrorCategory.PROVIDER_UNAVAILABLE,
+                "The JARVIS Brain endpoint is configured but no upstream API key "
+                "is set. Set NVIDIA_API_KEY (for the NVIDIA NIM backend) or "
+                "JARVIS_BRAIN_API_KEY (for a custom Brain endpoint) in the secure "
+                "environment / vault.",
+                detail=f"provider={provider}",
+                retryable=False,
+            )
+
+        resolved_model = model or _brain_model()
+        payload: Dict[str, Any] = {"model": resolved_model,
+                                   "messages": list(messages)}
+        if system:
+            payload["messages"] = [{"role": "system", "content": system}] + payload["messages"]
+        start = time.perf_counter()
+        try:
+            data = await asyncio.to_thread(
+                _ext._openai_compatible_post, post_url, payload, key,
+                provider=provider, timeout=float(deadline),
+            )
+        except HTTPException as e:
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            code = e.status_code
+            if code in (401, 403):
+                raise ChatError(
+                    ErrorCategory.PROVIDER_UNAVAILABLE,
+                    "The JARVIS Brain endpoint rejected the upstream credentials.",
+                    detail=f"provider={provider} code={code} latency_ms={latency_ms}",
+                    retryable=False,
+                ) from e
+            if code == 503:
+                raise ChatError(
+                    ErrorCategory.PROVIDER_UNAVAILABLE,
+                    "The JARVIS Brain endpoint is unreachable "
+                    "(connection / DNS / TLS failure).",
+                    detail=f"provider={provider} latency_ms={latency_ms}",
+                    retryable=False,
+                ) from e
+            if code == 429:
+                raise ChatError(
+                    ErrorCategory.RATE_LIMITED,
+                    "The AI provider is rate-limiting requests.",
+                    retryable=True,
+                ) from e
+            if code >= 500:
+                raise ChatError(
+                    ErrorCategory.TIMEOUT,
+                    "The JARVIS Brain endpoint returned a server error.",
+                    detail=f"provider={provider} code={code}",
+                    retryable=True,
+                ) from e
+            raise ChatError(
+                ErrorCategory.MODEL_ERROR,
+                "The JARVIS Brain endpoint returned an error.",
+                detail=f"provider={provider} code={code}",
+                retryable=False,
+            ) from e
+        except asyncio.TimeoutError:
+            raise ChatError(
+                ErrorCategory.TIMEOUT,
+                "The JARVIS Brain endpoint timed out. Please retry.",
+                retryable=True,
+            )
+        except Exception as exc:  # noqa: BLE001 -- network / transport
+            raise from_provider_exception(exc)
+        latency_ms = int((time.perf_counter() - start) * 1000)
+        usage = data.get("usage") or {}
+        return {
+            "content": ((data.get("choices") or [{}])[0]
+                        .get("message", {}).get("content", "")) or "",
+            "model": data.get("model") or resolved_model,
+            # Prefer the actual provider reported by the Brain upstream (e.g.
+            # "nvidia" for an NVIDIA-hosted Brain); never fabricated by us.
+            "provider": (data.get("provider") or "").strip() or provider,
+            "revision": ((data.get("choices") or [{}])[0]
+                         .get("finish_reason", "")) or "",
+            "backend": "remote-openai-compatible",
+            "device": "gpu-remote",
+            "latency_ms": latency_ms,
+            "usage": {
+                "prompt_tokens": usage.get("prompt_tokens"),
+                "completion_tokens": usage.get("completion_tokens"),
+                "total_tokens": usage.get("total_tokens"),
+            },
+        }
+
+    async def probe_brain(self, timeout: float = 15.0) -> dict[str, Any]:
+        """Real health probe of the remote JARVIS Brain.
+
+        Health is only reported healthy after an actual (tiny) inference
+        succeeds on the GPU host — never by assumption.  Reports the endpoint
+        and measured latency (ms) so the /ai/status panel can show it.
+        """
+        endpoint = _jarvis_brain_endpoint()
+        if not endpoint:
+            return {
+                "configured": False,
+                "healthy": False,
+                "endpoint": None,
+                "latency_ms": None,
+                "detail": "JARVIS_BRAIN_ENDPOINT not set",
+            }
+        probe_messages = [{"role": "user", "content": "Reply with the single word: ok"}]
+        try:
+            result = await self._chat_via_remote_brain(
+                endpoint, probe_messages, None, None, timeout,
+            )
+            if not (result.get("content") or "").strip():
+                # Honesty gate: an empty / stub inference is never "healthy".
+                return {
+                    "configured": True,
+                    "healthy": False,
+                    "endpoint": endpoint,
+                    "latency_ms": result.get("latency_ms"),
+                    "category": ErrorCategory.PROVIDER_UNAVAILABLE.value,
+                    "detail": "live probe returned an empty inference",
+                }
+            return {
+                "configured": True,
+                "healthy": True,
+                "endpoint": endpoint,
+                "backend": result.get("backend", "remote"),
+                "provider": result.get("provider", _brain_provider(endpoint)),
+                "model": result.get("model"),
+                "latency_ms": result.get("latency_ms"),
+                "detail": "live probe succeeded",
+            }
+        except ChatError as exc:
+            return {
+                "configured": True,
+                "healthy": False,
+                "endpoint": endpoint,
+                "latency_ms": None,
+                "category": exc.category.value,
+                "detail": str(exc),
+            }
+
+
+# Module-level default gateway used by ChatService.
+provider_gateway = ProviderGateway()

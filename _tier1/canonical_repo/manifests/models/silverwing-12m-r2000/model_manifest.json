@@ -1,0 +1,37 @@
+{
+  "model_id": "silverwing-12m-r2000",
+  "version": "v1",
+  "revision": "baseline",
+  "architecture": "Silverwing Decoder",
+  "parameter_count": 12440448,
+  "context_length": 1024,
+  "vocab_size": 8192,
+  "tokenizer": {
+    "version": "local-bpe-v1",
+    "type": "bpe",
+    "vocab_size": 8192,
+    "sha256": "4862da1d814a2f2a306f02dd954d9cd57a9bd84f19134faf955fce7ecec17d0a"
+  },
+  "weights": {
+    "format": "safetensors",
+    "sha256": "7ae69bd973484bc5fc71b9db523727e543290f1d18df079be01b177d6b81fc14",
+    "size_bytes": 62350232,
+    "config_sha256": "334bc89e3ab8378bf34fdaf9a39f6ffcdc994bcfee24d15265d654a08fd0add3",
+    "storage_uri": "local:///F:/AI/Jarvis-super-intelligence-/silverwing/local_run/final"
+  },
+  "capabilities": [
+    "text-generation"
+  ],
+  "status": "archived",
+  "created_at": "2026-01-01T00:00:00Z",
+  "archive_note": "ARCHIVED_BASELINE: 12.4M engineering and scaling reference model. Retained for comparison, not served in production.",
+  "evaluation": {
+    "train_loss": 5.788215398788452,
+    "val_loss": 5.976619243621826,
+    "val_perplexity": 394.10573790953435,
+    "steps": 1000,
+    "optimizer": "AdamW",
+    "learning_rate": 0.0002,
+    "precision": "float32"
+  }
+}

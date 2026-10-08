@@ -1,0 +1,57 @@
+{
+    "phase": "Phase 3: Large-scale pretraining",
+    "level": "Level 1: Silverwing-102M",
+    "seed": 42,
+
+    "optimizer": {
+        "name": "AdamW",
+        "lr": 2e-4,
+        "weight_decay": 0.01,
+        "betas": [0.9, 0.95],
+        "eps": 1e-8,
+        "max_grad_norm": 1.0
+    },
+
+    "scheduler": {
+        "name": "cosine_with_warmup",
+        "warmup_steps": 100,
+        "total_steps": 1000
+    },
+
+    "training": {
+        "per_device_batch_size": 2,
+        "gradient_accumulation_steps": 4,
+        "effective_batch_size": 8,
+        "max_seq_len": 2048,
+        "num_epochs": 1,
+        "max_steps": 1000,
+        "logging_steps": 10,
+        "eval_steps": 100,
+        "save_steps": 100,
+        "mixed_precision": "none",
+        "gradient_checkpointing": false,
+        "use_torch_compile": false
+    },
+
+    "data": {
+        "sources": {
+            "general_language": {"fraction": 0.45, "datasets": ["FineWeb", "OpenWebText"]},
+            "stem_education":    {"fraction": 0.20, "datasets": ["RedPajama-Stem"]},
+            "programming":       {"fraction": 0.15, "datasets": ["StarCoder-Data"]},
+            "science":           {"fraction": 0.10, "datasets": ["RedPajama-Physics", "RedPajama-Chemistry"]},
+            "mathematics":       {"fraction": 0.05, "datasets": ["OpenMath"]}
+        },
+        "target_tokens": 100000000,
+        "target_batches": 500
+    },
+
+    "checkpointing": {
+        "dir": "/kaggle/working/silverwing/checkpoints",
+        "save_every_steps": 100,
+        "keep_last_n": 3,
+        "save_format": "safetensors",
+        "save_optimizer": true,
+        "save_scheduler": true,
+        "save_rng_state": true
+    }
+}

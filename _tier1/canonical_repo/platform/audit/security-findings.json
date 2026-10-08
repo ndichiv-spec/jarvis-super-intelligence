@@ -1,0 +1,175 @@
+{
+  "audit": "SEC-1 Unified Security Boundary",
+  "scope": "jarvis_backend/ routers (FastAPI) + credential/secret handling + system host-op boundary; frontend secret-leakage survey",
+  "generated_at": "2026-09-21T16:45:00Z",
+  "findings": [
+    {
+      "id": "SEC-1.1",
+      "severity": "high",
+      "title": "system.py host capabilities were unauthenticated",
+      "original_state": "11 of 15 routers unauthenticated; system.py host endpoints (processes, files, screenshot, clipboard, launch, provider-settings) had no auth gate.",
+      "mitigation": "P3/P4: system host-op endpoints now require get_current_user + is_admin (privileged-host). Public surfaces retained only where the frontend depends on them without auth: /status, /dashboard, /capabilities, /launch/apps.",
+      "status": "resolved",
+      "evidence": "tests/test_sec1_security.py::TestSystemHostOps::test_unauthenticated_host_ops_rejected (401), TestSystemHostOps::test_shutdown_lockdown_unauthenticated (403), TestAuthorizationBoundary"
+    },
+    {
+      "id": "SEC-1.2",
+      "severity": "critical",
+      "title": "Destructive host command lockdown ordering",
+      "original_state": "POST /system/launch {\"app\":\"shutdown\"} returned 401 under an old Depends-before-deny-list ordering (unauth caller got 401 instead of the safety 403).",
+      "mitigation": "P4: the destructive-command deny-list (_DENY_COMMANDS) is evaluated BEFORE authentication, so shutdown/reboot/halt/poweroff always return 403 even for unauthenticated callers. Legitimate non-destructive launches still work for an authorized admin.",
+      "status": "resolved",
+      "evidence": "live probe POST /api/v1/system/launch {\"app\":\"shutdown\"} -> 403 'Refusing destructive host command matching shutdown'; test_shutdown_lockdown_unauthenticated; test_shutdown_lockdown_even_when_authenticated",
+      "regression_guard": "This deny-list-first ordering MUST NOT be reversed."
+    },
+    {
+      "id": "SEC-1.3",
+      "severity": "critical",
+      "title": "Provider settings exposed raw secret values",
+      "original_state": "GET /system/provider-settings returned plaintext secret names+values; PUT accepted secret-shaped fields.",
+      "mitigation": "P6/P7: GET scrubs secret-shaped values to '***' (key names are safe metadata only); PUT rejects any secret-shaped field with HTTP 400 ('Refusing secret-shaped field ...'). Provider credentials are never accepted/edited via the settings API.",
+      "status": "resolved",
+      "evidence": "tests/test_sec1_security.py::TestProviderSettingsBoundary"
+    },
+    {
+      "id": "SEC-1.4",
+      "severity": "high",
+      "title": "Three inconsistent secret-handling schemes (Fernet / PBKDF2 / plaintext)",
+      "original_state": "Legacy plaintext provider secrets persisted in misc.provider_settings; Fernet used by OAuth connectors; PBKDF2 used for password/API-key hashing.",
+      "mitigation": "P6: canonical credential abstraction established — Fernet (prefix 'fernet:') for encrypted provider secrets via connectors.crypto.encrypt_secret; PBKDF2 (pbkdf2_sha256$...) for password/API-key hashing preserved. Legacy plaintext auto-migrated to Fernet at startup via _migrate_legacy_provider_secrets() (idempotent, keyed off JARVIS_SECRET_KEY). No plaintext provider secrets are accepted by the provider-settings API.",
+      "status": "resolved",
+      "evidence": "test_plaintext_provider_secret_migrated_to_fernet, test_migration_is_idempotent; core._migrate_legacy_provider_secrets"
+    },
+    {
+      "id": "SEC-1.5",
+      "severity": "medium",
+      "title": "Authorization boundary was inconsistent across routers",
+      "original_state": "Some routers used get_current_user, others had ad-hoc auth; no centralized admin predicate.",
+      "mitigation": "P3: core.is_admin(user) and core.is_developer(user) are the single authorization predicates (role-name OR is_admin flag OR roles-store wildcard for owner). core._require_admin now delegates to is_admin. system.py reuses these.",
+      "status": "resolved",
+      "evidence": "tests/test_security_regression.py::TestRBAC (unchanged, green), tests/test_sec1_security.py::TestAuthorizationBoundary"
+    },
+    {
+      "id": "SEC-1.6",
+      "severity": "medium",
+      "title": "No defensive security headers",
+      "original_state": "Responses lacked X-Content-Type-Options/X-Frame-Options/Referrer-Policy/Permissions-Policy/Cache-Control.",
+      "mitigation": "P9: SecurityHeadersMiddleware adds nosniff/DENY/no-referrer/Camera+Microphone+Geolocation denial/no-store on every response. CORS origins are validated at import; production mode with default localhost origins raises RuntimeError (fail-closed).",
+      "status": "resolved",
+      "evidence": "test_sec1_security.py::TestSecurityHeaders; live probe header set on /api/v1/system/status"
+    },
+    {
+      "id": "SEC-1.7",
+      "severity": "medium",
+      "title": "Error responses could leak internals",
+      "original_state": "Unhandled exceptions in system host-op handlers could surface stack traces / absolute file paths.",
+      "mitigation": "P10: sensitive handlers catch exceptions, log full trace via logger.exception (server-side only), and return generic 'Request failed' / 'File not found' / 403 confinement messages. No traceback or absolute host path is returned to clients.",
+      "status": "resolved",
+      "evidence": "test_sec1_security.py::TestErrorSanitization, TestFileBoundary"
+    },
+    {
+      "id": "SEC-1.8",
+      "severity": "medium",
+      "title": "Path traversal on file APIs",
+      "original_state": "POST /system/files/read accepted arbitrary absolute/relative paths (e.g. /etc/passwd, ../../windows/win.ini).",
+      "mitigation": "P4: _confined_path confines reads/lists to ROOT; traversal attempts return 403 'Path is outside the allowed root'.",
+      "status": "resolved",
+      "evidence": "test_file_read_confined_to_root, test_file_list_confined_to_root"
+    },
+    {
+      "id": "SEC-1.9",
+      "severity": "low",
+      "title": "Sensitive host operations were not audited",
+      "original_state": "No durable audit trail for destructive/permissioned host operations.",
+      "mitigation": "P8: _audit_system_launch records every launch attempt (denied/executed/error) and _audit_system_action records sensitive system actions, both to audit_logs, with the authenticated actor (or 'anonymous' for pre-auth deny-list hits).",
+      "status": "resolved",
+      "evidence": "test_sec1_security.py::TestAuditTrail"
+    },
+    {
+      "id": "SEC-1.10",
+      "severity": "low",
+      "title": "Frontend models a provider-secret settings flow",
+      "original_state": "frontend/web/src/lib/api.ts declares a ProviderSettings interface (secret-shaped field names) and an updateProviderSettings PUT path.",
+      "mitigation": "P7/P11 boundary: the backend PUT rejects secret-shaped fields (400) and GET scrubs values to '***', so raw provider secrets can never reach the model/AI layer or be returned to the frontend. The frontend contains NO hardcoded secret values (scan-verified; only empty-string defaults and field-name types). Residual: the settings input form is backend-blocked but not yet removed from the UI (low-priority debt).",
+      "status": "boundary-verified (residual debt documented)",
+      "evidence": "P14 source scan (no sk-/AKIA/BEARER literals in frontend or backend production code); test_get_scrubs_secret_values; test_put_rejects_secret_shaped_fields"
+    },
+    {
+      "id": "SEC-1.11",
+      "severity": "low",
+      "title": "Knowledge dashboard crashes on undefined category (user-reported)",
+      "original_state": "getCategoryColor(category) called category.toLowerCase() on an undefined category -> TypeError.",
+      "mitigation": "getCategoryColor now accepts category?: string|null and guards with (category || '').toLowerCase(); KnowledgeCard renders a fallback color.",
+      "status": "resolved",
+      "evidence": "frontend/web/src/app/dashboard/knowledge/page.tsx L93-95"
+    },
+    {
+      "id": "SEC-1.12",
+      "severity": "info",
+      "title": "Out-of-scope unauthenticated routers (future SEC-2)",
+      "original_state": "ai, billing, global_knowledge, knowledge, memory, multimodal, media, voice, codegen, monitoring, stark, misc remain unauthenticated (not in SEC-1 Phase-4 system.py scope).",
+      "mitigation": "Not expanded in SEC-1 (out of scope; 'do not redesign / add unrelated features'). Documented for follow-up.",
+      "status": "documented-future-work",
+      "evidence": "security-matrix.json authorization_tiers"
+    },
+    {
+      "id": "SEC-1.13",
+      "severity": "low",
+      "title": "gateway.py imports a non-existent vault module (latent import)",
+      "original_state": "jarvis_backend/gateway.py imports infrastructure/vault/manager which is not on disk; ai.py imports gateway lazily and main.py does not import chat_service/gateway at startup, so no startup ImportError occurs.",
+      "mitigation": "No blocking runtime impact (lazy import). Documented as latent; do not eager-import gateway at startup.",
+      "status": "documented-no-change",
+      "evidence": "backend start log 'JARVIS backend started. ai_enabled=False'; python -c 'import jarvis_backend.main' builds app ok"
+    }
+  ],
+  "summary": {
+    "total": 13,
+    "critical": 2,
+    "high": 2,
+    "medium": 4,
+    "low": 4,
+    "info": 1,
+    "resolved": 10,
+    "boundary_verified": 1,
+    "documented_future_work": 1,
+    "documented_no_change": 1
+  },
+  "secret_store_registry": [
+    {
+      "name": "PBKDF2 password/API-key hashing",
+      "location": "jarvis_backend/connectors/crypto.py (hash_password/verify_password)",
+      "algorithm": "pbkdf2_hmac_sha256, 200000 iterations, 32-byte salt",
+      "encryption_state": "hashed (one-way); never reversible",
+      "caller": "auth.py login/register, API-key creation/rotation (auth.py api_keys), user seeding (core.start_backend)",
+      "rotation": "re-hash on password change / API-key rotation",
+      "migration": "none needed (canonical)"
+    },
+    {
+      "name": "Fernet encrypted provider secrets",
+      "location": "misc.provider_settings (jarvis_data/jarvis.db)",
+      "algorithm": "Fernet (PBKDF2-derived key off JARVIS_SECRET_KEY via crypto._fernet)",
+      "encryption_state": "ciphertext at rest (prefix 'fernet:')",
+      "caller": "connectors/registry.py / oauth.py token storage, core._migrate_legacy_provider_secrets (startup)",
+      "rotation": "re-encrypt on key rotation (keyed off JARVIS_SECRET_KEY)",
+      "migration": "plaintext provider secrets auto-migrated to Fernet at startup (idempotent)"
+    },
+    {
+      "name": "JWT access / refresh tokens",
+      "location": "in-memory refresh_tokens store + issued to client",
+      "algorithm": "HS256 (JARVIS_SECRET_KEY), short-lived access; refresh token hashed at rest",
+      "encryption_state": "access token in transit (client), refresh token hashed at rest",
+      "caller": "auth.py / core.create_token / core.create_refresh_token",
+      "rotation": "refresh grant; access token expiry",
+      "migration": "none needed"
+    },
+    {
+      "name": "OAuth connector secrets (per-provider)",
+      "location": "env-driven / vault-backed connector configs (registry)",
+      "algorithm": "Fernet-encrypted at rest via connectors.crypto.encrypt_secret",
+      "encryption_state": "ciphertext; NEVER returned to API consumers",
+      "caller": "connectors/registry.py dispatch; oauth.py callback",
+      "rotation": "re-configure connector",
+      "migration": "legacy plaintext oauth tokens -> fernet (registry._migrate)"
+    }
+  ]
+}

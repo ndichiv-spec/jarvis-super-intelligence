@@ -1,0 +1,138 @@
+{
+  "artifact": "ai-execution-map",
+  "generated_by": "JARVIS Platform X-Ray - sec 10/11",
+  "method": "rg -n of gateway.py method/tier/honesty lines; live /system/dashboard providers snapshot (ai_enabled=False); core.py ai_service env defaults.",
+  "entry_point": {
+    "router": "jarvis_backend/routers/ai.py",
+    "provider_gateway": "jarvis_backend/gateway.py ProviderGateway.chat() (L189, L197: 'Never returns a local-rule/fallback answer; raises ChatError instead')",
+    "auth": "UNAUTHENTICATED - ai.py has no get_current_user dependency (only provider-key honesty guard). Security-risk (see security-map)."
+  },
+  "routing_tiers": {
+    "description": "ProviderGateway.chat() tries tiers in order; each tier is opt-in by environment configuration; if a tier is unavailable it raises ChatError(PROVIDER_UNAVAILABLE) and the gateway honestly falls through to the next tier.",
+    "T1_local_torch": {
+      "method": "_chat_via_torch / TorchBackend over HTTP",
+      "gateway_lines": "gateway.py L243 ('TorchBackend over HTTP')",
+      "note": "Bypasses cloud-key honesty guard (L243 comment). Honesty guard #1 fires on empty/local-rule response (L216-220).",
+      "runtime": "UNCONFIGURED - no local provider keys configured."
+    },
+    "T2_phase6_fabric": {
+      "method": "_chat_via_phase6_fabric()",
+      "gateway_lines": "gateway.py L346 (fabric_root = str(_SILVERWING_BACKEND.parent) L369); tier marker L275 ('Phase 6 provider fabric (intermediate tier)')",
+      "boot": "main.py L198 calls providers.bootstrap.bootstrap_fabric(); main.py inserts F:/AI on sys.path so providers package is importable (Phase 6 IS on path).",
+      "runtime": "UNCONFIGURED - providers present but no API keys -> ai_enabled=False (system.py dashboard providers.ai_enabled=False, configured=[])."
+    },
+    "T3_model_gateway": {
+      "method": "_chat_via_model_gateway()",
+      "gateway_lines": "gateway.py L454; honesty guard L506-509 (gw_provider in ('local','local-rule','sw-echo','sw-echo-dev') or empty resp -> raise ChatError)",
+      "runtime": "DORMANT - gateway only reachable if a model is selected and a provider key exists."
+    },
+    "T4_remote_brain": {
+      "method": "_chat_via_remote_brain()",
+      "gateway_lines": "gateway.py L547; api_key=_jarvis_brain_api_key (L543, via get_secrets_manager().get_or_none('brain_api_key') L138); model=JARVIS_BRAIN_MODEL default 'jarvis-brain-qwen3-4b-v1' (L31/65)",
+      "endpoint": "JARVIS_BRAIN_ENDPOINT (os.environ.get, L127) - 'may be https://host/v1 or a bare host URL' (L124).",
+      "runtime": "ABSENT - JARVIS_BRAIN_ENDPOINT unset (comment main.py L36-38). Honesty guard L574/579 raises PROVIDER_UNAVAILABLE; detail 'JARVIS_BRAIN_ENDPOINT not set' returned at L616."
+    },
+    "fallback_cloud_local_rule": {
+      "gateway_lines": "gateway.py L288 ('Cloud / local-rule path (fallback)')",
+      "note": "Final honesty guard L325-329 ensures a local-rule/empty response is NEVER returned; raises ChatError."
+    }
+  },
+  "honesty_guards": {
+    "purpose": "Ensure JARVIS NEVER returns a canned local-rule / echo / empty answer; must raise or fall through, never fabricate.",
+    "guards": [
+      {
+        "id": "guard#1",
+        "location": "gateway.py L216-220",
+        "behavior": "local-rule/empty response -> raise ChatError (records fallback honestly)."
+      },
+      {
+        "id": "guard#2",
+        "location": "gateway.py L325-329",
+        "behavior": "if provider in ('local','local-rule') or resp.content empty -> raise ChatError."
+      },
+      {
+        "id": "guard#3",
+        "location": "gateway.py L506-509",
+        "behavior": "model-gateway honesty guard: gw_provider in ('local','local-rule','sw-echo','sw-echo-dev') or empty -> raise ChatError."
+      },
+      {
+        "id": "guard#4",
+        "location": "gateway.py L574/579",
+        "behavior": "remote brain: JARVIS_BRAIN_ENDPOINT/key absence -> raise PROVIDER_UNAVAILABLE with detail."
+      },
+      {
+        "id": "guard#5",
+        "location": "gateway.py L616",
+        "behavior": "explicit 'JARVIS_BRAIN_ENDPOINT not set' refusal when brain tier engaged unconfigured."
+      }
+    ],
+    "classification": "REAL - multiple layered honesty guards; architecture is honest-by-design, currently DORMANT (no configured provider to reach)."
+  },
+  "provider_model_matrix": {
+    "columns": [
+      "provider",
+      "endpoint_source",
+      "model_resolution",
+      "status_runtime",
+      "evidence"
+    ],
+    "rows": [
+      {
+        "provider": "Ollama (local inference)",
+        "endpoint_source": "core.py ai_service.ollama_base_url = http://localhost:11434 (L593)",
+        "model_resolution": "core.py _default_model() = os.environ.JARVIS_MODEL or 'local-rule' (L83/now_iso?)",
+        "status_runtime": "OFFLINE - ai_service.enabled False (summary); ai_enabled=False in /system/dashboard; no live model call.",
+        "evidence": "core.py L580-630; system.py /system/dashboard providers.ai_enabled=False, configured=[]."
+      },
+      {
+        "provider": "JARVIS Brain (remote)",
+        "endpoint_source": "JARVIS_BRAIN_ENDPOINT env (gateway.py L127)",
+        "model_resolution": "JARVIS_BRAIN_MODEL env default 'jarvis-brain-qwen3-4b-v1' (L31/65)",
+        "status_runtime": "UNCONFIGURED - JARVIS_BRAIN_ENDPOINT unset (main.py comment L36-38).",
+        "evidence": "gateway.py L124-127, L543-544, L616; main.py L36-38 comment."
+      },
+      {
+        "provider": "Silverwing (cloud / local-rule)",
+        "endpoint_source": "_SILVERWING_BACKEND = <jarvis_backend>/silverwing-backend (gateway.py L50) expected on disk",
+        "model_resolution": "Silverwing silverwing-backend/model_provider.py (gateway.py docstring L14)",
+        "status_runtime": "ABSENT - silverwing-backend directory not present relative to jarvis_backend (gateway.py) nor ROOT (main.py L87). Silverwing source exists at F:/AI root (silverwing, silverwing-runtime, silverwing_120m, ...) but is a PATH MISMATCH, not a missing dependency.",
+        "evidence": "gateway.py L50, L59-65; main.py L87-102 (silverwing-backend absent -> mount skipped, /silverwing/health integrated:false)."
+      },
+      {
+        "provider": "Phase 6 fabric (multi-provider)",
+        "endpoint_source": "F:/AI/providers package on sys.path (main.py L198 bootstrap_fabric())",
+        "model_resolution": "ProviderRouter/ModelRegistry/ModelManager (F:/AI/providers); routes by model/provider",
+        "status_runtime": "PRESENT-BUT-UNCONFIGURED - package importable & bootstrapped, but no provider API keys -> ai_enabled=False.",
+        "evidence": "main.py L87 sys.path insert, L198; gateway.py L275 tier, L369 fabric_root; /system/dashboard providers.ai_enabled=False."
+      },
+      {
+        "provider": "OpenAI / Anthropic / Gemini / HF / Replicate / Stability / AWS / Tavily / Serper / NewsAPI / OpenWeather",
+        "endpoint_source": "system.py provider-settings plaintext KV 'misc' (L284-296)",
+        "model_resolution": "ProviderGateway honesty-guarded key selection per-provider",
+        "status_runtime": "UNCONFIGURED - keys field names exist in system.py + ProviderApiKeys type (lib/api.ts L327-339) but no values set (ai_enabled=False).",
+        "evidence": "system.py L284-296; lib/api.ts L327-339 ProviderApiKeys; /system/dashboard configured=[]."
+      }
+    ],
+    "note": "At runtime the entire AI stack reports ai_enabled=False; every routing tier is reachable only in code, not in deployment. No AI generation reaches a live model."
+  },
+  "runtime_state": {
+    "ai_enabled": false,
+    "system_dashboard_providers": {
+      "ai_enabled": false,
+      "configured": []
+    },
+    "default_model_resolution": "local-rule (fallback when JARVIS_MODEL unset and no provider configured)",
+    "silverwing_integration": false,
+    "brain_endpoint": "unset",
+    "phase6_fabric_bootstrap": true,
+    "phase6_provider_keys": false
+  },
+  "summary": {
+    "tiers_defined": 4,
+    "tiers_reachable_at_runtime": 0,
+    "honesty_guards": 5,
+    "honesty_design": "REAL and layered",
+    "providers_configured": 0,
+    "primary_gap": "Every routing tier and honesty guard is real in code, but the runtime has zero configured provider credentials -> ai_enabled=False -> the gateway is structurally honest but functionally dormant. The single biggest AI-execution lever is configuring Phase 6 provider keys (or setting JARVIS_BRAIN_ENDPOINT + key) so a real tier engages behind the honesty guards."
+  }
+}

@@ -1,0 +1,29 @@
+# Docs by LangChain
+
+> Documentation for LangSmith, Fleet, and our open source packages.
+
+- [AGENT DEVELOPMENT LIFECYCLE (1479 pages)](https://docs.langchain.com/_llms/agent-development-lifecycle.md): Documentation for AGENT DEVELOPMENT LIFECYCLE.
+- [PRODUCTS AND SETUP (189 pages)](https://docs.langchain.com/_llms/products-and-setup.md): Documentation for PRODUCTS AND SETUP.
+
+## OpenAPI Specs
+
+- [agent-server-openapi](/langsmith/agent-server-openapi.json)
+- [openapi](https://api.host.langchain.com/openapi.json)
+- [langsmith-platform-openapi](/langsmith/langsmith-platform-openapi.json)
+
+> The links below point to documentation indexes. Follow each `/_llms/` index recursively until you reach documentation pages.
+
+## Indexes
+
+- [AGENT DEVELOPMENT LIFECYCLE (1479 pages)](https://docs.langchain.com/_llms/agent-development-lifecycle.md): Documentation for AGENT DEVELOPMENT LIFECYCLE.
+- [AGENT DEVELOPMENT LIFECYCLE / Build (475 pages)](https://docs.langchain.com/_llms/agent-development-lifecycle/build.md): Build agents with open source
+- [AGENT DEVELOPMENT LIFECYCLE / Build / Python (241 pages)](https://docs.langchain.com/_llms/agent-development-lifecycle/build/python.md): Documentation for AGENT DEVELOPMENT LIFECYCLE / Build / Python.
+- [AGENT DEVELOPMENT LIFECYCLE / Build / TypeScript (247 pages)](https://docs.langchain.com/_llms/agent-development-lifecycle/build/type-script.md): Documentation for AGENT DEVELOPMENT LIFECYCLE / Build / TypeScript.
+- [AGENT DEVELOPMENT LIFECYCLE / Deploy (256 pages)](https://docs.langchain.com/_llms/agent-development-lifecycle/deploy.md): Ship agents to production
+- [AGENT DEVELOPMENT LIFECYCLE / Deploy / Get started (150 pages)](https://docs.langchain.com/_llms/agent-development-lifecycle/deploy/get-started.md): Documentation for AGENT DEVELOPMENT LIFECYCLE / Deploy / Get started.
+- [AGENT DEVELOPMENT LIFECYCLE / Monitor (668 pages)](https://docs.langchain.com/_llms/agent-development-lifecycle/monitor.md): Trace, debug, and observe agents
+- [AGENT DEVELOPMENT LIFECYCLE / Monitor / Reference (569 pages)](https://docs.langchain.com/_llms/agent-development-lifecycle/monitor/reference.md): Documentation for AGENT DEVELOPMENT LIFECYCLE / Monitor / Reference.
+- [AGENT DEVELOPMENT LIFECYCLE / Monitor / Reference / LangSmith REST API (557 pages)](https://docs.langchain.com/_llms/agent-development-lifecycle/monitor/reference/lang-smith-rest-api.md): Documentation for AGENT DEVELOPMENT LIFECYCLE / Monitor / Reference / LangSmith REST API.
+- [AGENT DEVELOPMENT LIFECYCLE / Monitor / Reference / LangSmith REST API / Administration (150 pages)](https://docs.langchain.com/_llms/agent-development-lifecycle/monitor/reference/lang-smith-rest-api/administration.md): Documentation for AGENT DEVELOPMENT LIFECYCLE / Monitor / Reference / LangSmith REST API / Administration.
+- [PRODUCTS AND SETUP (189 pages)](https://docs.langchain.com/_llms/products-and-setup.md): Documentation for PRODUCTS AND SETUP.
+- [PRODUCTS AND SETUP / LangSmith setup (124 pages)](https://docs.langchain.com/_llms/products-and-setup/lang-smith-setup.md): Host on Cloud, BYOC, or Self-hosted

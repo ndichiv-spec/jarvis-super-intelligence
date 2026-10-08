@@ -1,0 +1,648 @@
+{
+  "artifact": "dependency-map",
+  "generated_by": "JARVIS Platform X-Ray - §4 dependency tracing",
+  "nodes": [
+    {
+      "id": "core",
+      "sector": "shared-kernel",
+      "type": "module",
+      "location": "jarvis_backend/core.py (Store, ai_service, get_current_user, now_iso, ROOT, DATA_DIR)"
+    },
+    {
+      "id": "db",
+      "sector": "persistence",
+      "type": "module",
+      "location": "jarvis_backend/db.py (kv_store, kv_load/save/get/delete)"
+    },
+    {
+      "id": "gateway",
+      "sector": "ai",
+      "type": "module",
+      "location": "jarvis_backend/gateway.py (ProviderGateway, ChatService)"
+    },
+    {
+      "id": "chat_service",
+      "sector": "ai",
+      "type": "service",
+      "location": "jarvis_backend/chat_service.py"
+    },
+    {
+      "id": "system",
+      "sector": "system",
+      "type": "router",
+      "location": "jarvis_backend/routers/system.py"
+    },
+    {
+      "id": "platform_identity",
+      "sector": "identity",
+      "type": "router",
+      "location": "jarvis_backend/routers/platform_identity.py"
+    },
+    {
+      "id": "auth",
+      "sector": "auth",
+      "type": "router",
+      "location": "jarvis_backend/routers/auth.py"
+    },
+    {
+      "id": "rbac",
+      "sector": "authz",
+      "type": "router",
+      "location": "jarvis_backend/routers/rbac.py"
+    },
+    {
+      "id": "agents",
+      "sector": "agents",
+      "type": "router",
+      "location": "jarvis_backend/routers/agents.py"
+    },
+    {
+      "id": "browser",
+      "sector": "browser",
+      "type": "router",
+      "location": "jarvis_backend/routers/browser.py"
+    },
+    {
+      "id": "browser_engine",
+      "sector": "browser",
+      "type": "service",
+      "location": "jarvis_backend/browser_engine.py"
+    },
+    {
+      "id": "search",
+      "sector": "search",
+      "type": "router",
+      "location": "jarvis_backend/routers/search.py"
+    },
+    {
+      "id": "knowledge",
+      "sector": "knowledge",
+      "type": "router",
+      "location": "jarvis_backend/routers/knowledge.py"
+    },
+    {
+      "id": "infra_knowledge",
+      "sector": "knowledge",
+      "type": "package",
+      "location": "infrastructure/knowledge/{store,index,retrieval,rag,ingest,context,types,validation,retention,learning,memory_bridge,observability}.py"
+    },
+    {
+      "id": "memory",
+      "sector": "memory",
+      "type": "router",
+      "location": "jarvis_backend/routers/memory.py"
+    },
+    {
+      "id": "connectors_registry",
+      "sector": "integrations",
+      "type": "module",
+      "location": "jarvis_backend/connectors/registry.py"
+    },
+    {
+      "id": "connectors_dispatch",
+      "sector": "integrations",
+      "type": "module",
+      "location": "jarvis_backend/connectors/dispatch.py"
+    },
+    {
+      "id": "connectors_oauth",
+      "sector": "integrations",
+      "type": "module",
+      "location": "jarvis_backend/connectors/oauth.py"
+    },
+    {
+      "id": "connectors_crypto",
+      "sector": "security",
+      "type": "module",
+      "location": "jarvis_backend/connectors/crypto.py"
+    },
+    {
+      "id": "mail_connector",
+      "sector": "integrations",
+      "type": "package",
+      "location": "jarvis_backend/connectors/mail/{connector,smtp_connector,imap_connector,gmail_oauth,outlook_oauth}.py"
+    },
+    {
+      "id": "stark",
+      "sector": "tools",
+      "type": "router",
+      "location": "jarvis_backend/routers/stark.py"
+    },
+    {
+      "id": "codegen",
+      "sector": "tools",
+      "type": "router",
+      "location": "jarvis_backend/routers/codegen.py"
+    },
+    {
+      "id": "sandbox",
+      "sector": "tools",
+      "type": "router",
+      "location": "jarvis_backend/routers/sandbox.py"
+    },
+    {
+      "id": "sandbox_executor",
+      "sector": "tools",
+      "type": "service",
+      "location": "infrastructure/sandbox/{executor.py,policy.py}"
+    },
+    {
+      "id": "automation",
+      "sector": "automation",
+      "type": "router",
+      "location": "jarvis_backend/routers/automation.py"
+    },
+    {
+      "id": "developer",
+      "sector": "developer",
+      "type": "router",
+      "location": "jarvis_backend/routers/developer.py"
+    },
+    {
+      "id": "extensions",
+      "sector": "extensibility",
+      "type": "router",
+      "location": "jarvis_backend/routers/extensions.py"
+    },
+    {
+      "id": "media",
+      "sector": "media",
+      "type": "router",
+      "location": "jarvis_backend/routers/media.py"
+    },
+    {
+      "id": "voice",
+      "sector": "voice",
+      "type": "router",
+      "location": "jarvis_backend/routers/voice.py"
+    },
+    {
+      "id": "multimodal",
+      "sector": "multimodal",
+      "type": "router",
+      "location": "jarvis_backend/routers/multimodal.py"
+    },
+    {
+      "id": "health",
+      "sector": "ops",
+      "type": "router",
+      "location": "jarvis_backend/routers/health.py"
+    },
+    {
+      "id": "monitoring",
+      "sector": "ops",
+      "type": "router",
+      "location": "jarvis_backend/routers/monitoring.py"
+    },
+    {
+      "id": "misc",
+      "sector": "ops",
+      "type": "router",
+      "location": "jarvis_backend/routers/misc.py"
+    },
+    {
+      "id": "legacy",
+      "sector": "api",
+      "type": "router",
+      "location": "jarvis_backend/routers/legacy.py"
+    },
+    {
+      "id": "global_knowledge",
+      "sector": "knowledge",
+      "type": "router",
+      "location": "jarvis_backend/routers/global_knowledge.py"
+    },
+    {
+      "id": "websocket",
+      "sector": "realtime",
+      "type": "router",
+      "location": "jarvis_backend/websocket.py"
+    },
+    {
+      "id": "observability",
+      "sector": "ops",
+      "type": "module",
+      "location": "jarvis_backend/observability.py + infrastructure/observability/*"
+    },
+    {
+      "id": "vault",
+      "sector": "security",
+      "type": "module",
+      "location": "infrastructure/vault/manager.py + infrastructure/security/*"
+    },
+    {
+      "id": "phase6_providers",
+      "sector": "ai",
+      "type": "package-external",
+      "location": "F:/AI/providers (providers.bootstrap.ProviderRouter/ModelRegistry/ModelManager)"
+    },
+    {
+      "id": "silverwing",
+      "sector": "ai",
+      "type": "package-external",
+      "location": "F:/AI/silverwing-runtime, silverwing_120m, backend/model_gateway (ModelGateway)"
+    },
+    {
+      "id": "plugins",
+      "sector": "extensibility",
+      "type": "package",
+      "location": "infrastructure/plugins/* + interfaces/*"
+    },
+    {
+      "id": "frontend_api_ts",
+      "sector": "frontend",
+      "type": "client",
+      "location": "frontend/web/src/lib/api.ts (jarvisAPI)"
+    },
+    {
+      "id": "frontend_api_client_ts",
+      "sector": "frontend",
+      "type": "client",
+      "location": "frontend/web/src/lib/api-client.ts (apiClient)"
+    },
+    {
+      "id": "frontend_system_api_ts",
+      "sector": "frontend",
+      "type": "client",
+      "location": "frontend/web/src/features/system/api.ts (systemApi)"
+    },
+    {
+      "id": "frontend_SystemMonitor",
+      "sector": "frontend",
+      "type": "component",
+      "location": "frontend/web/src/components/desktop/apps/SystemMonitor.tsx"
+    },
+    {
+      "id": "frontend_DesktopProvider",
+      "sector": "frontend",
+      "type": "component",
+      "location": "frontend/web/src/components/desktop/DesktopProvider.tsx (APP_REGISTRY)"
+    },
+    {
+      "id": "store_kv",
+      "sector": "persistence",
+      "type": "store",
+      "location": "db.py kv_store table (all get_store() collections)"
+    }
+  ],
+  "edges": [
+    {
+      "from": "gateway",
+      "to": "core",
+      "kind": "import",
+      "evidence": "gateway.py imports core.ai_service/ROOT/get_store/now_iso (gateway.py L153, L335)"
+    },
+    {
+      "from": "gateway",
+      "to": "phase6_providers",
+      "kind": "lazy-import",
+      "evidence": "gateway.py L275 `from providers.bootstrap import bootstrap_fabric` (imported sys.path(F:/AI); main.py L198)"
+    },
+    {
+      "from": "gateway",
+      "to": "silverwing",
+      "kind": "lazy-import",
+      "evidence": "gateway.py L245 `from backend.model_gateway...ModelGateway`, L288 `from model_provider` (silverwing-backend dir absent -> ImportError fallback)"
+    },
+    {
+      "from": "gateway",
+      "to": "vault",
+      "kind": "call",
+      "evidence": "gateway.py L130 `_jarvis_brain_api_key = get_secrets_manager().get_or_none('brain_api_key')`"
+    },
+    {
+      "from": "main",
+      "section": "startup",
+      "to": "observability",
+      "kind": "call",
+      "evidence": "main.py L213 install_observability(app)"
+    },
+    {
+      "from": "main",
+      "section": "startup",
+      "to": "phase6_providers",
+      "kind": "call",
+      "evidence": "main.py L198 bootstrap_fabric() at _jarvis_startup"
+    },
+    {
+      "from": "main",
+      "section": "startup",
+      "to": "db",
+      "kind": "call",
+      "evidence": "main.py create_db_and_tables() (db.create_db_and_tables)"
+    },
+    {
+      "from": "system",
+      "to": "core",
+      "kind": "import",
+      "evidence": "system.py L14 imports ONLY ROOT, ai_service, get_store, now_iso (NO get_current_user)"
+    },
+    {
+      "from": "system",
+      "to": "ai_service",
+      "kind": "call",
+      "evidence": "system.py uses ai_service.enabled / ai_service (for capabilities)"
+    },
+    {
+      "from": "system",
+      "section": "/dashboard",
+      "to": "store_kv",
+      "kind": "read",
+      "evidence": "system.py /dashboard reads agents + misc.provider_settings + audit_logs"
+    },
+    {
+      "from": "system",
+      "section": "/launch",
+      "to": "audit_logs",
+      "kind": "write",
+      "evidence": "system.py _audit_system_launch appends (allowed/denied) to audit_logs"
+    },
+    {
+      "from": "platform_identity",
+      "to": "store_kv",
+      "kind": "read/write",
+      "evidence": "platform_identity.py GET/PUT platform_identity + audit_logs + misc.provider_settings"
+    },
+    {
+      "from": "auth",
+      "to": "core",
+      "kind": "import",
+      "evidence": "auth.py imports core.get_current_user/get_store/verify_password/JWT"
+    },
+    {
+      "from": "rbac",
+      "to": "core",
+      "kind": "import",
+      "evidence": "rbac.py imports core.get_current_user/get_store/make_user_payload/hash_password"
+    },
+    {
+      "from": "rbac",
+      "to": "audit_logs",
+      "kind": "write",
+      "evidence": "rbac.py audit events appended"
+    },
+    {
+      "from": "agents",
+      "to": "core",
+      "kind": "import",
+      "evidence": "agents.py L314 AgentActIn depends get_current_user; uses get_store/ai_service"
+    },
+    {
+      "from": "agents",
+      "to": "connectors_dispatch",
+      "kind": "call",
+      "evidence": "agents.py L338 dispatches connector email action via dispatch"
+    },
+    {
+      "from": "agents",
+      "to": "sandbox",
+      "kind": "call",
+      "evidence": "agents.py run_code -> sandbox _sandbox_execute"
+    },
+    {
+      "from": "agents",
+      "to": "audit_logs",
+      "kind": "write",
+      "evidence": "agents.py task/execution audit"
+    },
+    {
+      "from": "browser",
+      "to": "browser_engine",
+      "kind": "import/call",
+      "evidence": "browser.py execute_action L1852 -> browser_engine driver (engine registry L558)"
+    },
+    {
+      "from": "browser",
+      "to": "knowledge",
+      "kind": "write",
+      "evidence": "browser.py L2911/L2932 get_store('knowledge').save() (extract-to-knowledge)"
+    },
+    {
+      "from": "browser",
+      "to": "memory",
+      "kind": "write",
+      "evidence": "browser.py L3102/L3104 get_store('memory').save() (evidence to memory)"
+    },
+    {
+      "from": "browser",
+      "to": "missions",
+      "kind": "write",
+      "evidence": "browser.py L2991/L3006 get_store('missions').save()"
+    },
+    {
+      "from": "browser",
+      "to": "connectors_registry",
+      "kind": "call",
+      "evidence": "browser.py L3234 connectors store read/write"
+    },
+    {
+      "from": "search",
+      "to": "store_kv",
+      "kind": "read(multistore)",
+      "evidence": "search.py L456-696 reads 15 stores via get_store(store_name); L1352 knowledge_store; L1425 get_store"
+    },
+    {
+      "from": "search",
+      "to": "infra_knowledge",
+      "kind": "call",
+      "evidence": "search.py semantic cache via infrastructure.knowledge"
+    },
+    {
+      "from": "knowledge",
+      "to": "infra_knowledge",
+      "kind": "import/call",
+      "evidence": "knowledge.py imports infrastructure.knowledge.store (KnowledgeStore); store.py L43/70/89/97/171 _notify"
+    },
+    {
+      "from": "memory",
+      "to": "infra_knowledge",
+      "kind": "call",
+      "evidence": "memory.py uses KnowledgeStore (store.py) for search/store + _notify"
+    },
+    {
+      "from": "connectors_dispatch",
+      "to": "connectors_registry",
+      "kind": "import/call",
+      "evidence": "dispatch.py L105 execute_connector_action -> L123 registry.load, L161 registry.audit"
+    },
+    {
+      "from": "connectors_registry",
+      "to": "connectors_crypto",
+      "kind": "import/call",
+      "evidence": "registry.py L23/47/59-63 encrypt/decrypt SECRET_FIELDS via crypto"
+    },
+    {
+      "from": "mail_connector",
+      "to": "connectors_dispatch",
+      "kind": "register",
+      "evidence": "dispatch.py L61 maps 'email': MailConnector"
+    },
+    {
+      "from": "stark",
+      "to": "gateway",
+      "kind": "call",
+      "evidence": "stark.py /tool -> ai_service (via gateway/ChatService for provider routing)"
+    },
+    {
+      "from": "codegen",
+      "to": "gateway",
+      "kind": "call",
+      "evidence": "codegen /generate -> ai_service.generate (provider)"
+    },
+    {
+      "from": "sandbox",
+      "to": "sandbox_executor",
+      "kind": "import/call",
+      "evidence": "sandbox.py L133 -> _sandbox_execute -> policy.py deny-list (reboot/shutdown/halt/poweroff)"
+    },
+    {
+      "from": "automation",
+      "to": "store_kv",
+      "kind": "read/write",
+      "evidence": "automation.py misc store (workflows, n8n_workflows); httpx to N8N_URL"
+    },
+    {
+      "from": "developer",
+      "to": "core",
+      "kind": "import",
+      "evidence": "developer.py uses core.get_store(ai_access/api_keys) + generate_api_key"
+    },
+    {
+      "from": "extensions",
+      "to": "connectors_oauth",
+      "kind": "import/call",
+      "evidence": "extensions.py oauth callback L890; auth via core.get_current_user/get_optional_user"
+    },
+    {
+      "from": "legacy",
+      "to": "chat_service",
+      "kind": "call",
+      "evidence": "legacy.py /api/chat -> chat_service -> gateway"
+    },
+    {
+      "from": "legacy",
+      "to": "browser_engine",
+      "kind": "call",
+      "evidence": "legacy.py /api/browser/* -> browser_engine"
+    },
+    {
+      "from": "legacy",
+      "to": "store_kv",
+      "kind": "read/write",
+      "evidence": "legacy notes/reminders/chat_sessions/chat_history/browser_sessions stores"
+    },
+    {
+      "from": "global_knowledge",
+      "to": "store_kv",
+      "kind": "read/write",
+      "evidence": "global_knowledge.py rss_feeds + misc.trends + audit_logs"
+    },
+    {
+      "from": "observability",
+      "to": "store_kv",
+      "kind": "read",
+      "evidence": "observability GATEWAY_EVENT_LOG + audit_logs"
+    },
+    {
+      "from": "websocket",
+      "to": "store_kv",
+      "kind": "read/write",
+      "evidence": "websocket.py reads sessions/tasks; broadcast to rooms"
+    },
+    {
+      "from": "plugins",
+      "to": "?",
+      "kind": "DISCONNECTED",
+      "evidence": "infrastructure/plugins NOT imported by any router in jarvis_backend (rg: no 'from infrastructure.plugins')"
+    },
+    {
+      "from": "frontend_SystemMonitor",
+      "to": "frontend_api_ts",
+      "kind": "api-call",
+      "evidence": "SystemMonitor.tsx -> jarvisAPI.getSystemDashboard (5s) + getCapabilities + getIdentity"
+    },
+    {
+      "from": "frontend_SystemMonitor",
+      "to": "system",
+      "kind": "api-call",
+      "evidence": "GET /api/v1/system/dashboard, GET /api/v1/system/capabilities, GET /api/v1/platform/identity"
+    },
+    {
+      "from": "frontend_DesktopProvider",
+      "to": "?",
+      "kind": "no-backend",
+      "evidence": "APP_REGISTRY hardcoded client-side (DesktopProvider.tsx L111); no /api/v1/desktop router"
+    },
+    {
+      "from": "frontend_api_ts",
+      "to": "system",
+      "kind": "api-call",
+      "evidence": "api.ts getSystemDashboard L666 -> /system/dashboard; getCapabilities L533 -> /system/capabilities"
+    },
+    {
+      "from": "frontend_system_api_ts",
+      "to": "system",
+      "kind": "api-call",
+      "evidence": "features/system/api.ts:10 getCapabilities -> /system/capabilities"
+    },
+    {
+      "from": "frontend_api_client_ts",
+      "to": "auth",
+      "kind": "api-call",
+      "evidence": "api-client.ts login/refresh -> /auth/*"
+    }
+  ],
+  "centrality": {
+    "most_consumed_nodes": [
+      {
+        "node": "store_kv",
+        "consumers": 8
+      },
+      {
+        "node": "core",
+        "consumers": 6
+      },
+      {
+        "node": "audit_logs",
+        "consumers": 3
+      },
+      {
+        "node": "infra_knowledge",
+        "consumers": 3
+      },
+      {
+        "node": "system",
+        "consumers": 3
+      }
+    ],
+    "most_dependent_nodes": [
+      {
+        "node": "browser",
+        "deps": 5
+      },
+      {
+        "node": "gateway",
+        "deps": 4
+      },
+      {
+        "node": "system",
+        "deps": 4
+      },
+      {
+        "node": "agents",
+        "deps": 4
+      }
+    ]
+  },
+  "interpretation": {
+    "most_consumed": "core (get_current_user/get_store/ai_service) + db + audit_logs + knowledge are the fan-in hubs — everything depends on the shared kernel.",
+    "fanout": "system.py, gateway.py, browser.py, search.py, connectors_dispatch are integration hubs with high fan-out.",
+    "disconnected": [
+      "plugins (infrastructure/plugins - imported nowhere at runtime)",
+      "silverwing-backend mount (dir absent)",
+      "silverwing tier2 (backend absent at expected path)",
+      "Desktop (no backend router)"
+    ]
+  },
+  "evidence_method": "rg import/call traces + per-router import scans; file:line in 'evidence' fields."
+}

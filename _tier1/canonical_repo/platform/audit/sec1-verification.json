@@ -1,0 +1,147 @@
+{
+  "artifact": "sec1-verification",
+  "scope": "SEC-1 — Unified Authentication, Authorization & Credential Boundary",
+  "generated_at": "2026-09-21T16:45:00Z",
+  "status": "COMPLETE",
+  "environment": {
+    "python": "C:\\Users\\Administrator\\AppData\\Local\\Programs\\Python\\Python313\\python.exe (3.13)",
+    "node": "C:\\nodejs\\node-v20.20.2-win-x64\\node.exe",
+    "backend": "jarvis_api.py on 0.0.0.0:8000 (SQLite jarvis_data/jarvis.db, JARVIS_TEST_MODE unset, dev mode)",
+    "live_python": "C:\\Users\\Administrator\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+    "note": "Admin-positive live probes are proven via the pytest TestClient (ephemeral in-memory DB + admin fixture) because the live owner credential is NOT persisted in .env (login with empty/known passwords returns 401)."
+  },
+  "verification": {
+    "compile": {
+      "py_compile": {"status": "PASS", "evidence": "python -m py_compile jarvis_backend/core.py jarvis_backend/routers/system.py -> OK"},
+      "app_import": {"status": "PASS", "evidence": "python -c 'import jarvis_backend.main' builds FastAPI app OK"},
+      "tsc": {"status": "PASS", "evidence": "node frontend/web/node_modules/typescript/bin/tsc --noEmit -p frontend/web/tsconfig.json -> exit 0"}
+    },
+    "pytest": {
+      "status": "PASS",
+      "command": "python -m pytest tests/test_auth.py tests/test_security_regression.py tests/test_platform_identity.py tests/test_sec1_security.py -q",
+      "result": "101 passed",
+      "per_suite": {
+        "tests/test_auth.py": {"count": 11, "status": "PASS"},
+        "tests/test_security_regression.py": {"count": 58, "status": "PASS (unchanged, green)"},
+        "tests/test_platform_identity.py": {"count": 7, "status": "PASS"},
+        "tests/test_sec1_security.py": {"count": 25, "status": "PASS (new SEC-1 suite)"}
+      },
+      "regression_guard": "pytest tests/test_auth.py tests/test_security_regression.py tests/test_platform_identity.py still green after SEC-1 changes"
+    },
+    "regression_gates_public_200": {
+      "status": "PASS",
+      "gates": {
+        "GET /api/v1/system/capabilities": "200",
+        "GET /api/v1/platform/identity": "200",
+        "GET /api/v1/system/dashboard": "200 (RESTORED public; frontend depends)",
+        "GET /api/v1/system/status": "200 (public by design)",
+        "GET /api/v1/health": "200",
+        "GET /api/ping": "200"
+      },
+      "evidence": "live probes (curl.exe) + tests/test_sec1_security.py::TestSystemHostOps::test_public_readonly_surface"
+    },
+    "auth_boundary": {
+      "status": "PASS",
+      "gates": {
+        "GET /system/processes (no auth)": "401",
+        "GET /system/provider-settings (no auth)": "401",
+        "GET /system/files (no auth)": "401",
+        "GET /system/clipboard (no auth)": "401",
+        "POST /system/launch (no auth)": "401 for non-destructive; 403 for deny-listed"
+      },
+      "evidence": "live probes + TestSystemHostOps::test_unauthenticated_host_ops_rejected"
+    },
+    "destructive_lockdown": {
+      "status": "PASS",
+      "gate": "POST /api/v1/system/launch {\"app\":\"shutdown\"} (NO auth) -> 403",
+      "response": "{\"detail\":\"Refusing destructive host command matching 'shutdown' (system:launch is gated by the JARVIS safety policy).\"}",
+      "ordering": "deny-list evaluated BEFORE authentication (cannot be bypassed by a token)",
+      "parametrized": ["shutdown", "reboot", "halt", "poweroff"],
+      "evidence": "TestSystemHostOps::test_shutdown_lockdown_unauthenticated + test_shutdown_lockdown_even_when_authenticated (authenticated non-admin still 403)"
+    },
+    "non_admin_behavior": {
+      "status": "PASS",
+      "gates": {
+        "POST /system/launch non-destructive (non-admin token)": "403 'Admin access required'",
+        "GET /system/processes (non-admin token)": "200",
+        "GET /system/provider-settings (non-admin token)": "403",
+        "POST /system/launch shutdown (non-admin token)": "403 (deny-list wins)"
+      },
+      "evidence": "live probes (non-admin via /auth/register + /auth/login)"
+    },
+    "admin_positive_gates": {
+      "status": "PASS (TestClient + admin fixture)",
+      "note": "Live admin token unavailable: the live owner@jarvis.local password is not in .env (login with ''/env var -> 401); admin gates are proven in-process via tests/test_sec1_security.py admin fixture (_make_user(['admin'])).",
+      "gates": {
+        "POST /system/launch non-destructive (admin)": "200 (TestSystemHostOps::test_admin_can_launch_non_destructive)",
+        "GET /system/processes (admin)": "200 (test_admin_can_read_processes)",
+        "GET /system/provider-settings (admin)": "200, scrubbed (TestProviderSettingsBoundary::test_get_scrubs_secret_values)",
+        "PUT /system/provider-settings secret-shaped (admin)": "400 (test_put_rejects_secret_shaped_fields)",
+        "POST /system/files/read traversal (admin)": "403 'Path is outside the allowed root' (TestFileBoundary::test_file_read_confined_to_root)",
+        "POST /system/files traversal (admin)": "403 (test_file_list_confined_to_root)"
+      }
+    },
+    "provider_settings_boundary_p7": {
+      "status": "PASS",
+      "get_scrubs": "secret-shaped values -> '***'; key names are safe metadata; test_get_scrubs_secret_values",
+      "put_rejects": "HTTP 400 'Refusing secret-shaped field <k> ...'; test_put_rejects_secret_shaped_fields",
+      "no_plaintext_at_rest": "legacy plaintext migrated to Fernet ('fernet:') at startup; test_plaintext_provider_secret_migrated_to_fernet + test_migration_is_idempotent"
+    },
+    "credential_boundary_p5": {
+      "status": "PASS",
+      "model_never_receives": ["API keys", "OAuth client secrets", "bearer tokens", "passwords", "private keys", "encryption keys"],
+      "mechanism": "SecretManager broker resolves creds only to adapters; assert_no_secrets guards model-facing payloads; provider-settings GET scrubs; PUT rejects secret-shaped."
+    },
+    "audit_trail_p8": {
+      "status": "PASS",
+      "evidence": "TestAuditTrail: shutdown denial appended to audit_logs with kind=system_launch, status=denied, actor='anonymous'; _audit_system_action + _audit_system_launch wired on launch/processes/path-traversal/deny-list paths."
+    },
+    "error_sanitization_p10": {
+      "status": "PASS",
+      "evidence": "TestErrorSanitization + TestFileBoundary: no traceback / absolute path / 'errno' in client-facing error detail; full trace logged server-side via logger.exception."
+    },
+    "security_headers_p9": {
+      "status": "PASS",
+      "live": {
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "no-referrer",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+        "Cache-Control": "no-store"
+      },
+      "evidence": "live probe headers on /api/v1/system/status + TestSecurityHeaders"
+    },
+    "frontend_p11": {
+      "status": "PASS (boundary enforced)",
+      "hardcoded_secret_values_in_source": "NONE (P14 scan: only empty-string defaults + field names; sk-/AKIA/BEGIN patterns only in test fixtures)",
+      "provider_settings_get": "returns '***' masks only",
+      "provider_settings_put": "rejected at API layer (400)",
+      "public_frontend_paths": ["/api/v1/system/status", "/dashboard/knowledge", "/capabilities"],
+      "residual_debt": "frontend provider-settings input form (dashboard/settings/page.tsx, developer-tab.tsx) still models secret field NAMES with empty defaults and is backend-blocked (PUT->400); not removed to avoid a frontend redesign (out of SEC-1 scope)."
+    },
+    "regression_scan_p14": {
+      "status": "PASS",
+      "scanned": ["frontend/web/src", "jarvis_backend", "tests"],
+      "secret_value_patterns": ["sk-[A-Za-z0-9]{12,}", "AKIA[0-9A-Z]{12,}", "-----BEGIN ... PRIVATE KEY-----", "ghp_[A-Za-z0-9]{30,}"],
+      "findings": "All matches are obvious test fixtures (sk-not-a-real-key, sk-1234567890abcdef, sk-legacy-plaintext-xyz, sk-super-secret-plain-123). No real credentials in production source."
+    }
+  },
+  "files_changed": [
+    "jarvis_backend/core.py",
+    "jarvis_backend/routers/system.py",
+    ".jarvis/platform-audit/security-matrix.json (regenerated + runtime annotations)",
+    ".jarvis/platform-audit/security-findings.json (rewritten)",
+    ".jarvis/platform-audit/credential-flow.json (rewritten)",
+    ".jarvis/platform-audit/sec1-verification.json (this file)",
+    "JARVIS_SECURITY_ARCHITECTURE.md (rewritten)",
+    "tests/test_sec1_security.py (new)",
+    "frontend/web/src/app/dashboard/knowledge/page.tsx (getCategoryColor null-guard — user-reported crash)"
+  ],
+  "deliverables": {
+    ".jarvis/platform-audit/security-matrix.json": "regenerated (337 endpoints; system host-ops now authenticated/privileged-host; runtime mitigations annotated)",
+    ".jarvis/platform-audit/security-findings.json": "13 findings (2 critical, 2 high, 4 medium, 4 low, 1 info)",
+    ".jarvis/platform-audit/credential-flow.json": "canonical credential abstraction + broker/invariant/model-context-prohibition layers",
+    "JARVIS_SECURITY_ARCHITECTURE.md": "human-readable architecture grounded in core.py/connectors/providers primitives"
+  },
+  "next_upgrade_unlocked": "SEC-2 — Device Trust / Integration Registry (out of SEC-1 scope per 'do not redesign')"
+}

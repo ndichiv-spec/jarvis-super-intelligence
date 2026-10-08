@@ -1,0 +1,175 @@
+{
+  "model_id": "silverwing-120m-base-v1",
+  "revision": "v1/r1",
+  "evaluated_at_utc": "2026-09-11T20:45:23Z",
+  "runtime": {
+    "backend": "torch",
+    "device": "cpu",
+    "parameters": 120087552
+  },
+  "phase5_language": {
+    "train_loss": 6.408630609512329,
+    "val_loss": 5.4373369216918945,
+    "val_perplexity": 229.82931430208146,
+    "best_step": 400,
+    "sample_tag": "language-continuation"
+  },
+  "phase5_math": [
+    {
+      "prompt": "What is 15 multiplied by 8? Give just the number.",
+      "output": ", ",
+      "model": "silverwing-120m-base-v1",
+      "finish_reason": "length",
+      "usage": {
+        "prompt_tokens": 34,
+        "completion_tokens": 128,
+        "total_tokens": 162
+      },
+      "elapsed_s": 22.44,
+      "category": "math",
+      "tag": "phase6-1"
+    },
+    {
+      "prompt": "Solve for x: 3x + 5 = 20. Show your steps.",
+      "output": "     ,....ch. H  1....5222....1............. (00..3....i1......................1......2   P P........S ().ch from (001 \n 2...amam (00  \n L L  ....",
+      "model": "silverwing-120m-base-v1",
+      "finish_reason": "length",
+      "usage": {
+        "prompt_tokens": 42,
+        "completion_tokens": 128,
+        "total_tokens": 170
+      },
+      "elapsed_s": 20.089,
+      "category": "math",
+      "tag": "phase6-2"
+    }
+  ],
+  "phase5_logic": [
+    {
+      "prompt": "If all Bloops are Razzies and some Razzies are Loppies, is it guaranteed that some Bloops are Loppies? Answer yes/no and explain.",
+      "output": "eer,.. (999        ...  \nee           ",
+      "model": "silverwing-120m-base-v1",
+      "finish_reason": "length",
+      "usage": {
+        "prompt_tokens": 68,
+        "completion_tokens": 128,
+        "total_tokens": 196
+      },
+      "elapsed_s": 23.603,
+      "category": "logic",
+      "tag": "logic-deduction"
+    }
+  ],
+  "phase5_coding": [
+    {
+      "prompt": "Write a Python function named 'add' that takes two numbers and returns their sum. Return only the code, no explanation.",
+      "output": " therrers, the of of ofs.M,icelel\n Eoo,..... theiii and asadsyy I, was,m,,,ic.ol;tt: yy.ie21 , (02  2 222..st R..iiii1..S (11           ...   R (.. 2221",
+      "model": "silverwing-120m-base-v1",
+      "finish_reason": "length",
+      "usage": {
+        "prompt_tokens": 57,
+        "completion_tokens": 128,
+        "total_tokens": 185
+      },
+      "elapsed_s": 20.118,
+      "category": "coding",
+      "tag": "phase6-4"
+    }
+  ],
+  "phase5_knowledge": [
+    {
+      "prompt": "Explain the difference between RAM and storage.",
+      "output": "\n, aom:amalurma:,  ",
+      "model": "silverwing-120m-base-v1",
+      "finish_reason": "length",
+      "usage": {
+        "prompt_tokens": 34,
+        "completion_tokens": 128,
+        "total_tokens": 162
+      },
+      "elapsed_s": 19.489,
+      "category": "knowledge",
+      "tag": "phase6-3"
+    },
+    {
+      "prompt": "What is a centrifugal pump?",
+      "output": " a",
+      "model": "silverwing-120m-base-v1",
+      "finish_reason": "length",
+      "usage": {
+        "prompt_tokens": 30,
+        "completion_tokens": 128,
+        "total_tokens": 158
+      },
+      "elapsed_s": 16.605,
+      "category": "knowledge",
+      "tag": "phase6-5"
+    },
+    {
+      "prompt": "Explain Newton's second law.",
+      "output": " List,,,..................i1....ja Tn R R\n............chch fromaa.chchchchch\nl,,,........ch p.,iiiiia,,....,,.....et, S;; Co,......66.....226......",
+      "model": "silverwing-120m-base-v1",
+      "finish_reason": "length",
+      "usage": {
+        "prompt_tokens": 30,
+        "completion_tokens": 128,
+        "total_tokens": 158
+      },
+      "elapsed_s": 15.412,
+      "category": "knowledge",
+      "tag": "phase6-6"
+    },
+    {
+      "prompt": "Explain photosynthesis.",
+      "output": " the E.,,P.... R  R  E... (011         \n,.ar..... Kch.. T T..     }   ",
+      "model": "silverwing-120m-base-v1",
+      "finish_reason": "length",
+      "usage": {
+        "prompt_tokens": 30,
+        "completion_tokens": 128,
+        "total_tokens": 158
+      },
+      "elapsed_s": 15.532,
+      "category": "knowledge",
+      "tag": "phase6-7"
+    }
+  ],
+  "phase6_fixed_prompts": [
+    {
+      "prompt": "What is 15 multiplied by 8? Give just the number.",
+      "tag": "phase6-1",
+      "output": ", "
+    },
+    {
+      "prompt": "Solve for x: 3x + 5 = 20. Show your steps.",
+      "tag": "phase6-2",
+      "output": "     ,....ch. H  1....5222....1............. (00..3....i1......................1......2   P P........S ().ch from (001 \n 2...amam (00  \n L L  ...."
+    },
+    {
+      "prompt": "Explain the difference between RAM and storage.",
+      "tag": "phase6-3",
+      "output": "\n, aom:amalurma:,  "
+    },
+    {
+      "prompt": "Write a Python function named 'add' that takes two numbers and returns their sum. Return only the code, no explanation.",
+      "tag": "phase6-4",
+      "output": " therrers, the of of ofs.M,icelel\n Eoo,..... theiii and asadsyy I, was,m,,,ic.ol;tt: yy.ie21 , (02  2 222..st R..iiii1..S (11           ...   R (.. 2221"
+    },
+    {
+      "prompt": "What is a centrifugal pump?",
+      "tag": "phase6-5",
+      "output": " a"
+    },
+    {
+      "prompt": "Explain Newton's second law.",
+      "tag": "phase6-6",
+      "output": " List,,,..................i1....ja Tn R R\n............chch fromaa.chchchchch\nl,,,........ch p.,iiiiia,,....,,.....et, S;; Co,......66.....226......"
+    },
+    {
+      "prompt": "Explain photosynthesis.",
+      "tag": "phase6-7",
+      "output": " the E.,,P.... R  R  E... (011         \n,.ar..... Kch.. T T..     }   "
+    }
+  ],
+  "verdict": "Model is correctly wired and honestly reachable (provider=silverwing, backend=torch, device=cpu). Generation is degenerate (untrained 120M, val_ppl 229.8): arithmetic/knowledge/coding outputs are incoherent. Capability gaps are a training-data deficit, not a connection defect."
+}

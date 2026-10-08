@@ -1,0 +1,176 @@
+{
+  "checks": [
+    {
+      "name": "LangSmith import",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Phoenix import",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Temporal import",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "A2A import",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Capabilities registered (15)",
+      "status": "PASS",
+      "detail": "Got 15: ['brain', 'conversation', 'voice', 'vision', 'image.generate', 'provider', 'browser', 'task', 'memory', 'knowledge.search', 'tool', 'research.cortex', 'science.engine', 'bio.learner', 'tech.evolution']"
+    },
+    {
+      "name": "LangSmith tracer created",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "LangSmith available",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Pricing table has 14 entries",
+      "status": "PASS",
+      "detail": "Got 14"
+    },
+    {
+      "name": "Cost calculation gpt-4o",
+      "status": "PASS",
+      "detail": "cost=0.0125"
+    },
+    {
+      "name": "Cost calculation claude-3-5-sonnet",
+      "status": "PASS",
+      "detail": "cost=0.0105"
+    },
+    {
+      "name": "Phoenix available",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Phoenix 5 criteria",
+      "status": "PASS",
+      "detail": "Got ['hallucination', 'relevance', 'toxicity', 'coherence', 'faithfulness']"
+    },
+    {
+      "name": "Phoenix evaluation runs",
+      "status": "PASS",
+      "detail": "{'evaluations': {'hallucination': {'method': 'heuristic.hallucination', 'score': 0, 'explanation': 'No strong hallucination indicators detected', 'timestamp': '2026-10-02T17:41:07.369806+00:00'}, 'relevance': {'method': 'heuristic.relevance', 'score': 4, 'explanation': 'Keyword overlap ratio: 0.67 (4/6)', 'timestamp': '2026-10-02T17:41:07.369844+00:00'}, 'toxicity': {'method': 'heuristic.toxicity', 'score': 1, 'explanation': 'No toxic content detected', 'timestamp': '2026-10-02T17:41:07.369862+00:00'}, 'coherence': {'method': 'heuristic.coherence', 'score': 3, 'explanation': 'Avg sentence length: 6.0 words, 1 sentences', 'timestamp': '2026-10-02T17:41:07.369894+00:00'}, 'faithfulness': {'method': 'heuristic.faithfulness', 'score': 3, 'explanation': 'Topic adherence: 0.67 keyword overlap', 'timestamp': '2026-10-02T17:41:07.369913+00:00'}}, 'overall_score': 2.2, 'timestamp': '2026-10-02T17:41:07.369758+00:00', 'inputs': {'prompt': 'What is the capital of France?', 'response': 'The capital of France is Paris.', 'context': ''}}"
+    },
+    {
+      "name": "Phoenix has 5 criteria",
+      "status": "PASS",
+      "detail": "Got 5"
+    },
+    {
+      "name": "Phoenix toxicity detection",
+      "status": "PASS",
+      "detail": "score=3"
+    },
+    {
+      "name": "Temporal installed",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "3 workflows defined",
+      "status": "PASS",
+      "detail": "['ResearchIngestionWorkflow', 'BioLearnerConsolidationWorkflow', 'ScienceComputationWorkflow']"
+    },
+    {
+      "name": "6 activities defined",
+      "status": "PASS",
+      "detail": "['ingest_feed_activity', 'search_arxiv_activity', 'ingest_url_activity', 'study_concept_activity', 'consolidate_activity', 'solve_math_activity']"
+    },
+    {
+      "name": "Temporal science workflow runs",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Science workflow solved >= 1",
+      "status": "PASS",
+      "detail": "solved=1"
+    },
+    {
+      "name": "Temporal consolidation workflow runs",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Consolidation studied >= 1",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "A2A SDK available",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "Agent card created",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "15 skills defined",
+      "status": "PASS",
+      "detail": "Got 15"
+    },
+    {
+      "name": "Executor created",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "A2A skill detect: 'What is 2+2?'",
+      "status": "PASS",
+      "detail": "got=chat, expected=chat"
+    },
+    {
+      "name": "A2A skill detect: 'Search arxiv for AI'",
+      "status": "PASS",
+      "detail": "got=research, expected=research"
+    },
+    {
+      "name": "A2A skill detect: 'Solve 2*x+5=15'",
+      "status": "PASS",
+      "detail": "got=science, expected=science"
+    },
+    {
+      "name": "A2A skill detect: 'Create a task to review'",
+      "status": "PASS",
+      "detail": "got=task, expected=task"
+    },
+    {
+      "name": "A2A skill detect: 'Generate an image of sunrise'",
+      "status": "PASS",
+      "detail": "got=image-generation, expected=image-generation"
+    },
+    {
+      "name": "A2A routes mounted",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "A2A endpoints present",
+      "status": "PASS",
+      "detail": "['/.well-known/agent-card.json', '/a2a', '/a2a/message:send', '/a2a/message:stream', '/a2a/tasks/{id}:cancel', '/a2a/tasks/{id}:subscribe', '/a2a/tasks/{id}:subscribe', '/a2a/tasks/{id}', '/a2a/tasks/{id}/pushNotificationConfigs/{push_id}', '/a2a/tasks/{id}/pushNotificationConfigs/{push_id}', '/a2a/tasks/{id}/pushNotificationConfigs', '/a2a/tasks/{id}/pushNotificationConfigs', '/a2a/tasks', '/a2a/extendedAgentCard']"
+    },
+    {
+      "name": "Provider registry intact",
+      "status": "PASS",
+      "detail": ""
+    }
+  ],
+  "pass": 34,
+  "fail": 0
+}

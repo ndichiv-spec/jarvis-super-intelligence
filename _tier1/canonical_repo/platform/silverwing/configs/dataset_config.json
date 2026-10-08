@@ -1,0 +1,37 @@
+{
+    "name": "silverwing-lm-education",
+    "description": "Curated text datasets for Silverwing pretraining",
+    "sources": [
+        {
+            "name": "SFT skills (JARVIS)",
+            "type": "local_jsonl",
+            "path": "/kaggle/input/jarvis-skills-sft/sft_skills.jsonl",
+            "format": "messages_to_text",
+            "estimated_tokens": 50000
+        }
+    ],
+    "processing": {
+        "language_filter": "en",
+        "quality_filter": {
+            "min_chars": 50,
+            "min_words": 10,
+            "max_ratio_special_chars": 0.30,
+            "min_stopword_ratio": 0.60,
+            "language": "en"
+        },
+        "deduplication": {
+            "algorithm": "minhash",
+            "threshold": 0.95,
+            "ngram_size": 5
+        },
+        "sequence_packing": {
+            "max_length": 2048,
+            "pad_token_id": 0
+        }
+    },
+    "splits": {
+        "train": 0.98,
+        "validation": 0.02
+    },
+    "seed": 42
+}

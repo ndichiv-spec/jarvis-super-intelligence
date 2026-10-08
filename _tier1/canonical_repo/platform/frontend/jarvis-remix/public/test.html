@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JARVIS Test Page</title>
+    <style>
+        body {
+            background-color: #1f2937;
+            color: white;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .header {
+            font-size: 32px;
+            margin-bottom: 20px;
+            color: #3b82f6;
+        }
+        .card {
+            background-color: #374151;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .status {
+            color: #10b981;
+            font-weight: bold;
+        }
+        .time {
+            color: #9ca3af;
+            font-size: 14px;
+        }
+        .link {
+            color: #3b82f6;
+            text-decoration: none;
+        }
+        .link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="header">🤖 JARVIS - Static Test Page</h1>
+        
+        <div class="card">
+            <p class="status">✅ Server Status: WORKING</p>
+            <p>If you can see this page, the web server is functioning correctly.</p>
+            <p class="time" id="time">Loading time...</p>
+        </div>
+        
+        <div class="card">
+            <h2>Test Results:</h2>
+            <ul>
+                <li>✅ HTML rendering: Working</li>
+                <li>✅ CSS styling: Working</li>
+                <li>✅ Static content: Working</li>
+                <li id="js-test">🔄 JavaScript: Testing...</li>
+            </ul>
+        </div>
+        
+        <div class="card">
+            <h2>Next Steps:</h2>
+            <p>If this page displays correctly, the issue is with the React/Remix application.</p>
+            <p>Try accessing: <a href="/dashboard" class="link">/dashboard</a></p>
+            <p>Or try: <a href="/test" class="link">/test</a> for a simpler React test.</p>
+        </div>
+        
+        <div class="card">
+            <h2>Troubleshooting:</h2>
+            <p>1. Check browser console (F12) for JavaScript errors</p>
+            <p>2. Disable browser extensions</p>
+            <p>3. Try a different browser</p>
+            <p>4. Clear browser cache and cookies</p>
+        </div>
+    </div>
+    
+    <script>
+        // Test JavaScript
+        document.getElementById('time').textContent = 'Current time: ' + new Date().toLocaleTimeString();
+        document.getElementById('js-test').innerHTML = '✅ JavaScript: Working';
+        
+        // Update time every second
+        setInterval(() => {
+            document.getElementById('time').textContent = 'Current time: ' + new Date().toLocaleTimeString();
+        }, 1000);
+        
+        console.log('JARVIS Test Page - JavaScript is working');
+    </script>
+</body>
+</html>

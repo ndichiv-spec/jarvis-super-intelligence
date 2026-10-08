@@ -1,0 +1,474 @@
+{
+  "artifact": "sector-state-classification",
+  "generated_by": "JARVIS Platform X-Ray - §3 classification evidence matrix (discovery phase, no code modified)",
+  "methodology": "Each component classified from on-disk evidence (file:line citations) + live verification where marked. A component may carry multiple tags. Tags: REAL/PARTIAL/DISCONNECTED/DUPLICATED/MOCKED/HARDCODED/UNUSED/BROKEN/UNTESTED/SECURITY-RISK/PRODUCTION-INCOMPLETE/EXPERIMENTAL/DEPRECATED + live-verified markers.",
+  "tag_legend": {
+    "REAL": "Implemented, wired, and serving its stated purpose (evidence-backed).",
+    "PARTIAL": "Implemented but incomplete vs intended scope or has a known gap.",
+    "DISCONNECTED": "Code exists but is not wired into the running application (no import/route/consumer).",
+    "DUPLICATED": "Same concern solved by >=2 independent implementations with no convergence.",
+    "MOCKED": "Behavior/data is simulated (Math.random, hardcoded fixtures), not from real backend state.",
+    "HARDCODED": "Values/configuration are literals in source rather than config/data-driven.",
+    "UNUSED": "Code present but never referenced.",
+    "BROKEN": "Does not run / import fails / integration path fails (but not crashing the app).",
+    "UNTESTED": "No automated test covers it.",
+    "SECURITY-RISK": "Concrete security defect with fixable vector.",
+    "PRODUCTION-INCOMPLETE": "Lacks prod gating (env requirements, secret handling, hardening).",
+    "EXPERIMENTAL": "Prototype/sandbox, not on stable runtime path.",
+    "DEPRECATED": "Superseded by a newer surface; retained only for compat."
+  },
+  "components": [
+    {
+      "component": "Capability Registry",
+      "sector": "AI core",
+      "classification": [
+        "REAL"
+      ],
+      "evidence": [
+        "system.py L60-78 _CAPABILITIES tuple of 17 (id,category,tool,permissions,needs_ai,provider_service).",
+        "GET /api/v1/system/capabilities (system.py L98-154) returns flat list + registry[] with availability/health/ai_backed/dependencies/provenance/last_checked.",
+        "Verified live 09:17: 200, 17 entries; platform-backed=available/ok; AI-backed=unavailable/offline; ai_enabled=false.",
+        "Frontend consumer: SystemMonitor.tsx CAPABILITIES panel; developer/capabilities page.",
+        "py_compile system.py = 0; tsc = 0."
+      ]
+    },
+    {
+      "component": "Platform Identity",
+      "sector": "Identity / security",
+      "classification": [
+        "REAL"
+      ],
+      "evidence": [
+        "platform_identity.py GET/PUT /api/v1/platform/identity; returns NO secrets.",
+        "PUT rejects secret-shaped field names -> 400 (verified 09:28: PUT api_key -> 400 'Refusing secret-shaped field api_key').",
+        "transport derived from env (SMTP_HOST/SMTP_USER) — never fabricated; _ALLOWED_TRANSPORT={smtp,none,unavailable}.",
+        "tests/test_platform_identity.py 7 PASS; py_compile=0.",
+        "Verified GET-after-PUT: developer_identity='dev-001', verification_status='verified'."
+      ]
+    },
+    {
+      "component": "Authentication (JWT / API keys)",
+      "sector": "Auth",
+      "classification": [
+        "REAL"
+      ],
+      "evidence": [
+        "core.py L270 create_token (HS256, TTL 24*7h); L282 decode_token; L351 get_current_user (Bearer header); L471-486 generate_api_key/hash_api_key (PBKDF2).",
+        "core.py L458-459 'Raw API keys are NEVER persisted.'",
+        "auth.py full login/register/refresh/logout/me/sessions/api-keys CRUD.",
+        "core.py L90-107 admin_email (prod requires JARVIS_ADMIN_EMAIL; dev default 'admin@jarvis.local'); L220 PBKDF2 200k iterations."
+      ]
+    },
+    {
+      "component": "Authorization / RBAC",
+      "sector": "Auth",
+      "classification": [
+        "REAL",
+        "PARTIAL"
+      ],
+      "evidence": [
+        "REAL: rbac.py _require_admin (L57), _require_auth (L78) guards; users/roles/permissions CRUD; seeded canonical roles (core._seed_canonical_roles).",
+        "PARTIAL: no object-level (per-user) authorization (can-this-user-edit-user-X not enforced). /users page default 20 with no upper clamp.",
+        "Live: /rbac/users -> {users,total,page,per_page}; /rbac/audit-logs -> 401 Not authenticated (admin gate live check failed in test env)."
+      ]
+    },
+    {
+      "component": "Connector Registry",
+      "sector": "Integrations",
+      "classification": [
+        "REAL"
+      ],
+      "evidence": [
+        "connectors/registry.py: SECRET_FIELDS encrypted via crypto.encrypt_secret on save (L59-63), decrypted on load (L47); MASK bullet string (L22); public_config masks + _set flags (L81); audit JSONL (L94).",
+        "dispatch.py execute_connector_action enforces CapabilityDenied (consent) + risk_level/requires_confirmation (L105, L161 audit).",
+        "smtp_connector.py smtp_test uses REAL smtplib + STARTTLS (not a mock); verified SMTP auth-failure -> honest 'SMTP authentication failed'.",
+        "connectors.py /test runs live IMAP login + SMTP EHLO; honest status reporting.",
+        "Email connector action email.send is audited + rate-limited + requires_confirmation (connector.py L35)."
+      ]
+    },
+    {
+      "component": "Agents",
+      "sector": "AI",
+      "classification": [
+        "REAL",
+        "PARTIAL"
+      ],
+      "evidence": [
+        "REAL: agents.py _DEFAULT_AGENTS (L15) 4-role roster (coordinator/researcher/analyst/coder); AgentActIn (L57); POST /agents/task + collaboration endpoints; data-driven agents store.",
+        "PARTIAL: no AgentRunner/autonomous-loop class; agent 'act' only dispatches run_code|email (agents.py L328); scheduler/status is a STUB (L207 {running:true,interval:60,next_run:None}); system.py dashboard scheduler_running=false."
+      ]
+    },
+    {
+      "component": "Tool Registry / Tool dispatch",
+      "sector": "AI",
+      "classification": [
+        "DISCONNECTED",
+        "DUPLICATED"
+      ],
+      "evidence": [
+        "stark.py /tool (L39), browser.execute_action (L1852), connectors.dispatch.execute_connector_action (L105) — three independent tool-call surfaces.",
+        "NO central tool registry: rg 'ToolDef|register_tool' returns NO hits in jarvis_backend.",
+        "stark-control/page.tsx L417 labels a 'Tool Registry' section but it is frontend-only (no backend registry)."
+      ]
+    },
+    {
+      "component": "Browser engine + remote browser",
+      "sector": "Browser",
+      "classification": [
+        "REAL",
+        "PARTIAL"
+      ],
+      "evidence": [
+        "REAL: browser.py (3056-4192) + browser_engine.py; 18 browser_* KV collections; remote-browser sessions/tabs/actions/checkpoints/workspaces/telemetry/source-graph/network-events/timeline/evidence.",
+        "PARTIAL: page/understand AI extraction depends on ai_service (disabled); cross-sector writes to knowledge/memory/missions exist but no unified execution plan.",
+        "18 browser collections in core.STORES (sessions,tabs,bookmarks,history,downloads,evidence,actions,action_queues,page_states,tasks,checkpoints,workspaces,telemetry,source_graph,timeline,network_events,navigation_timeline,health)."
+      ]
+    },
+    {
+      "component": "Desktop (frontend)",
+      "sector": "UI",
+      "classification": [
+        "PARTIAL",
+        "FRONTEND-ONLY"
+      ],
+      "evidence": [
+        "NO /api/v1/desktop backend router (27 routers enumerated; desktop absent).",
+        "Window state is purely client-side (APP_REGISTRY hardcoded in DesktopProvider.tsx L111).",
+        "SystemMonitor.tsx was FIXED: fetches /system/dashboard + /platform/identity; no Math.random; no host psutil; no recharts useMonitoringStore (tsc=0)."
+      ]
+    },
+    {
+      "component": "Holographics",
+      "sector": "UI",
+      "classification": [
+        "FRONTEND-ONLY",
+        "EXPERIMENTAL",
+        "MOCKED"
+      ],
+      "evidence": [
+        "app/holographic/page.tsx L61-239 Math.random particle/physics; jarvis-v10-chambers L117-121/L313 Math.random entanglement/accuracy/loss.",
+        "No backend router /api/v1/holographic — pure client animation.",
+        "MOCKED: simulation data (Math.random) not sourced from any backend truth."
+      ]
+    },
+    {
+      "component": "IDE / Codegen / Sandbox",
+      "sector": "Tools",
+      "classification": [
+        "REAL"
+      ],
+      "evidence": [
+        "codegen.py POST /generate /review /deploy; sandbox.py POST /python (authenticated) -> infrastructure/sandbox/executor.py policy CHECK.",
+        "executor.py L63-67 deny-list (reboot/shutdown/halt/poweroff).",
+        "IDE only exists as an extensions.py entry ('Cursor IDE' L121) — no /api/v1/ide router."
+      ]
+    },
+    {
+      "component": "System Monitoring & Host Control",
+      "sector": "System",
+      "classification": [
+        "REAL",
+        "SECURITY-RISK"
+      ],
+      "evidence": [
+        "REAL: /system/dashboard (read-only platform view L157-244, verified 09:28: services:14, agents{total:4,active:1,...}, providers{ai_enabled:false}); /system/launch LOCKED DOWN: _DENY_COMMANDS L376-380; POST shutdown -> 403 + _audit_system_launch (verified).",
+        "SECURITY-RISK: system.py imports NO get_current_user (L14) -> ENTIRE router UNAUTHENTICATED — /processes/kill, /files/read, /clipboard, /screenshot, /windows, /file-structure, /launch reachable without bearer token.",
+        "SECURITY-RISK: /provider-settings stores openai_api_key/anthropic_api_key/etc PLAINTEXT in misc store (system.py L284-296) — unlike connectors (encrypted) and api_keys (PBKDF2-hashed)."
+      ]
+    },
+    {
+      "component": "Provider Settings storage",
+      "sector": "System/Security",
+      "classification": [
+        "SECURITY-RISK",
+        "REAL"
+      ],
+      "evidence": [
+        "system.py update_provider_settings (L284-296): settings[field]=value; get_store('misc').save() — plaintext in SQLite jarvis_kv.",
+        "Contrast: connectors/registry.py encrypts secrets (crypto.py); core api_keys use PBKDF2. Provider keys are the insecure outlier.",
+        "ProviderApiKeys type (lib/api.ts L327-339) exposes secret-shaped field NAMES to the frontend."
+      ]
+    },
+    {
+      "component": "Security / Vault / Secrets",
+      "sector": "Security",
+      "classification": [
+        "REAL",
+        "PARTIAL"
+      ],
+      "evidence": [
+        "REAL: infrastructure/vault/manager.py SecretsManager.get_or_none (gateway.py L130 brain_api_key — 'never read as raw env var, never persisted, never logged').",
+        "REAL: platform_identity PUT rejects secret-shaped fields (400, verified); connectors encrypt; api_keys PBKDF2 (raw shown once).",
+        "PARTIAL: provider settings plaintext inconsistency; no central policy unifying all secret stores; rate_limiter/security modules exist but wiring into all routers unconfirmed."
+      ]
+    },
+    {
+      "component": "Storage / Persistence (db.py)",
+      "sector": "Persistence",
+      "classification": [
+        "REAL"
+      ],
+      "evidence": [
+        "db.py: SQLAlchemy kv_store table {store_name PK, key PK, value Text}; SQLite default (jarvis_data/jarvis.db), Postgres via DATABASE_URL, in-memory for tests (JARVIS_TEST_MODE).",
+        "Dict collections row-per-key; list collections blob under __root__; ~190 get_store call-sites unchanged (drop-in).",
+        "core.py L116-121 'SQL-backed KV store... Store API preserved verbatim'; L163 STORES dict."
+      ]
+    },
+    {
+      "component": "Knowledge / RAG / Retrieval",
+      "sector": "Memory/Cognition",
+      "classification": [
+        "REAL"
+      ],
+      "evidence": [
+        "knowledge.py CRUD; infrastructure/knowledge/{index,retrieval,rag,store,ingest,context,types,validation,retention,learning,memory_bridge,observability} (11 modules).",
+        "KnowledgeStore typed docs + _notify observers (store.py). search.py cross-store domain index (793) reads 15 stores.",
+        "Browser /page/extract-to-knowledge writes knowledge store (L2911/2932)."
+      ]
+    },
+    {
+      "component": "Memory / Consciousness",
+      "sector": "Cognition",
+      "classification": [
+        "REAL"
+      ],
+      "evidence": [
+        "memory.py /cognitive/memory/store|recall, /consciousness/{report,reflect,focus,goal}, /emotion/analyze, /memory/stats|consolidate, GET /knowledge/search, user profile, context.",
+        "Per-user memory keyed by user_id; KnowledgeStore + _notify. PARTIAL: no in-repo embedding indexer (uses search.browser_semantic_cache)."
+      ]
+    },
+    {
+      "component": "Search (cross-store)",
+      "sector": "Search",
+      "classification": [
+        "REAL"
+      ],
+      "evidence": [
+        "search.py L915-1430: /search/, /domains, /suggest, /history, /explain, /to/{browser,research,knowledge}, /inspect.",
+        "Reads 15 stores; writes search_history. _DOMAIN_INDEX registry (L793).",
+        "Tests: test_search.py, test_search_system.py, test_search_navigation.py."
+      ]
+    },
+    {
+      "component": "Workflows / Automation (n8n)",
+      "sector": "Automation",
+      "classification": [
+        "PARTIAL",
+        "HARDCODED"
+      ],
+      "evidence": [
+        "automation.py: SEED _DEFAULT_WORKFLOWS hardcoded (L49) into misc store; n8n proxy via httpx (L122-178).",
+        "N8N_API_KEY unset -> _n8n_headers empty (confirmed) -> n8n list fails silently.",
+        "/system/dashboard automation={tasks:0,scheduler_running:false,engine:'local'}; scheduler stub (agents.py L207).",
+        "Tests: test_automation_n8n.py."
+      ]
+    },
+    {
+      "component": "Scheduler / Background Workers",
+      "sector": "Automation",
+      "classification": [
+        "STUB",
+        "PARTIAL"
+      ],
+      "evidence": [
+        "agents.py GET /scheduler/status returns hardcoded {running:true,interval:60,next_run:None} (L205-210); no real loop.",
+        "infrastructure/resilience/{retry,circuit_breaker,ai_provider.py} exists (fallback) but no mounted async worker (no Celery/RQ).",
+        "websocket.py handles realtime pushes (registered in main.py L104)."
+      ]
+    },
+    {
+      "component": "AI Core / Provider Gateway",
+      "sector": "AI",
+      "classification": [
+        "REAL",
+        "PARTIAL"
+      ],
+      "evidence": [
+        "gateway.py ProviderGateway multi-tier (Brain/Silverwing/Phase6 fabric/local-rule) with honesty guards (L201-334): raises ChatError(PROVIDER_UNAVAILABLE) instead of fabricating; never echoes local-rule.",
+        "PARTIAL: JARVIS_BRAIN_ENDPOINT unset -> tier1 inactive; silverwing-backend absent -> tier2 mount skipped (/silverwing/health integrated:false); Phase6 fabric (F:/AI/providers) present+importable but no provider keys -> ai_enabled=False.",
+        "Runtime confirms ai_enabled=false (from /system/dashboard + /capabilities)."
+      ]
+    },
+    {
+      "component": "Model Registry / Provider Registry (Phase 6)",
+      "sector": "AI",
+      "classification": [
+        "PARTIAL",
+        "DISCONNECTED",
+        "EXTERNAL"
+      ],
+      "evidence": [
+        "F:/AI/providers (ProviderRouter/ModelRegistry/ModelManager) + F:/AI/backend/model_gateway (ModelGateway) — present on F:/AI sys.path, imported lazily by gateway.py + main._jarvis_startup (L198).",
+        "DISCONNECTED: external package not committed in audited repo; bootstrap_fabric() runs at startup but providers unconfigured (no keys).",
+        "Model matrix: Ollama local (ai_enabled false), Brain remote (endpoint unset), Silverwing (backend dir absent), Phase6 fabric (keys absent) -> all offline/unconfigured."
+      ]
+    },
+    {
+      "component": "Silverwing runtime",
+      "sector": "AI",
+      "classification": [
+        "DISCONNECTED",
+        "EXTERNAL",
+        "BROKEN-INTEGRATION"
+      ],
+      "evidence": [
+        "main.py expects ROOT/silverwing-backend (F:/AI/Jarvis-super-intelligence-/silverwing-backend) — ABSENT -> integrate_silverwing skips mount (warning); /silverwing/health -> integrated:false (verified).",
+        "Real Silverwing source lives at F:/AI/silverwing-runtime/silverwing_120m etc (PATH MISMATCH).",
+        "gateway.py _load_silverwing (L403-409) imports model_provider from non-existent dir -> ImportError -> fall through."
+      ]
+    },
+    {
+      "component": "Frontend API clients (3x)",
+      "sector": "Frontend",
+      "classification": [
+        "PARTIAL",
+        "DUPLICATED"
+      ],
+      "evidence": [
+        "jarvisAPI (lib/api.ts: getSystemDashboard L666, getCapabilities L533, login L1180, Bearer L481), apiClient (api-client.ts: setAuthToken L47, 401-refresh L158), systemApi (features/system/api.ts L10 wraps getCapabilities, used by store.ts L73).",
+        "DUPLICATED: SystemCapability/SystemCapabilities type defined in BOTH src/types.ts:46 and src/features/system/types.ts:84 (`registry?: SystemCapability[]`).",
+        "tsc --noEmit = 0 (types compile, but redundant)."
+      ]
+    },
+    {
+      "component": "Observability",
+      "sector": "Ops",
+      "classification": [
+        "REAL"
+      ],
+      "evidence": [
+        "observability.py install_observability (L409): RequestsIDMiddleware + MetricsMiddleware; ChatError->record_error handler; GATEWAY_EVENT_LOG bounded ring (L266-290); /api/v1/metrics (health.py L75).",
+        "infrastructure/observability/{metrics,tracer,middleware}.py + logsys/structured.py.",
+        "Tests: test_observability, test_phase2_observability, test_metrics, test_health."
+      ]
+    },
+    {
+      "component": "Plugins (infrastructure/plugins)",
+      "sector": "Extensibility",
+      "classification": [
+        "DISCONNECTED",
+        "EXPERIMENTAL",
+        "UNUSED"
+      ],
+      "evidence": [
+        "rg 'from infrastructure.plugins|import plugin|load_plugins|plugin_loader|plugins' jarvis_backend -> NO hits (only extensions.py:1 docstring).",
+        "main.build_app() runs install_observability + setup_routers + integrate_silverwing — NO plugin load step.",
+        "extensions.py manages get_store('extensions') (manifest registry) — a DIFFERENT concept ('extensions' != 'plugins').",
+        "infrastructure/plugins/registry.py, loader.py, lifecycle.py, interfaces/* + test_plugins.py exist but are dead code in the runtime."
+      ]
+    },
+    {
+      "component": "Frontend telemetry fakes (Math.random dashboards)",
+      "sector": "Frontend/Truthfulness",
+      "classification": [
+        "MOCKED",
+        "HARDCODED"
+      ],
+      "evidence": [
+        "jarvis-v10-chambers.tsx L117-121/L313; jarvis-smart-home.tsx:105; analytics-dashboard.tsx L210-221/362-414; holographic/page.tsx L61-239; neural-background.tsx L48-56; cascade-codeviewer.tsx:173-178; real-time-monitoring.tsx L148-184; modern-dashboard-system.tsx L225-228; omega/page.tsx:448 (placeholder); knowledge-hub/page.tsx:491 ('{Math.floor(Math.random()*1000+100)} views'); neural-activity-map.tsx L95-100/207.",
+        "Contrast: dashboard/monitoring/page.tsx:326 comment 'real data, no Math.random'; dashboard/system status — fixed; SystemMonitor.tsx fixed. ~10 other dashboards STILL simulate telemetry."
+      ]
+    },
+    {
+      "component": "Desktop app registry",
+      "sector": "Frontend",
+      "classification": [
+        "HARDCODED",
+        "MOCKED",
+        "FRONTEND-ONLY"
+      ],
+      "evidence": [
+        "DesktopProvider.tsx L111 APP_REGISTRY:Record<string,AppRegistryEntry> — hardcoded client-side app list (system-monitor, agents, browser, chat, cascade-ai, knowledge-graph, file-manager, settings, terminal).",
+        "No backend registry backs it (no /apps router; /system/launch/apps only spawns host apps via /launch).",
+        "Window state (z-index, positions, open/close) kept in client component state only — lost on refresh."
+      ]
+    },
+    {
+      "component": "Frontend auth state (autonomous-state-manager)",
+      "sector": "Frontend",
+      "classification": [
+        "HARDCODED"
+      ],
+      "evidence": [
+        "lib/autonomous-state-manager.ts stateManager.get('backup_registry') backed by browser localStorage (no backend persistence).",
+        "authStore/apiClient store token/refresh-token in localStorage (not HttpOnly cookie)."
+      ]
+    },
+    {
+      "component": "Websockets",
+      "sector": "Realtime",
+      "classification": [
+        "REAL",
+        "PARTIAL"
+      ],
+      "evidence": [
+        "websocket.py /ws + /ws (GET/POST) + ConnectionManager (L23); registered in main.py L104.",
+        "PARTIAL: no typed event schema published; no frontend WS consumer confirmed beyond system-status page; no fallback when WS unavailable."
+      ]
+    },
+    {
+      "component": "Extensions marketplace",
+      "sector": "Extensibility",
+      "classification": [
+        "REAL",
+        "PARTIAL"
+      ],
+      "evidence": [
+        "extensions.py: install/launch/connect/invoke + oauth callback; static manifest of ~12 extensions (Cursor IDE, Docker, Analytics, Monitoring, Copilot, etc.).",
+        "PARTIAL: manifests are static (not dynamically fetched); 'invoke' is a thin dispatch to stark/browser/connector; no real install lifecycle (no package fetch/execution)."
+      ]
+    },
+    {
+      "component": "Health / Diagnostics",
+      "sector": "Ops",
+      "classification": [
+        "REAL",
+        "PARTIAL"
+      ],
+      "evidence": [
+        "health.py: /health (200), /api/v1/health/status (sessions+memory snapshot, L75-86), /api/v1/metrics; monitoring.py health-report/optimization/ diagnostics/recovery; misc.py tier4; network_diagnostics.py.",
+        "PARTIAL: /health is a trivial 200 (no dependency probes); no deep dependency graph health; network_diagnostics present but not surfaced in dashboard."
+      ]
+    },
+    {
+      "component": "Legacy API",
+      "sector": "API",
+      "classification": [
+        "REAL",
+        "DEPRECATED"
+      ],
+      "evidence": [
+        "legacy.py: /api/chat (sync + stream), notes/reminders CRUD, /api/browser/* control.",
+        "DEPRECATED: superseded by /api/v1/* routers; kept for backward compat. rg confirms get_current_user import present (L13)."
+      ]
+    },
+    {
+      "component": "Configuration loading",
+      "sector": "Config",
+      "classification": [
+        "REAL"
+      ],
+      "evidence": [
+        "main.py L28-46 _env.apply + load_dotenv(F:/AI/.env); db.py L75-99 env priority (DATABASE_URL/JARVIS_DB_PATH/JARVIS_TEST_MODE/sqlite).",
+        "infrastructure/config/settings.py + loader.py; F:/AI/_env.py sets SILVERWING_*/JARVIS_BRAIN_*.",
+        "frontend env.ts L1 (NEXT_PUBLIC_API_URL); .env.local/.env.example. F:/AI/.env has NO NEXT_PUBLIC_API_URL/JARVIS_APP_URL (confirmed rg)."
+      ]
+    }
+  ],
+  "summary_counts_by_primary_tag": {
+    "BROKEN-INTEGRATION": 1,
+    "DEPRECATED": 1,
+    "DISCONNECTED": 4,
+    "DUPLICATED": 2,
+    "EXPERIMENTAL": 2,
+    "EXTERNAL": 2,
+    "FRONTEND-ONLY": 3,
+    "HARDCODED": 4,
+    "MOCKED": 3,
+    "PARTIAL": 13,
+    "REAL": 22,
+    "SECURITY-RISK": 2,
+    "STUB": 1,
+    "UNUSED": 1
+  }
+}

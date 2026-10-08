@@ -1,0 +1,151 @@
+{
+  "artifact": "upgrade-recommendations",
+  "generated_by": "JARVIS Platform X-Ray - upgrade sequencing",
+  "method": "Prioritization derived strictly from findings in the 9 emitted audit JSONs (security-map, truthfulness-report, registry-map, ai-execution-map, frontend-architecture-map, sector-state-classification, integration-map). No invention.",
+  "sequencing_rule": "Order = (1) security-critical that changes attacker surface, (2) secrets/credential hygiene, (3) network trust/pinning, (4) authz completeness, (5) frontend duplication/truth, (6) simulated-data removal, (7) enabling the dormant AI stack behind existing honesty guards, (8) dead-registry cleanup, (9) scheduling. Each item lists concrete evidence + exact files.",
+  "first_upgrade_sequence": [
+    {
+      "priority": 1,
+      "id": "SEC-1",
+      "title": "Gate system.py host-management endpoints behind authentication + admin",
+      "evidence": "security-map: system.py is UNAUTHENTICATED; imports only ROOT,ai_service,get_store,now_iso (no get_current_user). /system/launch (403 deny-list verified live), /provider-settings (plaintext, 284-296), /processes (psutil), /files, /screenshot, /clipboard, /windows, /dashboard all reachable without a token.",
+      "action": "Add get_current_user dependency + _require_admin to /launch, /provider-settings, /processes, /files, /screenshot, /clipboard, /windows. /dashboard may stay public (read-only platform metadata) but should be rate-limited.",
+      "files": [
+        "jarvis_backend/routers/system.py"
+      ],
+      "runtime_blockers": 0,
+      "risk": "Low - adds a gate; /system/dashboard stays live (already verified 200). /launch already deny-lists destructive cmds; this just adds identity."
+    },
+    {
+      "priority": 2,
+      "id": "SEC-2",
+      "title": "Stop plaintext provider settings + remove secret-shape leakage from frontend",
+      "evidence": "security-map credential_flow.provider_settings_plaintext (system.py L284-296 writes openai_api_key etc. unencrypted into misc KV); truthfulness-report frontend_secret_shape_exposure (lib/api.ts L327-339 ProviderApiKeys enum; dashboard/settings/page.tsx placeholders expose sk-...,AKIA...,tvly_... shapes).",
+      "action": "Migrate provider settings to the existing Fernet scheme (connectors/crypto.py) used by the Connector Registry; delete the ProviderApiKeys secret-field-name enum from lib/api.ts; replace settings placeholders with masked, typed fields (no secret shapes).",
+      "files": [
+        "jarvis_backend/routers/system.py",
+        "jarvis_backend/connectors/crypto.py",
+        "frontend/web/src/lib/api.ts",
+        "frontend/web/src/app/dashboard/settings/page.tsx"
+      ],
+      "runtime_blockers": "ProviderGateway honesty guards expect keys via secrets-manager; reconcile after encryption migration.",
+      "risk": "Medium - changes how provider keys are stored; backend restart required."
+    },
+    {
+      "priority": 3,
+      "id": "NET-1",
+      "title": "Pin localhost -> 127.0.0.1 in self-callbacks + CORS allowlist",
+      "evidence": "security-map ipv6_localhost_self_callback: system.py:38, connectors/oauth.py:202-203, extensions.py:596 & 922, connectors.py:270, core.py:593 (ollama localhost), core.py:677 CORS [localhost:3000/5173/5003].",
+      "action": "Replace http://localhost:3000 with http://127.0.0.1:3000 in self-callbacks; pin CORS allowlist to 127.0.0.1 + explicit origins; pin OLLAMA base to 127.0.0.1:11434.",
+      "files": [
+        "jarvis_backend/routers/system.py",
+        "jarvis_backend/connectors/oauth.py",
+        "jarvis_backend/routers/extensions.py",
+        "jarvis_backend/routers/connectors.py",
+        "jarvis_backend/core.py"
+      ],
+      "risk": "Low - loopback pinning; verify OAuth redirect still matches registered callback."
+    },
+    {
+      "priority": 4,
+      "id": "AUTHZ-1",
+      "title": "Close RBAC object-level gap + clamp pagination",
+      "evidence": "security-map rbac_object_level_gap: /rbac/users unbounded page param (no upper clamp) -> resource-exhaustion; no per-resource ownership/row-level authz.",
+      "action": "Clamp per_page (1-200); add resource-owner authorization filter; audit-log every RBAC read.",
+      "files": [
+        "jarvis_backend/routers/rbac.py"
+      ],
+      "risk": "Low - additive clamping + filter."
+    },
+    {
+      "priority": 5,
+      "id": "FE-1",
+      "title": "Collapse frontend 3-way client duplication + 4 duplicated stores + duplicate websocket hooks + duplicated SystemCapability type",
+      "evidence": "frontend-architecture-map: jarvisAPI (lib/api.ts) + apiClient (lib/api-client.ts) + systemApi (features/system/api.ts, thin facade over apiClient); 4 hook names (useSystemStore/useMonitoringStore/useChatStore/useAuthStore) exported from BOTH src/stores/* AND src/features/*/store.ts; duplicated websocket modules lib/websocket.ts vs hooks/useWebSocket.ts; SystemCapability duplicated types.ts:26 + features/system/types.ts:64.",
+      "action": "Pick ONE canonical client (lib/api.ts jarvisAPI), migrate all features/*api.ts facades to it, delete src/stores/* duplicate (keep features/*/store.ts), delete lib/websocket.ts (keep hooks/useWebSocket.ts), merge SystemCapability into a single types module.",
+      "files": [
+        "frontend/web/src/lib/api.ts",
+        "frontend/web/src/lib/api-client.ts",
+        "frontend/web/src/features/*/api.ts",
+        "frontend/web/src/stores/*",
+        "frontend/web/src/lib/websocket.ts",
+        "frontend/web/src/hooks/useWebSocket.ts",
+        "frontend/web/src/types.ts",
+        "frontend/web/src/features/system/types.ts"
+      ],
+      "risk": "High - touches ~20+ UI files; do behind feature flag; verify tsc --noEmit = 0 and SystemMonitor still fetches live CAPABILITIES/PLATFORM."
+    },
+    {
+      "priority": 6,
+      "id": "FE-2",
+      "title": "Migrate ~10 Math.random simulated dashboards to real backend endpoints",
+      "evidence": "truthfulness-report math_random_simulated_data (jarvis-v10-chambers, jarvis-smart-home, analytics-dashboard, supreme, holographic, neural-background, cascade-codeviewer, real-time-monitoring, modern-dashboard-system, omega, knowledge-hub:491, neural-activity-map) - 10 dashboards simulate telemetry.",
+      "action": "Route each simulated widget to /system/dashboard telemetry OR /api/v1/monitoring/metrics; remove Math.random; delete autonomous-state-manager backup_registry stub or persist to backend.",
+      "files": [
+        "frontend/web/src/app/dashboard/*",
+        "frontend/web/src/lib/autonomous-state-manager.ts"
+      ],
+      "risk": "Medium - depends on backend telemetry completeness for each metric."
+    },
+    {
+      "priority": 7,
+      "id": "AI-1",
+      "title": "Configure provider credentials so the dormant AI stack engages behind honesty guards",
+      "evidence": "ai-execution-map: ai_enabled=False, 0 providers configured, 4 tiers reach-able only in code, 5 honesty guards REAL but dormant. core.py ai_service.enabled False.",
+      "action": "After SEC-2 (encryption), set provider keys via the secured store (Phase 6 keys in F:/AI/providers OR JARVIS_BRAIN_ENDPOINT + brain_api_key via secrets-manager) so ai_enabled becomes True and a REAL tier (T2/T3/T4) serves behind the honesty guards. Do NOT bypass honesty guards.",
+      "files": [
+        "jarvis_backend/core.py",
+        "jarvis_backend/gateway.py",
+        ".env"
+      ],
+      "risk": "High - changes runtime AI behavior; requires a live provider key + restart; verify honesty guard still raises on local-rule/empty."
+    },
+    {
+      "priority": 8,
+      "id": "INT-1",
+      "title": "Resolve Silverwing backend path mismatch",
+      "evidence": "integration-map/AI-execution: main.py L87 expects ROOT/silverwing-backend; gateway.py L50 expects <jarvis_backend>/silverwing-backend; real Silverwing source at F:/AI root dirs (silverwing, silverwing-runtime, silverwing_120m...). /silverwing/health integrated:false.",
+      "action": "Point main.py + gateway.py at the real Silverwing root (or relocate silverwing-backend), then re-enable integrate_silverwing() mount; verify /silverwing/health integrated:true.",
+      "files": [
+        "jarvis_backend/main.py",
+        "jarvis_backend/gateway.py"
+      ],
+      "risk": "Medium - integration surface; verify backend restart (no --reload)."
+    },
+    {
+      "priority": 9,
+      "id": "REG-1",
+      "title": "Retire or wire orphaned / dead registries; begin capability unification",
+      "evidence": "registry-map dead_registries: Device Registry (absent), Plugin Registry (disconnected), APP_REGISTRY (hardcoded frontend-only); convergence #1 'Agent vs Provider vs Capability vs Tool registries are separate and disconnected' (4 distinct, non-converging); convergence #3 four capability notions (system._CAPABILITIES, agents.capabilities, connector ActionSpec capabilities, rbac permissions).",
+      "action": "Either wire Plugin Registry via main.build_app() or delete infrastructure/plugins; make APP_REGISTRY driven by a backend source; establish a single capabilities concept (extend system._CAPABILITIES provenance to be the canonical registry that agents/connectors/rbac reference).",
+      "files": [
+        "jarvis_backend/main.py",
+        "frontend/web/src/components/desktop/DesktopProvider.tsx",
+        "infrastructure/plugins/registry.py",
+        "jarvis_backend/routers/system.py",
+        "jarvis_backend/routers/agents.py",
+        "jarvis_backend/connectors/registry.py",
+        "jarvis_backend/routers/rbac.py"
+      ],
+      "risk": "Medium - touches registry semantics across 4 components."
+    },
+    {
+      "priority": 10,
+      "id": "SCHED-1",
+      "title": "Replace scheduler stub + complete n8n wiring",
+      "evidence": "agents.py:207 {running:true,interval:60,next_run:None} stub; automation._n8n_headers() empty when N8N_API_KEY unset; system.py /system/dashboard automation.scheduler_running=False.",
+      "action": "Implement a real scheduler (replace stub) and gate automation.py n8n behind N8N_API_KEY presence; surface scheduler_running truthfully in /system/dashboard.",
+      "files": [
+        "jarvis_backend/routers/agents.py",
+        "jarvis_backend/routers/automation.py",
+        "jarvis_backend/routers/system.py"
+      ],
+      "risk": "Medium - adds a background worker path."
+    }
+  ],
+  "non_goals": [
+    "Discovery only - do NOT implement items during this audit phase (per constraints).",
+    "No new features invented; every recommendation is traceable to an emitted finding.",
+    "No production file edits in this phase except .jarvis/ diagnostic artifacts."
+  ]
+}

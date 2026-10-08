@@ -1,0 +1,30 @@
+{
+  "id": "videlisndichi/jarvis-brain-v1-qwen3-4b-lora-qlora-sft",
+  "title": "JARVIS Brain v1 - Qwen3-4B LoRA/QLoRA SFT",
+  "code_file": "jarvis_brain_sft.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_interactive": false,
+  "enable_gpu": true,
+  "internet": true,
+  "requirements": "pip",
+  "requirements_txt": "torch==2.4.1+cu121\ntransformers>=4.46\nsafetensors\npeft>=0.12.0\nbitsandbytes\nhttpx\nhuggingface_hub\ntqdm\n",
+  "dataset_sources": [
+    "ndichiv/jarvis-brain-v1-sources"
+  ],
+  "kernel_sources": [
+    "ndichiv/qwen-tokenizer"
+  ],
+  "competition_sources": [],
+  "output_dir": "jarvis-brain-qwen3-4b-sft-v1",
+  "description": "\u00c2\u00a710\u2212\u00c2\u00a716: frozen Qwen3-4B-Base (HF, on Kaggle only) + PEFT LoRA/QLoRA (QLoRA 4-bit NF4 by default). Teacher-LM (JARVIS Brain) synthesis with extractive-seed fallback. Pilot-first (S12), generation smoke, r2000 eval, capability gate (S16). Never stores Qwen weights under F:\\AI.",
+  "refactor_when": "manual",
+  "enable_tensorflow": false,
+  "enable_torch_py": true,
+  "kernel_secrets": [
+    "JARVIS_BRAIN_ENDPOINT",
+    "JARVIS_BRAIN_API_KEY",
+    "JARVIS_BRAIN_MODEL",
+    "JARVIS_HF_TOKEN"
+  ]
+}

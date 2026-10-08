@@ -1,0 +1,50 @@
+{
+  "model_id": "jarvis-brain-qwen3-4b",
+  "version": "v1",
+  "revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+  "architecture": "Qwen3ForCausalLM",
+  "parameter_count": 4004667392,
+  "context_length": 40960,
+  "vocab_size": 151936,
+  "tokenizer": {
+    "version": "qwen3-tokenizer",
+    "type": "bpe",
+    "vocab_size": 151936,
+    "sha256": "AEB13307A71ACD8FE81861D94AD54AB689DF773318809EED3CBE794B4492DAE4"
+  },
+  "weights": {
+    "format": "remote-safetensors-sharded-hf",
+    "sha256": "6DC0981B8829FEAD746441F68F38F24C5CA4A3A66351F652C26C6DF0EFC43AB2",
+    "size_bytes": null,
+    "config_sha256": "8BA006F74FECFAAEB392872A60F4A480E7EC9860153D2E1B769EC81F9A147F8A",
+    "storage_uri": "hf://Qwen/Qwen3-4B"
+  },
+  "capabilities": [
+    "text-generation",
+    "chat",
+    "reasoning",
+    "coding",
+    "math",
+    "long-context",
+    "tool-use"
+  ],
+  "status": "experimental",
+  "created_at": "2026-09-15T00:00:00Z",
+  "archive_note": "Weights NOT stored in the JARVIS repository. Durable source is Hugging Face (Qwen/Qwen3-4B) at pinned revision. Served on remote Kaggle GPU via JARVIS_BRAIN_ENDPOINT.",
+  "evaluation": {
+    "license": "apache-2.0",
+    "source": "huggingface.co/Qwen/Qwen3-4B",
+    "verified_files": {
+      "config.json": "8BA006F74FECFAAEB392872A60F4A480E7EC9860153D2E1B769EC81F9A147F8A",
+      "generation_config.json": "2325DA0F15BB848E018C5AE071B7943332E9F871D6B60E2ED22CA97D4CB993D2",
+      "tokenizer_config.json": "D5D09F07B48C3086C508B30D1C9114BD1189145B74E982A265350C923ACD8101",
+      "model.safetensors.index.json": "6DC0981B8829FEAD746441F68F38F24C5CA4A3A66351F652C26C6DF0EFC43AB2",
+      "tokenizer.json": "AEB13307A71ACD8FE81861D94AD54AB689DF773318809EED3CBE794B4492DAE4",
+      "vocab.json": "CA10D7E9FB3ED18575DD1E277A2579C16D108E32F27439684AFA0E10B1440910",
+      "merges.txt": "8831E4F1A044471340F7C0A83D7BD71306A5B867E95FD870F74D0C5308A904D5"
+    },
+    "baseline": "pending — run kaggle_kernel/jarvis_brain_qwen3_4b.ipynb section 7 before promotion",
+    "training": "none yet (frozen base, LoRA planned)",
+    "local_inference_feasibility": "NOT feasible on JARVIS PC (7.9 GB RAM, no GPU) — remote GPU required"
+  }
+}

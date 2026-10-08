@@ -1,0 +1,110 @@
+361|  extraction_latency_ms?: number | null;
+362|  ai_latency_ms?: number | null;
+363|  provider?: string | null;
+364|  model?: string | null;
+365|  tokens?: number | null;
+366|  cost?: number | null;
+367|  downloads: number;
+368|  errors: number;
+369|  security_blocks: number;
+370|  automation_actions: number;
+371|}
+372|
+373|// ---------------------------------------------------------------------------
+374|// Source Graph (spec §36)
+375|// ---------------------------------------------------------------------------
+376|
+377|export interface SourceGraph {
+378|  id: string;
+379|  session_id: string;
+380|  claim: string;
+381|  sources: Array<Record<string, unknown>>;
+382|  evidence: Array<Record<string, unknown>>;
+383|  connections: Array<{ source_a: string; source_b: string; type: string; agreement: boolean | null }>;
+384|  created_at: string;
+385|}
+386|
+387|// ---------------------------------------------------------------------------
+388|// Timeline (spec §37) — distinct from telemetry entries
+389|// ---------------------------------------------------------------------------
+390|
+391|export interface TimelineEntry {
+392|  id: string;
+393|  timestamp: string;
+394|  epoch: number;
+395|  session_id: string;
+396|  action: string;
+397|  detail: string;
+398|  url: string;
+399|  user_id: string;
+400|}
+401|
+402|// ---------------------------------------------------------------------------
+403|// Model Routing (spec §9, §44)
+404|// ---------------------------------------------------------------------------
+405|
+406|export interface ModelRoute {
+407|  task_type: string;
+408|  capability: string;
+409|  model_type: string;
+410|  privacy_mode: string;
+411|  routing_policy: {
+412|    provider: string;
+413|    model: string;
+414|    reason?: string;
+415|    cost?: number;
+416|    cost_estimate?: string;
+417|    fallback?: string;
+418|    latency_target?: string;
+419|    [key: string]: unknown;
+420|  };
+421|}
+422|
+423|// ---------------------------------------------------------------------------
+424|// Remote Browser (spec §40)
+425|// ---------------------------------------------------------------------------
+426|
+427|export interface RemoteBrowserStatus {
+428|  remote_browser_enabled: boolean;
+429|  remote_browser_url: string;
+430|  api_key_configured: boolean;
+431|  local_browsing_available: boolean;
+432|  routing_policy: {
+433|    mode: 'local' | 'remote';
+434|    reason: string;
+435|  };
+436|}
+437|
+438|export interface RemoteBrowserSession {
+439|  session_id: string;
+440|  remote: boolean;
+441|  status: string;
+442|  worker_url: string;
+443|}
+444|
+445|// ---------------------------------------------------------------------------
+446|// Browser Identity Indicator (spec §19)
+447|// ---------------------------------------------------------------------------
+448|
+449|export interface AuthProviderInfo {
+450|  provider: string;
+451|  account: string;
+452|  connected_at: string;
+453|  connected_by: string;
+454|}
+455|
+456|export interface AuthState {
+457|  authenticated_providers: AuthProviderInfo[];
+458|  active_authenticated_session: BrowserSession | null;
+459|  note: string;
+460|}
+461|
+462|// ---------------------------------------------------------------------------
+463|// High-Risk DOM Detection (spec §23)
+464|// ---------------------------------------------------------------------------
+465|
+466|export interface HighRiskDomMatch {
+467|  type: string;
+468|  snippet: string;
+469|}
+470|

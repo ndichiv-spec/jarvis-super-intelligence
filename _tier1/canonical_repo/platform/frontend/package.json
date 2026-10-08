@@ -1,0 +1,13 @@
+{
+  "name": "jarvis-app",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix web run build && python scripts/backend_build.py",
+    "build:web": "npm --prefix web run build",
+    "build:backend": "python scripts/backend_build.py",
+    "backend:build": "python scripts/backend_build.py",
+    "backend:start": "python run_backend.py",
+    "start:backend": "python run_backend.py",
+    "start:web": "npm --prefix web run start"
+  }
+}

@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JARVIS - Advanced AI System</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0a0a1a 0%, #1a1a3a 50%, #0a0a2a 100%);
+            color: #e0e0ff;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .container {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 280px;
+            background: linear-gradient(180deg, #1a1a3a 0%, #0d0d2a 100%);
+            border-right: 1px solid #3a3a6a;
+            padding: 20px 0;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+            z-index: 1000;
+        }
+
+        .logo {
+            text-align: center;
+            padding: 20px;
+            border-bottom: 1px solid #3a3a6a;
+            margin-bottom: 20px;
+        }
+
+        .logo h1 {
+            font-size: 24px;
+            background: linear-gradient(135deg, #00d4ff, #7b2cbf);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+
+        .logo .subtitle {
+            font-size: 12px;
+            color: #8888aa;
+            margin-top: 5px;
+        }
+
+        .nav-section {
+            padding: 10px 20px;
+            border-bottom: 1px solid #2a2a5a;
+        }
+
+        .nav-section-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: #666688;
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            padding: 12px 15px;
+            color: #a0a0c0;
+            text-decoration: none;
+            border-radius: 8px;
+            margin-bottom: 5px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .nav-link:hover {
+            background: rgba(0, 212, 255, 0.1);
+            color: #00d4ff;
+            transform: translateX(5px);
+        }
+
+        .nav-link.active {
+            background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(123, 44, 191, 0.2));
+            color: #00d4ff;
+            border: 1px solid rgba(0, 212, 255, 0.3);
+        }
+
+        .nav-link i {
+            width: 25px;
+            margin-right: 10px;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            margin-left: 280px;
+            padding: 30px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .header h2 {
+            font-size: 32px;
+            background: linear-gradient(135deg, #00d4ff, #7b2cbf);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .system-status {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .status-badge {
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .status-online {
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+            border: 1px solid #00ff88;
+        }
+
+        .tier-badge {
+            background: linear-gradient(135deg, rgba(123, 44, 191, 0.3), rgba(0, 212, 255, 0.3));
+            color: #00d4ff;
+            border: 1px solid #7b2cbf;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        /* Content Sections */
+        .content-section {
+            display: none;
+            animation: fadeIn 0.5s ease;
+        }
+
+        .content-section.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Dashboard Grid */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: linear-gradient(135deg, rgba(26, 26, 58, 0.8), rgba(13, 13, 42, 0.8));
+            border: 1px solid #3a3a6a;
+            border-radius: 15px;
+            padding: 25px;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            border-color: #00d4ff;
+            box-shadow: 0 10px 40px rgba(0, 212, 255, 0.2);
+        }
+
+        .card h3 {
+            font-size: 18px;
+            color: #00d4ff;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card h3 i {
+            font-size: 20px;
+        }
+
+        /* Metric Cards */
+        .metric-card {
+            text-align: center;
+            padding: 30px 20px;
+        }
+
+        .metric-value {
+            font-size: 48px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #00d4ff, #7b2cbf);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 10px 0;
+        }
+
+        .metric-label {
+            color: #8888aa;
+            font-size: 14px;
+        }
+
+        .metric-change {
+            font-size: 12px;
+            margin-top: 5px;
+        }
+
+        .metric-change.positive {
+            color: #00ff88;
+        }
+
+        .metric-change.negative {
+            color: #ff4444;
+        }
+
+        /* Capability Cards */
+        .capability-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .capability-card {
+            background: linear-gradient(135deg, rgba(123, 44, 191, 0.1), rgba(0, 212, 255, 0.1));
+            border: 1px solid #3a3a6a;
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .capability-card:hover {
+            border-color: #7b2cbf;
+            transform: scale(1.02);
+        }
+
+        .capability-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .capability-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .capability-icon.tier8 {
+            background: linear-gradient(135deg, #7b2cbf, #9d4edd);
+        }
+
+        .capability-icon.tier9 {
+            background: linear-gradient(135deg, #00d4ff, #00a8cc);
+        }
+
+        .capability-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #e0e0ff;
+        }
+
+        .capability-status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 11px;
+            margin-left: auto;
+        }
+
+        .capability-status.active {
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+        }
+
+        .capability-description {
+            color: #a0a0c0;
+            font-size: 13px;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+
+        .capability-metrics {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .capability-metric {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+        }
+
+        .capability-metric span {
+            color: #00d4ff;
+            font-weight: 600;
+        }
+
+        /* Charts */
+        .chart-container {
+            height: 300px;
+            position: relative;
+        }
+
+        /* Progress Bars */
+        .progress-bar {
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 1s ease;
+        }
+
+        .progress-fill.tier8 {
+            background: linear-gradient(90deg, #7b2cbf, #9d4edd);
+        }
+
+        .progress-fill.tier9 {
+            background: linear-gradient(90deg, #00d4ff, #00a8cc);
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #7b2cbf, #9d4edd);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(123, 44, 191, 0.4);
+        }
+
+        .btn-secondary {
+            background: rgba(0, 212, 255, 0.2);
+            color: #00d4ff;
+            border: 1px solid #00d4ff;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(0, 212, 255, 0.3);
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, rgba(26, 26, 58, 0.8), rgba(13, 13, 42, 0.8));
+            border: 1px solid #3a3a6a;
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .stat-card h4 {
+            color: #8888aa;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+
+        .stat-card .value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #e0e0ff;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0a0a1a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #3a3a6a;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4a4a7a;
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 100%;
+                height: auto;
+                position: relative;
+            }
+
+            .main-content {
+                margin-left: 0;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="logo">
+                <h1>JARVIS</h1>
+                <div class="subtitle">Advanced AI System</div>
+            </div>
+
+            <div class="nav-section">
+                <div class="nav-section-title">Main</div>
+                <a href="#overview" class="nav-link active" data-section="overview">
+                    <i class="fas fa-home"></i> Overview
+                </a>
+                <a href="#realtime" class="nav-link" data-section="realtime">
+                    <i class="fas fa-chart-line"></i> Real-Time
+                </a>
+            </div>
+
+            <div class="nav-section">
+                <div class="nav-section-title">Tier 8: Strategic Advantage</div>
+                <a href="#proprietary" class="nav-link" data-section="proprietary">
+                    <i class="fas fa-brain"></i> Proprietary AI
+                </a>
+                <a href="#marketplace" class="nav-link" data-section="marketplace">
+                    <i class="fas fa-store"></i> Agent Marketplace
+                </a>
+                <a href="#governance" class="nav-link" data-section="governance">
+                    <i class="fas fa-shield-alt"></i> Governance
+                </a>
+                <a href="#security" class="nav-link" data-section="security">
+                    <i class="fas fa-lock"></i> Security
+                </a>
+                <a href="#research" class="nav-link" data-section="research">
+                    <i class="fas fa-flask"></i> Research
+                </a>
+                <a href="#infrastructure" class="nav-link" data-section="infrastructure">
+                    <i class="fas fa-globe"></i> Infrastructure
+                </a>
+                <a href="#intelligence" class="nav-link" data-section="intelligence">
+                    <i class="fas fa-chart-pie"></i> Business Intelligence
+                </a>
+                <a href="#education" class="nav-link" data-section="education">
+                    <i class="fas fa-graduation-cap"></i> Education
+                </a>
+            </div>
+
+            <div class="nav-section">
+                <div class="nav-section-title">Tier 9: Emerging Tech</div>
+                <a href="#neuromorphic" class="nav-link" data-section="neuromorphic">
+                    <i class="fas fa-microchip"></i> Neuromorphic
+                </a>
+                <a href="#photonic" class="nav-link" data-section="photonic">
+                    <i class="fas fa-lightbulb"></i> Photonic
+                </a>
+                <a href="#quantum" class="nav-link" data-section="quantum">
+                    <i class="fas fa-atom"></i> Quantum ML
+                </a>
+                <a href="#cryogenic" class="nav-link" data-section="cryogenic">
+                    <i class="fas fa-snowflake"></i> Cryogenic
+                </a>
+                <a href="#dna" class="nav-link" data-section="dna">
+                    <i class="fas fa-dna"></i> DNA Computing
+                </a>
+                <a href="#biological" class="nav-link" data-section="biological">
+                    <i class="fas fa-heartbeat"></i> Biological AI
+                </a>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="header">
+                <h2>System Overview</h2>
+                <div class="system-status">
+                    <span class="status-badge status-online">
+                        <i class="fas fa-circle"></i> Online
+                    </span>
+                    <span class="tier-badge">
+                        <i class="fas fa-crown"></i> Tier 8 & 9 Active
+                    </span>
+                </div>
+            </div>
+
+            <!-- Overview Section -->
+            <section id="overview" class="content-section active">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h4>Total Capabilities</h4>
+                        <div class="value">14</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Tier 8 Systems</h4>
+                        <div class="value">8</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Tier 9 Systems</h4>
+                        <div class="value">6</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>System Uptime</h4>
+                        <div class="value">99.9%</div>
+                    </div>
+                </div>
+
+                <div class="dashboard-grid">
+                    <div class="card">
+                        <h3><i class="fas fa-chart-line"></i> System Performance</h3>
+                        <div class="chart-container">
+                            <canvas id="performanceChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3><i class="fas fa-tasks"></i> Capability Status</h3>
+                        <div style="margin-top: 20px;">
+                            <div style="margin-bottom: 15px;">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                    <span>Tier 8 Strategic Advantage</span>
+                                    <span>100%</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill tier8" style="width: 100%"></div>
+                                </div>
+                            </div>
+                            <div style="margin-bottom: 15px;">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                    <span>Tier 9 Emerging Technologies</span>
+                                    <span>100%</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill tier9" style="width: 100%"></div>
+                                </div>
+                            </div>
+                            <div style="margin-bottom: 15px;">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                    <span>Integration Engine</span>
+                                    <span>100%</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill tier8" style="width: 100%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3><i class="fas fa-rocket"></i> Competitive Advantages</h3>
+                    <div class="capability-grid" style="margin-top: 20px;">
+                        <div class="capability-card">
+                            <div class="capability-header">
+                                <div class="capability-icon tier8">
+                                    <i class="fas fa-brain"></i>
+                                </div>
+                                <div>
+                                    <div class="capability-title">Proprietary Architecture</div>
+                                    <span class="capability-status active">Active</span>
+                                </div>
+                            </div>
+                            <div class="capability-description">
+                                Unique neural architecture with quantum-classical hybrid processing and swarm coordination
+                            </div>
+                            <div class="capability-metrics">
+                                <div class="capability-metric"><span>0.61</span> Advantage Score</div>
+                                <div class="capability-metric"><span>EXTREME</span> Replication Difficulty</div>
+                            </div>
+                        </div>
+
+                        <div class="capability-card">
+                            <div class="capability-header">
+                                <div class="capability-icon tier9">
+                                    <i class="fas fa-lightbulb"></i>
+                                </div>
+                                <div>
+                                    <div class="capability-title">Photonic Computing</div>
+                                    <span class="capability-status active">Active</span>
+                                </div>
+                            </div>
+                            <div class="capability-description">
+                                Speed of light processing with optical neural networks and quantum photonics
+                            </div>
+                            <div class="capability-metrics">
+                                <div class="capability-metric"><span>120</span> GOPS</div>
+                                <div class="capability-metric"><span>27</span> THz Bandwidth</div>
+                            </div>
+                        </div>
+
+                        <div class="capability-card">
+                            <div class="capability-header">
+                                <div class="capability-icon tier9">
+                                    <i class="fas fa-atom"></i>
+                                </div>
+                                <div>
+                                    <div class="capability-title">Quantum Machine Learning</div>
+                                    <span class="capability-status active">Active</span>
+                                </div>
+                            </div>
+                            <div class="capability-description">
+                                Full quantum-native machine learning with quantum neural networks and optimization
+                            </div>
+                            <div class="capability-metrics">
+                                <div class="capability-metric"><span>10.8x</span> Quantum Advantage</div>
+                                <div class="capability-metric"><span>1024</span> Quantum Features</div>
+                            </div>
+                        </div>
+
+                        <div class="capability-card">
+                            <div class="capability-header">
+                                <div class="capability-icon tier9">
+                                    <i class="fas fa-dna"></i>
+                                </div>
+                                <div>
+                                    <div class="capability-title">DNA Computing</div>
+                                    <span class="capability-status active">Active</span>
+                                </div>
+                            </div>
+                            <div class="capability-description">
+                                Massive parallelism through molecular computing with trillions of operations
+                            </div>
+                            <div class="capability-metrics">
+                                <div class="capability-metric"><span>12.0</span> Parallelism</div>
+                                <div class="capability-metric"><span>21.5K</span> PB/g Storage</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tier 8 Sections -->
+            <section id="proprietary" class="content-section">
+                <div class="header">
+                    <h2>Proprietary AI Architecture</h2>
+                    <span class="tier-badge">Tier 8</span>
+                </div>
+                <div class="dashboard-grid">
+                    <div class="card metric-card">
+                        <div class="metric-value">0.61</div>
+                        <div class="metric-label">Competitive Advantage Score</div>
+                        <div class="metric-change positive"><i class="fas fa-arrow-up"></i> +15% this month</div>
+                    </div>
+                    <div class="card metric-card">
+                        <div class="metric-value">EXTREME</div>
+                        <div class="metric-label">Replication Difficulty</div>
+                        <div class="metric-change">5-10 year lead</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Architecture Components</h3>
+                    <div class="capability-grid" style="margin-top: 20px;">
+                        <div class="capability-card">
+                            <div class="capability-title">Jarvis Neural Core</div>
+                            <div class="capability-description">Proprietary neural optimization with adaptive architecture</div>
+                        </div>
+                        <div class="capability-card">
+                            <div class="capability-title">Quantum-Classical Bridge</div>
+                            <div class="capability-description">Hybrid processing combining quantum and classical systems</div>
+                        </div>
+                        <div class="capability-card">
+                            <div class="capability-title">Adaptive Intelligence</div>
+                            <div class="capability-description">Self-modifying architecture for continuous optimization</div>
+                        </div>
+                        <div class="capability-card">
+                            <div class="capability-title">Swarm Coordination</div>
+                            <div class="capability-description">Proprietary swarm algorithms for distributed intelligence</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tier 9 Sections -->
+            <section id="neuromorphic" class="content-section">
+                <div class="header">
+                    <h2>Neuromorphic Computing</h2>
+                    <span class="tier-badge">Tier 9</span>
+                </div>
+                <div class="dashboard-grid">
+                    <div class="card metric-card">
+                        <div class="metric-value">50</div>
+                        <div class="metric-label">Neurons</div>
+                    </div>
+                    <div class="card metric-card">
+                        <div class="metric-value">250</div>
+                        <div class="metric-label">Synapses</div>
+                    </div>
+                    <div class="card metric-card">
+                        <div class="metric-value">1000x</div>
+                        <div class="metric-label">Energy Efficiency</div>
+                    </div>
+                    <div class="card metric-card">
+                        <div class="metric-value">0.1</div>
+                        <div class="metric-label">Connectivity</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Neuromorphic Features</h3>
+                    <div class="capability-grid" style="margin-top: 20px;">
+                        <div class="capability-card">
+                            <div class="capability-title">Spiking Neural Networks</div>
+                            <div class="capability-description">Brain-inspired neural network architectures</div>
+                        </div>
+                        <div class="capability-card">
+                            <div class="capability-title">Event-Driven Processing</div>
+                            <div class="capability-description">Process information only when events occur</div>
+                        </div>
+                        <div class="capability-card">
+                            <div class="capability-title">Analog Computing</div>
+                            <div class="capability-description">Leverage analog computation for energy efficiency</div>
+                        </div>
+                        <div class="capability-card">
+                            <div class="capability-title">Brain-Inspired Learning</div>
+                            <div class="capability-description">STDP and Hebbian learning mechanisms</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Add more sections for other capabilities... -->
+        </main>
+    </div>
+
+    <script>
+        // Navigation
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                
+                // Remove active class from all links
+                document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+                
+                // Add active class to clicked link
+                this.classList.add('active');
+                
+                // Hide all sections
+                document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
+                
+                // Show target section
+                const sectionId = this.getAttribute('data-section');
+                document.getElementById(sectionId).classList.add('active');
+            });
+        });
+
+        // Performance Chart
+        const ctx = document.getElementById('performanceChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '24:00'],
+                datasets: [{
+                    label: 'Tier 8',
+                    data: [85, 88, 92, 95, 93, 97, 99],
+                    borderColor: '#7b2cbf',
+                    backgroundColor: 'rgba(123, 44, 191, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                }, {
+                    label: 'Tier 9',
+                    data: [70, 75, 82, 88, 85, 92, 95],
+                    borderColor: '#00d4ff',
+                    backgroundColor: 'rgba(0, 212, 255, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: '#e0e0ff'
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#8888aa'
+                        }
+                    },
+                    x: {
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#8888aa'
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

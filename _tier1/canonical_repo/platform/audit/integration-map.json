@@ -1,0 +1,282 @@
+{
+  "artifact": "integration-map",
+  "generated_by": "JARVIS Platform X-Ray - §4 cross-sector integration tracing",
+  "chains": [
+    {
+      "name": "AI execution chain",
+      "segments": [
+        {
+          "step": 1,
+          "node": "Provider config",
+          "to": "Provider Registry (Phase6 F:/AI/providers)",
+          "evidence": "providers.bootstrap.ProviderRouter/ModelRegistry/ModelManager"
+        },
+        {
+          "step": 2,
+          "node": "Model Registry",
+          "to": "Model Router (ProviderRouter)",
+          "evidence": "gateway.py tier3 _chat_via_phase6_fabric"
+        },
+        {
+          "step": 3,
+          "node": "Model Router",
+          "to": "ChatService -> ProviderGateway.chat()",
+          "evidence": "chat_service.py -> gateway.py L153"
+        },
+        {
+          "step": 4,
+          "node": "ChatService",
+          "to": "Agent (agents.py act / chat)",
+          "evidence": "legacy /api/chat -> chat_service; agents use ai_service"
+        },
+        {
+          "step": 5,
+          "node": "Agent",
+          "to": "Tool (stark /tool | browser execute_action | connector actions)",
+          "evidence": "agents.py dispatch run_code|email"
+        },
+        {
+          "step": 6,
+          "node": "Tool",
+          "to": "Capability Registry (/system/capabilities)",
+          "evidence": "SystemMonitor renders caps.registry; capability-gated dispatch"
+        },
+        {
+          "step": 7,
+          "node": "Capability",
+          "to": "Mission (browser /missions/{id}/browser-task)",
+          "evidence": "browser.py L3060"
+        },
+        {
+          "step": 8,
+          "node": "Mission",
+          "to": "Workflow (automation)",
+          "evidence": "automation.py workflows"
+        },
+        {
+          "step": 9,
+          "node": "Workflow",
+          "to": "Memory (memory store)",
+          "evidence": "memory.py; browser evidence->memory"
+        },
+        {
+          "step": 10,
+          "node": "Memory",
+          "to": "Audit (audit_logs)",
+          "evidence": "audit_logs store"
+        },
+        {
+          "step": 11,
+          "node": "Audit",
+          "to": "UI (SystemMonitor/agents page)",
+          "evidence": "/system/dashboard surfaces audit tail; SystemMonitor CHARTS/AUDIT"
+        }
+      ],
+      "stops_at": [
+        "Provider Registry / Model Registry: no provider API keys configured (env unset) -> ai_enabled=False -> honesty guard raises PROVIDER_UNAVAILABLE; Brain endpoint unset; Silverwing backend absent; Phase6 fabric importable but inactive.",
+        "Tool layer: 3 DISCONNECTED tool surfaces (stark/browser/connector), NO central ToolDef registry (rg 'ToolDef|register_tool' = 0 hits).",
+        "Mission: only the browser-mission binding exists (no standalone /missions orchestration/planning/lifecycle).",
+        "Workflow: scheduler stub (scheduler_running=false, engine='local'); n8n proxy inactive (N8N_API_KEY unset)."
+      ]
+    },
+    {
+      "name": "Platform Identity chain",
+      "segments": [
+        {
+          "step": 1,
+          "node": "Platform Identity (platform_identity.py)",
+          "to": "Authentication (core JWT)",
+          "evidence": "platform_identity returns developer_identity, verification_status"
+        },
+        {
+          "step": 2,
+          "node": "Authentication",
+          "to": "Session (sessions store + refresh_tokens)",
+          "evidence": "auth.py session CRUD, core create_refresh_token"
+        },
+        {
+          "step": 3,
+          "node": "Session",
+          "to": "Device (???)",
+          "evidence": "no device registry found; browser sessions are browser-engine sessions, not device registry"
+        },
+        {
+          "step": 4,
+          "node": "Device",
+          "to": "Authorization/RBAC (rbac.py)",
+          "evidence": "rbac role/permission checks"
+        },
+        {
+          "step": 5,
+          "node": "Authorization",
+          "to": "Integration (connectors)",
+          "evidence": "connector actions capability-gated"
+        },
+        {
+          "step": 6,
+          "node": "Integration",
+          "to": "Capability (/system/capabilities)",
+          "evidence": "capabilities include connector/email/imap/smtp"
+        },
+        {
+          "step": 7,
+          "node": "Capability",
+          "to": "Notification (email via connector + identity notification_configuration)",
+          "evidence": "connector email.send + platform_identity.notification_configuration"
+        }
+      ],
+      "stops_at": [
+        "Device: NO device registry / device identity sector (only browser sessions exist, different concept).",
+        "Authorization: role-based guards exist but NO object-level/per-resource authorization (can-this-user-edit-user-X not enforced).",
+        "Notification: NOT a first-class service — email is a connector capability gated by consent; no queue/templating/push. notification_configuration is env-derived config only."
+      ]
+    },
+    {
+      "name": "Data persistence chain (write path)",
+      "segments": [
+        {
+          "step": 1,
+          "node": "Any router/service",
+          "to": "core.get_store(name)",
+          "evidence": "~190 call-sites"
+        },
+        {
+          "step": 2,
+          "node": "Store",
+          "to": "db.kv_save",
+          "evidence": "core.py Store.save -> db.kv_save"
+        },
+        {
+          "step": 3,
+          "node": "db.kv_save",
+          "to": "SQLite/Postgres jarvis_kv",
+          "evidence": "db.py L190-220 atomic replace-all per collection"
+        }
+      ],
+      "stops_at": [
+        "Single persistence spine is solid; the gap is that SOME secrets bypass it: connectors use on-disk jars (registry) but provider keys use the SAME kv store PLAINTEXT."
+      ]
+    }
+  ],
+  "cross_sector_writes": [
+    {
+      "from": "browser.py",
+      "to": "knowledge store",
+      "evidence": "L2911/L2932 (extract-to-knowledge -> get_store('knowledge').save())"
+    },
+    {
+      "from": "browser.py",
+      "to": "memory store",
+      "evidence": "L3102/L3104 (evidence -> memory)"
+    },
+    {
+      "from": "browser.py",
+      "to": "missions store",
+      "evidence": "L2991/L3006"
+    },
+    {
+      "from": "browser.py",
+      "to": "connectors config",
+      "evidence": "L3234"
+    },
+    {
+      "from": "search.py",
+      "to": "search_history store",
+      "evidence": "/search writes history"
+    },
+    {
+      "from": "agents.py",
+      "to": "tasks/executions/audit_logs",
+      "evidence": "task dispatch"
+    },
+    {
+      "from": "system.py",
+      "to": "audit_logs",
+      "evidence": "/launch deny+audit _audit_system_launch"
+    }
+  ],
+  "frontend_bypasses_backend": [
+    {
+      "component": "APP_REGISTRY (Desktop window manager)",
+      "evidence": "hardcoded client-side (DesktopProvider.tsx L111); window state (z-index, positions, open/close) in client state only; no /api/v1/desktop backend router"
+    },
+    {
+      "component": "Holographics",
+      "evidence": "pure client Math.random animation; no backend data; no /api/v1/holographic"
+    },
+    {
+      "component": "Math.random dashboards",
+      "evidence": "jarvis-v10-chambers, smart-home, analytics-dashboard, holographic, neural-background, cascade-codeviewer, real-time-monitoring, modern-dashboard-system, omega, knowledge-hub, neural-activity-map STILL simulate telemetry (only SystemMonitor/monitoring/system-status were fixed)"
+    },
+    {
+      "component": "Frontend auth state",
+      "evidence": "apiClient/authStore keep token + refresh in localStorage (not HttpOnly cookie); autonomous-state-manager backup_registry in localStorage"
+    },
+    {
+      "component": "ProviderApiKeys type",
+      "evidence": "lib/api.ts L327-339 lists secret-shaped field names exposed to frontend"
+    }
+  ],
+  "orphaned_registries": [
+    {
+      "registry": "infrastructure/plugins registry",
+      "status": "DISCONNECTED",
+      "evidence": "not imported by any router (rg no hits); main.build_app has no plugin load step"
+    },
+    {
+      "registry": "Silverwing mount (/silverwing)",
+      "status": "ABSENT",
+      "evidence": "main.py expects ROOT/silverwing-backend which doesn't exist -> skip; /silverwing/health integrated:false"
+    },
+    {
+      "registry": "Model Registry / Provider Registry",
+      "status": "EXTERNAL",
+      "evidence": "F:/AI/providers not committed in audited repo; importable via sys.path but unconfigured (no keys)"
+    },
+    {
+      "registry": "Device Registry",
+      "status": "ABSENT",
+      "evidence": "no device/identity registry; only browser sessions exist"
+    },
+    {
+      "registry": "Tool Registry",
+      "status": "ABSENT",
+      "evidence": "no central ToolDef/register_tool (rg=0 hits); 3 ad-hoc surfaces"
+    },
+    {
+      "registry": "Mission Registry",
+      "status": "PARTIAL",
+      "evidence": "only browser.missions store; no standalone mission router with lifecycle"
+    }
+  ],
+  "consumers_that_bypass_registries": [
+    {
+      "consumer": "agents.py agent_act",
+      "bypasses": "central Tool Registry (none exists)",
+      "evidence": "directly calls dispatch.execute_connector_action + sandbox._sandbox_execute"
+    },
+    {
+      "consumer": "stark /tool",
+      "bypasses": "ProviderGateway multi-tier routing",
+      "evidence": "calls ai_service directly (uncertain if wrapped); not confirmed via gateway tiering"
+    },
+    {
+      "consumer": "codegen /generate",
+      "bypasses": "central Tool Registry",
+      "evidence": "ai_service.generate direct"
+    },
+    {
+      "consumer": "Frontend DesktopProvider",
+      "bypasses": "all backend truth for window state",
+      "evidence": "APP_REGISTRY client-side; no backend"
+    }
+  ],
+  "integration_gaps_top5": [
+    "1. Provider/Model layer is UNCONFIGURED (ai_enabled=False) -> AI chain is structurally present but functionally offline.",
+    "2. No central Tool Registry -> agents/stark/codegen connect to execution surfaces directly (fragile, duplicated gate logic).",
+    "3. Desktop/Holographics/IDE/Workflows have NO backend routers -> frontend-only or surfaced through browser/automation/system (state lost on refresh).",
+    "4. Plugins package is DISCONNECTED dead code (extensions is a separate, also-unified concern).",
+    "5. system.py router is UNAUTHENTICATED while auth.py/rbac.py have the only bearer enforcement -> auth boundary is per-router, not global."
+  ],
+  "evidence_method": "rg import/call traces + live /system/dashboard + /health verification + router census; file:line in 'evidence' fields."
+}

@@ -1,0 +1,18 @@
+1043|      },
+1044|
+1045|      // ---- UI toggles ----
+1046|      setShowAIContext: (show) => set({ showAIContext: show }),
+1047|      setShowResearchControls: (show) => set({ showResearchControls: show }),
+1048|      setShowEvidencePanel: (show) => set({ showEvidencePanel: show }),
+1049|      setShowSecurityPanel: (show) => set({ showSecurityPanel: show }),
+1050|      setShowDownloadsPanel: (show) => set({ showDownloadsPanel: show }),
+1051|      setShowBookmarksPanel: (show) => set({ showBookmarksPanel: show }),
+1052|      setShowHistoryPanel: (show) => set({ showHistoryPanel: show }),
+1053|      setPrivacyMode: (mode) => set({ privacyMode: mode }),
+1054|
+1055|      // ---- Browser ↔ Chat integration ----
+1056|
+1057|      /** Build a BrowserContextSummary from current store state for chat. */
+1058|      getBrowserContextSummary: (): BrowserContextSummary | null => {
+1059|        const state = get();
+1060|        const activeTab = state.activeTabId ? state.tabs[state.activeTabId] : null;

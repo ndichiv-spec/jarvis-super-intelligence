@@ -1,0 +1,62 @@
+{
+  "model_id": "silverwing-120m-base",
+  "revision": "v1/r1",
+  "immutable": true,
+  "frozen_at_utc": "2026-09-11T20:45:23Z",
+  "do_not_overwrite": "This is the baseline. New capability experiments produce a NEW revision; they never overwrite this one.",
+  "architecture": {
+    "vocab_size": 8192,
+    "max_position_embeddings": 2048,
+    "n_layers": 12,
+    "n_heads": 16,
+    "n_kv_heads": 4,
+    "d_model": 1024,
+    "hidden_size": 2176,
+    "tie_word_embeddings": true
+  },
+  "parameters": 120087552,
+  "training": {
+    "optimizer": "AdamW",
+    "learning_rate_peak": 0.00015,
+    "precision": "fp16 + GradScaler",
+    "best_step": 400,
+    "total_tokens": 409600,
+    "batch_size": 1,
+    "grad_accum": 4,
+    "max_seq_len": 256,
+    "train_loss": 6.408630609512329,
+    "val_loss": 5.4373369216918945,
+    "val_perplexity": 229.82931430208146,
+    "dataset_hash_recorded": "5b389a08d7e1eb65bc7a9859a7f644def69aaf78f0b7373f9c77c67bd27fa236",
+    "dataset_provenance": {}
+  },
+  "artifacts_verified": {
+    "model.safetensors": {
+      "path": "F:\\AI\\.sw_cache\\silverwing-120m-base\\r1\\model.safetensors",
+      "sha256_recorded": "da860489943c6bfe2e826a0a9325e75e381b4ef0a48270f4c4c6a6a4ef12abb4",
+      "sha256_actual": "da860489943c6bfe2e826a0a9325e75e381b4ef0a48270f4c4c6a6a4ef12abb4",
+      "match": true
+    },
+    "tokenizer.json": {
+      "path": "F:\\AI\\.sw_cache\\silverwing-120m-base\\r1\\tokenizer.json",
+      "sha256_recorded": "5b09bfb6cf456dbbdc52879c133bf706bafeee34bc9f9766786fd2bda8027844",
+      "sha256_actual": "5b09bfb6cf456dbbdc52879c133bf706bafeee34bc9f9766786fd2bda8027844",
+      "match": true
+    },
+    "config.json": {
+      "path": "F:\\AI\\.sw_cache\\silverwing-120m-base\\r1\\config.json",
+      "sha256_recorded": "df1f7562d484abf4b45dfb43c9bb5ac6eb1169af86ca4c84680bea3c35b5bfc9",
+      "sha256_actual": "df1f7562d484abf4b45dfb43c9bb5ac6eb1169af86ca4c84680bea3c35b5bfc9",
+      "match": true
+    }
+  },
+  "storage_uris": {
+    "served_cache": "F:\\AI\\.sw_cache\\silverwing-120m-base\\r1",
+    "training_output": "local:///F:/AI/_kout6/silverwing-120m-gpu-r1/best"
+  },
+  "serving": {
+    "endpoint": "http://127.0.0.1:8010",
+    "backend": "torch",
+    "device": "cpu"
+  }
+}

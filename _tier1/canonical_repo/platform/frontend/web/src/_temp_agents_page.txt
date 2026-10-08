@@ -1,0 +1,313 @@
+788|export default function AgentsPage() {
+789|  const [tasks, setTasks] = useState<AgentTask[]>([]);
+790|  const [executions, setExecutions] = useState<TaskExecution[]>([]);
+791|  const [stats, setStats] = useState<AgentStats>({
+792|    total_tasks: 0,
+793|    active_tasks: 0,
+794|    success_rate_percent: 0,
+795|    avg_execution_time_ms: 0,
+796|  });
+797|  const [schedulerStatus, setSchedulerStatus] = useState<SchedulerStatus>({
+798|    running: false,
+799|    total_scheduled: 0,
+800|  });
+801|  const [serviceTailoring, setServiceTailoring] = useState<ServiceTailoringStatus>({
+802|    success: true,
+803|    changed: false,
+804|    sync_count: 0,
+805|    changes_detected: 0,
+806|    current_profile: {
+807|      configured_service_count: 0,
+808|      active_capabilities: [],
+809|      configured_services: {},
+810|    },
+811|  });
+812|  const [loading, setLoading] = useState(true);
+813|  const [dialogOpen, setDialogOpen] = useState(false);
+814|
+815|  // ── Fetch all data ──────────────────────────────────────────────────────
+816|
+817|  const fetchData = useCallback(async () => {
+818|    try {
+819|      const [agentsRes, statsRes, schedulerRes, executionsRes, tailoringRes] =
+820|        await Promise.allSettled([
+821|          jarvisAPI.getAgents(),
+822|          jarvisAPI.getAgentStats(),
+823|          jarvisAPI.getSchedulerStatus(),
+824|          jarvisAPI.getTaskExecutions(20),
+825|          jarvisAPI.getServiceTailoringStatus(),
+826|        ]);
+827|
+828|      if (agentsRes.status === "fulfilled") {
+829|        setTasks(agentsRes.value.tasks || []);
+830|      } else {
+831|        // Fallback: use demo data if API is not available
+832|        setTasks([]);
+833|      }
+834|
+835|      if (statsRes.status === "fulfilled") {
+836|        setStats(statsRes.value);
+837|      }
+838|
+839|      if (schedulerRes.status === "fulfilled") {
+840|        setSchedulerStatus(schedulerRes.value);
+841|      }
+842|
+843|      if (executionsRes.status === "fulfilled") {
+844|        setExecutions(executionsRes.value.executions || []);
+845|      }
+846|
+847|      if (tailoringRes.status === "fulfilled") {
+848|        setServiceTailoring(tailoringRes.value);
+849|      }
+850|    } catch (error) {
+851|      console.error("Failed to fetch agents data:", error);
+852|    } finally {
+853|      setLoading(false);
+854|    }
+855|  }, []);
+856|
+857|  useEffect(() => {
+858|    fetchData();
+859|  }, [fetchData]);
+860|
+861|  // ── Handlers ────────────────────────────────────────────────────────────
+862|
+863|  const handleCreateTask = async (formData: TaskFormData) => {
+864|    await jarvisAPI.registerCustomTask({
+865|      name: formData.name,
+866|      description: formData.description,
+867|      schedule_type: formData.schedule_type,
+868|      schedule_value: formData.schedule_value,
+869|      priority: formData.priority,
+870|      timeout: formData.timeout,
+871|      max_retries: formData.max_retries,
+872|    });
+873|    await fetchData();
+874|  };
+875|
+876|  const handleToggleTask = async (taskId: string, enabled: boolean) => {
+877|    try {
+878|      await jarvisAPI.toggleAgentTask(taskId, enabled);
+879|      setTasks((prev) =>
+880|        prev.map((t) => (t.id === taskId ? { ...t, enabled } : t))
+881|      );
+882|      toast.success(`Task ${enabled ? "enabled" : "disabled"}`);
+883|    } catch (error: any) {
+884|      toast.error(`Failed to toggle task: ${error.message}`);
+885|    }
+886|  };
+887|
+888|  const handleRunTask = async (taskId: string) => {
+889|    await jarvisAPI.runAgentTask(taskId);
+890|    await fetchData();
+891|  };
+892|
+893|  const handleDeleteTask = async (taskId: string) => {
+894|    await jarvisAPI.deleteAgentTask(taskId);
+895|    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+896|    await fetchData();
+897|  };
+898|
+899|  const handleToggleScheduler = async () => {
+900|    try {
+901|      const newRunning = !schedulerStatus.running;
+902|      await jarvisAPI.toggleScheduler(newRunning);
+903|      setSchedulerStatus((prev) => ({ ...prev, running: newRunning }));
+904|      toast.success(`Scheduler ${newRunning ? "started" : "stopped"}`);
+905|    } catch (error: any) {
+906|      toast.error(`Failed to toggle scheduler: ${error.message}`);
+907|    }
+908|  };
+909|
+910|  // ── Loading state ───────────────────────────────────────────────────────
+911|
+912|  if (loading) {
+913|    return (
+914|      <div className="flex h-full items-center justify-center">
+915|        <div className="flex flex-col items-center gap-3">
+916|          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+917|          <p className="text-sm text-muted-foreground">Loading agents...</p>
+918|        </div>
+919|      </div>
+920|    );
+921|  }
+922|
+923|  // ── Render ──────────────────────────────────────────────────────────────
+924|
+925|  return (
+926|    <div className="h-full overflow-auto p-4 md:p-6 lg:p-8">
+927|      <div className="mx-auto max-w-7xl space-y-6">
+928|        {/* ── Header ──────────────────────────────────────────────────── */}
+929|        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+930|          <div>
+931|            <h1 className="text-2xl font-bold tracking-tight">
+932|              Autonomous Agents
+933|            </h1>
+934|            <p className="text-sm text-muted-foreground mt-1">
+935|              Manage scheduled tasks and autonomous workflows
+936|            </p>
+937|          </div>
+938|          <div className="flex items-center gap-3">
+939|            {/* Scheduler toggle */}
+940|            <div className="flex items-center gap-2 rounded-lg border border-border bg-card/50 px-3 py-2 backdrop-blur-sm">
+941|              {schedulerStatus.running ? (
+942|                <Power className="h-4 w-4 text-emerald-400" />
+943|              ) : (
+944|                <PowerOff className="h-4 w-4 text-muted-foreground" />
+945|              )}
+946|              <span className="text-xs font-medium">
+947|                Scheduler {schedulerStatus.running ? "Running" : "Stopped"}
+948|              </span>
+949|              <span
+950|                className={`relative flex h-2 w-2 rounded-full ${
+951|                  schedulerStatus.running ? "bg-emerald-500" : "bg-muted-foreground/40"
+952|                }`}
+953|              >
+954|                {schedulerStatus.running && (
+955|                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+956|                )}
+957|              </span>
+958|              <Button
+959|                variant="ghost"
+960|                size="sm"
+961|                className="h-6 px-2 text-xs"
+962|                onClick={handleToggleScheduler}
+963|              >
+964|                {schedulerStatus.running ? "Stop" : "Start"}
+965|              </Button>
+966|            </div>
+967|
+968|            <Button onClick={() => setDialogOpen(true)} className="gap-1.5">
+969|              <Plus className="h-4 w-4" />
+970|              Create Task
+971|            </Button>
+972|          </div>
+973|        </div>
+974|
+975|        {/* ── Stats Cards ─────────────────────────────────────────────── */}
+976|        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+977|          <StatCard
+978|            title="Total Tasks"
+979|            value={stats.total_tasks || tasks.length}
+980|            icon={ListTodo}
+981|            description="Registered tasks"
+982|          />
+983|          <StatCard
+984|            title="Active Tasks"
+985|            value={stats.active_tasks || tasks.filter((t) => t.enabled).length}
+986|            icon={Activity}
+987|            description="Currently enabled"
+988|          />
+989|          <StatCard
+990|            title="Success Rate"
+991|            value={`${(stats?.success_rate_percent ?? 0).toFixed(1)}%`}
+992|            icon={Percent}
+993|            description="Last 24 hours"
+994|            progressValue={stats?.success_rate_percent ?? 0}
+995|          />
+996|          <StatCard
+997|            title="Avg Execution Time"
+998|            value={
+999|              stats?.avg_execution_time_ms > 0
+1000|                ? formatDuration(stats?.avg_execution_time_ms ?? 0)
+1001|                : "--"
+1002|            }
+1003|            icon={Timer}
+1004|            description="Mean duration"
+1005|          />
+1006|        </div>
+1007|
+1008|        <Card className="bg-card/50 border-border backdrop-blur-sm">
+1009|          <CardHeader>
+1010|            <CardTitle className="text-lg">Service Tailoring Sync</CardTitle>
+1011|            <CardDescription>
+1012|              Autonomous profile refresh for configured backend services
+1013|            </CardDescription>
+1014|          </CardHeader>
+1015|          <CardContent className="space-y-4">
+1016|            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+1017|              <span>
+1018|                Last sync:{" "}
+1019|                {serviceTailoring.last_synced_at
+1020|                  ? formatDistanceToNow(new Date(serviceTailoring.last_synced_at), { addSuffix: true })
+1021|                  : "never"}
+1022|              </span>
+1023|              <span>Changes detected: {serviceTailoring.changes_detected}</span>
+1024|              <span>Syncs: {serviceTailoring.sync_count}</span>
+1025|              {schedulerStatus.single_worker_required && (
+1026|                <Badge variant="outline" className="text-amber-400 border-amber-500/30 bg-amber-500/10">
+1027|                  Single backend worker required for recurring runs
+1028|                </Badge>
+1029|              )}
+1030|            </div>
+1031|            <div className="flex flex-wrap gap-2">
+1032|              {Object.entries(serviceTailoring.current_profile?.configured_services || {}).length > 0 ? (
+1033|                Object.entries(serviceTailoring.current_profile?.configured_services || {}).map(([name, service]) => (
+1034|                  <Badge key={name} variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
+1035|                    {service.label}
+1036|                  </Badge>
+1037|                ))
+1038|              ) : (
+1039|                <span className="text-sm text-muted-foreground">No configured services detected yet.</span>
+1040|              )}
+1041|            </div>
+1042|            {(serviceTailoring.current_profile?.active_capabilities || []).length > 0 && (
+1043|              <div className="flex flex-wrap gap-2">
+1044|                {serviceTailoring.current_profile?.active_capabilities.slice(0, 8).map((capability) => (
+1045|                  <Badge key={capability} variant="outline" className="text-xs">
+1046|                    {capability}
+1047|                  </Badge>
+1048|                ))}
+1049|              </div>
+1050|            )}
+1051|          </CardContent>
+1052|        </Card>
+1053|
+1054|        {/* ── Task Cards Grid ─────────────────────────────────────────── */}
+1055|        <div>
+1056|          <h2 className="text-lg font-semibold mb-3">Scheduled Tasks</h2>
+1057|          {tasks.length === 0 ? (
+1058|            <Card className="bg-card/50 border-border backdrop-blur-sm">
+1059|              <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+1060|                <Bot className="h-12 w-12 text-muted-foreground/40 mb-3" />
+1061|                <h3 className="text-lg font-medium mb-1">No tasks yet</h3>
+1062|                <p className="text-sm text-muted-foreground mb-4">
+1063|                  Create your first autonomous task to get started.
+1064|                </p>
+1065|                <Button onClick={() => setDialogOpen(true)} className="gap-1.5">
+1066|                  <Plus className="h-4 w-4" />
+1067|                  Create Task
+1068|                </Button>
+1069|              </CardContent>
+1070|            </Card>
+1071|          ) : (
+1072|            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+1073|              <AnimatePresence>
+1074|                {tasks.map((task) => (
+1075|                  <TaskCard
+1076|                    key={task.id || task.name}
+1077|                    task={task}
+1078|                    onToggle={handleToggleTask}
+1079|                    onRun={handleRunTask}
+1080|                    onDelete={handleDeleteTask}
+1081|                  />
+1082|                ))}
+1083|              </AnimatePresence>
+1084|            </div>
+1085|          )}
+1086|        </div>
+1087|
+1088|        {/* ── Execution History ───────────────────────────────────────── */}
+1089|        <ExecutionHistoryTable executions={executions} />
+1090|
+1091|        {/* ── Create Task Dialog ──────────────────────────────────────── */}
+1092|        <CreateTaskDialog
+1093|          open={dialogOpen}
+1094|          onOpenChange={setDialogOpen}
+1095|          onSubmit={handleCreateTask}
+1096|        />
+1097|      </div>
+1098|    </div>
+1099|  );
+1100|}

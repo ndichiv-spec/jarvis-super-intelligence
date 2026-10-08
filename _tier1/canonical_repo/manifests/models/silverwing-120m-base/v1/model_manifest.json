@@ -1,0 +1,37 @@
+{
+  "model_id": "silverwing-120m-base",
+  "version": "v1",
+  "revision": "r1",
+  "architecture": "Silverwing Decoder",
+  "parameter_count": 120087552,
+  "context_length": 2048,
+  "vocab_size": 8192,
+  "tokenizer": {
+    "version": "r2000-bpe",
+    "type": "bpe",
+    "vocab_size": 8192,
+    "sha256": "5b09bfb6cf456dbbdc52879c133bf706bafeee34bc9f9766786fd2bda8027844"
+  },
+  "weights": {
+    "format": "safetensors",
+    "sha256": "da860489943c6bfe2e826a0a9325e75e381b4ef0a48270f4c4c6a6a4ef12abb4",
+    "size_bytes": 513915792,
+    "config_sha256": "df1f7562d484abf4b45dfb43c9bb5ac6eb1169af86ca4c84680bea3c35b5bfc9",
+    "storage_uri": "local:///F:/AI/_kout6/silverwing-120m-gpu-r1/best"
+  },
+  "capabilities": [
+    "text-generation"
+  ],
+  "status": "experimental",
+  "created_at": "2026-09-11T11:49:40Z",
+  "evaluation": {
+    "train_loss": 6.408630609512329,
+    "val_loss": 5.4373369216918945,
+    "val_perplexity": 229.82931430208146,
+    "best_step": 400,
+    "optimizer": "AdamW",
+    "learning_rate": 0.00015,
+    "precision": "fp16 + GradScaler",
+    "dataset_hash": "5b389a08d7e1eb65bc7a9859a7f644def69aaf78f0b7373f9c77c67bd27fa236"
+  }
+}

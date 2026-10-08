@@ -1,0 +1,7 @@
+﻿{
+    "title": "Silverwing Checkpoints",
+    "subtitle": "Training checkpoints for Silverwing-12M LLM",
+    "description": "Training checkpoints (step-1000) for the Silverwing-12M language model. Includes config, metadata, and BPE tokenizer. Model weights are downloaded by the kernel from the previous run.",
+    "keywords": ["machine-learning", "deep-learning", "language-model", "training-checkpoint", "silverwing", "llm"],
+    "licenses": [{"name": "MIT"}]
+}

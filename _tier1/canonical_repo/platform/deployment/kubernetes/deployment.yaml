@@ -1,0 +1,229 @@
+# JARVIS AI - Kubernetes Deployment Configuration
+# Provides auto-scaling, self-healing, and high availability
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jarvis-api
+  labels:
+    app: jarvis-api
+    version: v1
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: jarvis-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: jarvis-api
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/api/v1/monitoring/metrics/prometheus"
+    spec:
+      serviceAccountName: jarvis-sa
+      containers:
+      - name: api
+        image: jarvis-ai:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: jarvis-secrets
+              key: database-url
+        - name: REDIS_URL
+          value: "redis://jarvis-redis:6379"
+        - name: WATCHDOG_INTERVAL
+          value: "30"
+        - name: AUTO_RECOVERY
+          value: "true"
+        - name: OPTIMIZATION_STRATEGY
+          value: "adaptive"
+        - name: WORKER_COUNT
+          value: "4"
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "2000m"
+            memory: "2Gi"
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health/ready
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health/live
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /api/v1/health/status
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 30
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: jarvis-config
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+
+---
+# Horizontal Pod Autoscaler
+# Automatically scales based on CPU/memory/custom metrics
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: jarvis-api-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: jarvis-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  # Scale based on CPU utilization
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  # Scale based on memory utilization
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 75
+  # Scale based on custom metrics (HTTP requests per second)
+  - type: Pods
+    pods:
+      metric:
+        name: http_requests_per_second
+      target:
+        type: AverageValue
+        averageValue: "100"
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 120
+
+---
+# Vertical Pod Autoscaler
+# Automatically adjusts resource requests/limits
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: jarvis-api-vpa
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: jarvis-api
+  updatePolicy:
+    updateMode: "Auto"
+  resourcePolicy:
+    containerPolicies:
+    - containerName: api
+      minAllowed:
+        cpu: "250m"
+        memory: "256Mi"
+      maxAllowed:
+        cpu: "4000m"
+        memory: "4Gi"
+
+---
+# Service - Load Balancer
+apiVersion: v1
+kind: Service
+metadata:
+  name: jarvis-api
+  annotations:
+    prometheus.io/scrape: "true"
+spec:
+  type: LoadBalancer
+  selector:
+    app: jarvis-api
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8000
+    protocol: TCP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 3600
+
+---
+# ConfigMap - Application Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jarvis-config
+data:
+  WATCHDOG_INTERVAL: "30"
+  AUTO_RECOVERY: "true"
+  OPTIMIZATION_STRATEGY: "adaptive"
+  LOG_LEVEL: "INFO"
+  LOG_FORMAT: "json"
+
+---
+# Service Account
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jarvis-sa
+  labels:
+    app: jarvis
+
+---
+# PodDisruptionBudget - Ensures high availability during maintenance
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: jarvis-api-pdb
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: jarvis-api

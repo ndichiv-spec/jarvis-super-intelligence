@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JARVIS AI | Next-Gen Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='holographic.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Orbitron:wght@400;500;600;700&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Loading overlay -->
+    <div id="loadingOverlay" style="position:fixed;inset:0;background:#030508;display:flex;align-items:center;justify-content:center;z-index:9999;flex-direction:column;gap:20px;">
+        <div style="font-family:'Orbitron',sans-serif;font-size:32px;color:#00f0ff;text-shadow:0 0 20px #00f0ff;">JARVIS</div>
+        <div style="color:#94a3b8;">Initializing systems...</div>
+        <div id="loadingStatus" style="color:#64748b;font-size:12px;">Loading...</div>
+    </div>
+    
+    <div class="app-container">
+        <!-- Animated Background -->
+        <div class="ambient-bg">
+            <div class="gradient-orb orb-1"></div>
+            <div class="gradient-orb orb-2"></div>
+            <div class="gradient-orb orb-3"></div>
+            <div class="grid-overlay"></div>
+        </div>
+
+        <!-- Command Palette -->
+        <div class="command-palette" id="commandPalette">
+            <div class="cmd-backdrop"></div>
+            <div class="cmd-container">
+                <div class="cmd-input-wrapper">
+                    <span class="cmd-icon">⌘</span>
+                    <input type="text" id="cmdInput" placeholder="Type a command or search..." autocomplete="off">
+                    <span class="cmd-hint">ESC to close</span>
+                </div>
+                <div class="cmd-results" id="cmdResults"></div>
+            </div>
+        </div>
+
+        <!-- Floating Chat -->
+        <button class="chat-toggle" id="chatToggle">
+            <span class="chat-icon">💬</span>
+            <span class="notification-dot" id="chatNotif"></span>
+        </button>
+
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo-container">
+                    <div class="logo-glow"></div>
+                    <div class="logo-icon">
+                        <svg viewBox="0 0 50 50" class="logo-svg">
+                            <circle cx="25" cy="25" r="20" class="outer-ring"/>
+                            <circle cx="25" cy="25" r="12" class="inner-ring"/>
+                            <circle cx="25" cy="25" r="4" class="core-dot"/>
+                            <path d="M25 5 L25 15" class="beam beam-1"/>
+                            <path d="M25 35 L25 45" class="beam beam-2"/>
+                            <path d="M5 25 L15 25" class="beam beam-3"/>
+                            <path d="M35 25 L45 25" class="beam beam-4"/>
+                        </svg>
+                    </div>
+                    <span class="logo-text">JARVIS</span>
+                </div>
+                <button class="sidebar-toggle" id="sidebarToggle">‹</button>
+            </div>
+
+            <nav class="nav-menu">
+                <div class="nav-section">
+                    <span class="nav-section-title">Main</span>
+                    <ul>
+                        <li class="nav-item active" data-panel="dashboard" data-tooltip="Dashboard">
+                            <span class="nav-icon">◈</span>
+                            <span class="nav-label">Dashboard</span>
+                        </li>
+                        <li class="nav-item" data-panel="chat" data-tooltip="AI Chat">
+                            <span class="nav-icon">⬡</span>
+                            <span class="nav-label">Chat</span>
+                            <span class="nav-badge">NEW</span>
+                        </li>
+                        <li class="nav-item" data-panel="voice" data-tooltip="Voice Interface">
+                            <span class="nav-icon">◉</span>
+                            <span class="nav-label">Voice</span>
+                        </li>
+                    </ul>
+                </div>
+                <div class="nav-section">
+                    <span class="nav-section-title">Tools</span>
+                    <ul>
+                        <li class="nav-item" data-panel="web" data-tooltip="Web Tools">
+                            <span class="nav-icon">🌐</span>
+                            <span class="nav-label">Web</span>
+                        </li>
+                        <li class="nav-item" data-panel="processes" data-tooltip="Processes">
+                            <span class="nav-icon">⚡</span>
+                            <span class="nav-label">Processes</span>
+                        </li>
+                        <li class="nav-item" data-panel="files" data-tooltip="File Browser">
+                            <span class="nav-icon">▣</span>
+                            <span class="nav-label">Files</span>
+                        </li>
+                        <li class="nav-item" data-panel="observation" data-tooltip="Monitoring">
+                            <span class="nav-icon">◩</span>
+                            <span class="nav-label">Monitor</span>
+                        </li>
+                    </ul>
+                </div>
+                <div class="nav-section">
+                    <span class="nav-section-title">AI Engine</span>
+                    <ul>
+                        <li class="nav-item" data-panel="knowledge" data-tooltip="Knowledge Base">
+                            <span class="nav-icon">🧠</span>
+                            <span class="nav-label">Knowledge</span>
+                        </li>
+                        <li class="nav-item" data-panel="training" data-tooltip="Training">
+                            <span class="nav-icon">⬢</span>
+                            <span class="nav-label">Training</span>
+                        </li>
+                        <li class="nav-item" data-panel="system" data-tooltip="System">
+                            <span class="nav-icon">⚙</span>
+                            <span class="nav-label">System</span>
+                        </li>
+                    </ul>
+                </div>
+                <div class="nav-section">
+                    <span class="nav-section-title">Integrations</span>
+                    <ul>
+                        <li class="nav-item" data-panel="connections" data-tooltip="Connections">
+                            <span class="nav-icon">🔌</span>
+                            <span class="nav-label">Connections</span>
+                        </li>
+                        <li class="nav-item" data-panel="extensions" data-tooltip="Extensions">
+                            <span class="nav-icon">🧩</span>
+                            <span class="nav-label">Extensions</span>
+                        </li>
+                        <li class="nav-item" data-panel="developer" data-tooltip="Developer">
+                            <span class="nav-icon">🛠️</span>
+                            <span class="nav-label">Developer</span>
+                        </li>
+                    </ul>
+                </div>
+                <div class="nav-footer">
+                    <li class="nav-item" data-panel="settings" data-tooltip="Settings">
+                        <span class="nav-icon">✎</span>
+                        <span class="nav-label">Settings</span>
+                    </li>
+                </div>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <header class="header">
+                <div class="header-left">
+                    <button class="menu-btn" id="menuBtn">☰</button>
+                    <div class="header-title">
+                        <h1 id="panelTitle">Dashboard</h1>
+                        <span class="header-subtitle" id="panelSubtitle">System Overview</span>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <div class="model-selector">
+                        <select id="modelSelect">
+                            <option value="local">🤖 Local LLM</option>
+                            <option value="gpt-4">🔮 GPT-4</option>
+                            <option value="rag">📚 RAG Mode</option>
+                            <option value="claude">🧠 Claude</option>
+                        </select>
+                    </div>
+                    <div class="header-stats">
+                        <div class="stat-pill">
+                            <span class="stat-label">CPU</span>
+                            <span class="stat-value" id="miniCpu">0%</span>
+                            <div class="stat-bar-mini"><div class="stat-fill-mini" id="miniCpuBar"></div></div>
+                        </div>
+                        <div class="stat-pill">
+                            <span class="stat-label">MEM</span>
+                            <span class="stat-value" id="miniMem">0%</span>
+                            <div class="stat-bar-mini"><div class="stat-fill-mini" id="miniMemBar"></div></div>
+                        </div>
+                    </div>
+                    <div class="status-badge online" id="statusBadge">
+                        <span class="status-pulse"></span>
+                        <span id="statusText">Online</span>
+                    </div>
+                </div>
+            </header>
+
+            <div class="content-area">
+                <!-- Dashboard Panel -->
+                <section class="panel dashboard-panel active" id="dashboardPanel">
+                    <div class="dashboard-grid">
+                        <div class="hero-card">
+                            <div class="hero-glow"></div>
+                            <div class="hero-content">
+                                <h2>Welcome to JARVIS</h2>
+                                <p>Your AI assistant is ready</p>
+                                <div class="hero-stats">
+                                    <div class="hero-stat">
+                                        <span class="hs-value" id="heroUptime">0s</span>
+                                        <span class="hs-label">Uptime</span>
+                                    </div>
+                                    <div class="hero-stat">
+                                        <span class="hs-value" id="heroRequests">0</span>
+                                        <span class="hs-label">Requests</span>
+                                    </div>
+                                    <div class="hero-stat">
+                                        <span class="hs-value" id="heroMemory">0MB</span>
+                                        <span class="hs-label">Memory</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="hero-visual">
+                                <canvas id="heroCanvas"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="quick-actions">
+                            <h3>Quick Actions</h3>
+                            <div class="actions-grid">
+                                <button class="action-card" data-action="chat">
+                                    <span class="ac-icon">💭</span>
+                                    <span class="ac-label">New Chat</span>
+                                </button>
+                                <button class="action-card" data-action="voice">
+                                    <span class="ac-icon">🎙️</span>
+                                    <span class="ac-label">Voice</span>
+                                </button>
+                                <button class="action-card" data-action="search">
+                                    <span class="ac-icon">🔍</span>
+                                    <span class="ac-label">Search</span>
+                                </button>
+                                <button class="action-card" data-action="code">
+                                    <span class="ac-icon">⌨️</span>
+                                    <span class="ac-label">Code</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="system-card">
+                            <div class="card-header">
+                                <h3>System Metrics</h3>
+                                <button class="icon-btn" onclick="jarvis.fetchSystemStatus()">↻</button>
+                            </div>
+                            <div class="metrics-row">
+                                <div class="metric-item">
+                                    <div class="metric-ring" id="cpuRing">
+                                        <span class="metric-value" id="cpuValue">0%</span>
+                                    </div>
+                                    <span class="metric-label">CPU</span>
+                                </div>
+                                <div class="metric-item">
+                                    <div class="metric-ring" id="ramRing">
+                                        <span class="metric-value" id="ramValue">0%</span>
+                                    </div>
+                                    <span class="metric-label">Memory</span>
+                                </div>
+                                <div class="metric-item">
+                                    <div class="metric-ring" id="diskRing">
+                                        <span class="metric-value" id="diskValue">0%</span>
+                                    </div>
+                                    <span class="metric-label">Disk</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="activity-card">
+                            <div class="card-header">
+                                <h3>Activity</h3>
+                                <button class="icon-btn" id="clearLogs">✕</button>
+                            </div>
+                            <div class="logs-container" id="logsContainer">
+                                <div class="log-entry info">
+                                    <span class="log-time">--:--:--</span>
+                                    <span class="log-message">System initialized</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Chat Panel -->
+                <section class="panel chat-panel hidden" id="chatPanel">
+                    <div class="chat-header">
+                        <div class="chat-info">
+                            <div class="ai-avatar">
+                                <div class="avatar-glow"></div>
+                                <span>J</span>
+                            </div>
+                            <div class="ai-details">
+                                <span class="ai-name">JARVIS</span>
+                                <span class="ai-status">
+                                    <span class="status-indicator"></span>
+                                    <span id="chatStatusText">Ready</span>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="chat-actions">
+                            <button class="chat-action-btn" id="clearChatBtn" title="Clear Chat">🗑️</button>
+                            <button class="chat-action-btn" id="exportChatBtn" title="Export">📤</button>
+                        </div>
+                    </div>
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="message jarvis-message">
+                            <div class="message-avatar">J</div>
+                            <div class="message-content">
+                                <div class="message-text">
+                                    <p>Greetings, sir. All systems operational. How may I assist you today?</p>
+                                </div>
+                                <div class="message-meta">
+                                    <span class="message-time">Just now</span>
+                                </div>
+                            </div>
+                            <div class="message-actions">
+                                <button class="msg-action" title="Copy">📋</button>
+                                <button class="msg-action" title="Regenerate">🔄</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="typing-indicator hidden" id="typingIndicator">
+                        <div class="typing-dots">
+                            <span></span><span></span><span></span>
+                        </div>
+                        <span class="typing-text">JARVIS is thinking...</span>
+                    </div>
+                    <div class="chat-input-container">
+                        <button class="input-action" id="attachBtn" title="Attach">📎</button>
+                        <div class="input-wrapper">
+                            <textarea id="chatInput" placeholder="Ask me anything..." rows="1"></textarea>
+                            <div class="input-tools">
+                                <button class="tool-btn" id="emojiBtn" title="Emoji">😊</button>
+                            </div>
+                        </div>
+                        <button class="send-btn" id="sendBtn">
+                            <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Voice Panel -->
+                <section class="panel voice-panel hidden" id="voicePanel">
+                    <div class="voice-container">
+                        <div class="voice-visualizer-large">
+                            <canvas id="voiceCanvas"></canvas>
+                            <div class="voice-ring">
+                                <div class="ring-pulse"></div>
+                                <div class="ring-pulse delay-1"></div>
+                                <div class="ring-pulse delay-2"></div>
+                            </div>
+                            <div class="voice-status" id="voiceStatus">Ready</div>
+                        </div>
+                        <div class="voice-controls">
+                            <button class="voice-btn-large" id="voiceBtn">
+                                <span class="mic-icon">🎤</span>
+                                <span class="voice-label">Hold to Speak</span>
+                            </button>
+                        </div>
+                        <div class="voice-transcript">
+                            <div class="transcript-header">
+                                <span>Transcript</span>
+                                <button class="icon-btn" id="copyTranscript">📋</button>
+                            </div>
+                            <div class="transcript-content" id="transcript">Waiting for input...</div>
+                        </div>
+                        <div class="voice-options">
+                            <button class="voice-option" id="speakBtn">
+                                <span class="vo-icon">🔊</span>
+                                <span>Speak</span>
+                            </button>
+                            <button class="voice-option" id="listenBtn">
+                                <span class="vo-icon">👂</span>
+                                <span>Listen</span>
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Web Tools Panel -->
+                <section class="panel web-panel hidden" id="webPanel">
+                    <div class="panel-header">
+                        <h2>Web Tools</h2>
+                        <div class="panel-tabs">
+                            <button class="tab-btn active" data-tab="search">Search</button>
+                            <button class="tab-btn" data-tab="weather">Weather</button>
+                            <button class="tab-btn" data-tab="news">News</button>
+                            <button class="tab-btn" data-tab="wiki">Wiki</button>
+                        </div>
+                    </div>
+                    <div class="tab-content active" id="searchTab">
+                        <div class="search-box">
+                            <input type="text" id="searchQuery" placeholder="Search the web...">
+                            <button class="search-btn" onclick="jarvis.doWebSearch()">
+                                <span>🔍</span>
+                            </button>
+                        </div>
+                        <div class="tool-results" id="searchResults"></div>
+                    </div>
+                    <div class="tab-content hidden" id="weatherTab">
+                        <div class="weather-card">
+                            <div class="weather-main">
+                                <span class="temp" id="weatherTemp">--°C</span>
+                                <span class="condition" id="weatherCondition">Loading...</span>
+                            </div>
+                            <div class="weather-details">
+                                <div class="wd-item">💧 <span id="weatherHumidity">--%</span></div>
+                                <div class="wd-item">💨 <span id="weatherWind">-- km/h</span></div>
+                            </div>
+                            <button class="action-btn primary" onclick="jarvis.getWeather()">Get Weather</button>
+                        </div>
+                    </div>
+                    <div class="tab-content hidden" id="newsTab">
+                        <div class="news-categories">
+                            <button class="cat-btn active" data-cat="tech">Tech</button>
+                            <button class="cat-btn" data-cat="science">Science</button>
+                            <button class="cat-btn" data-cat="world">World</button>
+                        </div>
+                        <div class="news-list" id="newsList"></div>
+                    </div>
+                    <div class="tab-content hidden" id="wikiTab">
+                        <div class="wiki-search">
+                            <input type="text" id="wikiQuery" placeholder="Search Wikipedia...">
+                            <button class="action-btn" onclick="jarvis.getWikiSummary()">Search</button>
+                        </div>
+                        <div class="wiki-result" id="wikiResult"></div>
+                    </div>
+                </section>
+
+                <!-- Process Manager Panel -->
+                <section class="panel processes-panel hidden" id="processesPanel">
+                    <div class="panel-header">
+                        <h2>Process Manager</h2>
+                        <button class="refresh-btn" onclick="jarvis.loadProcesses()">↻</button>
+                    </div>
+                    <div class="process-filters">
+                        <div class="search-box">
+                            <input type="text" id="processSearch" placeholder="Search processes...">
+                        </div>
+                        <select id="processSort" class="filter-select">
+                            <option value="cpu">CPU</option>
+                            <option value="memory">Memory</option>
+                            <option value="name">Name</option>
+                        </select>
+                    </div>
+                    <div class="process-table">
+                        <div class="table-header">
+                            <span>PID</span><span>Name</span><span>CPU%</span><span>Mem%</span><span>Action</span>
+                        </div>
+                        <div class="table-body" id="processItems"></div>
+                    </div>
+                </section>
+
+                <!-- Files Panel -->
+                <section class="panel files-panel hidden" id="filesPanel">
+                    <div class="panel-header">
+                        <h2>File Browser</h2>
+                        <button class="refresh-btn" onclick="jarvis.loadFiles()">↻</button>
+                    </div>
+                    <div class="path-bar">
+                        <button class="path-btn" onclick="jarvis.navigateUp()">↑</button>
+                        <input type="text" id="currentPath" value=".">
+                        <button class="path-btn" onclick="jarvis.navigateToPath()">→</button>
+                    </div>
+                    <div class="file-table">
+                        <div class="table-header">
+                            <span>Name</span><span>Size</span><span>Modified</span>
+                        </div>
+                        <div class="table-body" id="fileItems"></div>
+                    </div>
+                </section>
+
+                <!-- Observation Panel -->
+                <section class="panel observation-panel hidden" id="observationPanel">
+                    <div class="panel-header">
+                        <h2>Real-time Monitoring</h2>
+                        <button class="refresh-btn" onclick="jarvis.loadObservation()">↻</button>
+                    </div>
+                    <div class="monitor-grid">
+                        <div class="monitor-card">
+                            <div class="mc-header">
+                                <span>CPU Usage</span>
+                                <span class="mc-value" id="obsCpu">0%</span>
+                            </div>
+                            <canvas id="cpuCanvas" class="monitor-canvas"></canvas>
+                        </div>
+                        <div class="monitor-card">
+                            <div class="mc-header">
+                                <span>Memory</span>
+                                <span class="mc-value" id="obsMem">0%</span>
+                            </div>
+                            <canvas id="memCanvas" class="monitor-canvas"></canvas>
+                        </div>
+                        <div class="monitor-card">
+                            <div class="mc-header">
+                                <span>Network</span>
+                                <span class="mc-value" id="obsNet">0 KB/s</span>
+                            </div>
+                            <canvas id="netCanvas" class="monitor-canvas"></canvas>
+                        </div>
+                    </div>
+                    <div class="events-section">
+                        <h3>Recent Events</h3>
+                        <div class="events-list" id="eventsList"></div>
+                    </div>
+                </section>
+
+                <!-- Knowledge Panel -->
+                <section class="panel knowledge-panel hidden" id="knowledgePanel">
+                    <div class="panel-header">
+                        <h2>Knowledge Base</h2>
+                    </div>
+                    <div class="knowledge-stats">
+                        <div class="know-stat-card">
+                            <span class="ks-value" id="totalKnowledge">0</span>
+                            <span class="ks-label">Entries</span>
+                        </div>
+                        <div class="know-stat-card">
+                            <span class="ks-value" id="totalPatterns">0</span>
+                            <span class="ks-label">Patterns</span>
+                        </div>
+                        <div class="know-stat-card">
+                            <span class="ks-value" id="totalTraining">0</span>
+                            <span class="ks-label">Training</span>
+                        </div>
+                    </div>
+                    <div class="knowledge-search">
+                        <input type="text" id="knowledgeSearch" placeholder="Search knowledge...">
+                    </div>
+                    <div class="knowledge-list" id="knowledgeList"></div>
+                    <div class="knowledge-form">
+                        <div class="form-row">
+                            <input type="text" id="knowledgeKey" placeholder="Key">
+                            <input type="text" id="knowledgeValue" placeholder="Value">
+                        </div>
+                        <div class="form-row">
+                            <select id="knowledgeCategory">
+                                <option value="general">General</option>
+                                <option value="system">System</option>
+                                <option value="user">User</option>
+                            </select>
+                            <button class="action-btn primary" onclick="jarvis.addKnowledge()">Add</button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Training Panel -->
+                <section class="panel training-panel hidden" id="trainingPanel">
+                    <div class="panel-header">
+                        <h2>Training Engine</h2>
+                    </div>
+                    <div class="training-stats">
+                        <div class="train-stat">
+                            <span class="ts-value" id="vocabSize">0</span>
+                            <span class="ts-label">Vocabulary</span>
+                        </div>
+                        <div class="train-stat">
+                            <span class="ts-value" id="totalSamples">0</span>
+                            <span class="ts-label">Samples</span>
+                        </div>
+                        <div class="train-stat">
+                            <span class="ts-value" id="avgRating">0</span>
+                            <span class="ts-label">Rating</span>
+                        </div>
+                    </div>
+                    <div class="training-form">
+                        <h3>Add Training Sample</h3>
+                        <div class="form-row">
+                            <input type="text" id="trainInput" placeholder="Input text">
+                            <input type="text" id="trainOutput" placeholder="Expected output">
+                        </div>
+                        <div class="form-row">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="trainValidated" checked> Validated
+                            </label>
+                            <button class="action-btn primary" onclick="jarvis.addTrainingSample()">Train</button>
+                        </div>
+                    </div>
+                    <div class="training-samples" id="trainingSamples"></div>
+                </section>
+
+                <!-- System Panel -->
+                <section class="panel system-panel hidden" id="systemPanel">
+                    <div class="panel-header">
+                        <h2>System Tools</h2>
+                    </div>
+                    <div class="system-grid">
+                        <div class="sys-tool-card">
+                            <span class="stc-icon">📋</span>
+                            <span class="stc-label">Clipboard</span>
+                            <input type="text" id="clipboardText" placeholder="Text to copy...">
+                            <button class="action-btn" onclick="jarvis.copyToClipboard()">Copy</button>
+                        </div>
+                        <div class="sys-tool-card">
+                            <span class="stc-icon">📸</span>
+                            <span class="stc-label">Screenshot</span>
+                            <button class="action-btn primary" onclick="jarvis.takeScreenshot()">Capture</button>
+                        </div>
+                        <div class="sys-tool-card">
+                            <span class="stc-icon">🚀</span>
+                            <span class="stc-label">Launch App</span>
+                            <select id="appSelect">
+                                <option value="notepad">Notepad</option>
+                                <option value="calculator">Calculator</option>
+                                <option value="explorer">Explorer</option>
+                                <option value="cmd">CMD</option>
+                            </select>
+                            <button class="action-btn" onclick="jarvis.launchApp()">Launch</button>
+                        </div>
+                        <div class="sys-tool-card">
+                            <span class="stc-icon">🔒</span>
+                            <span class="stc-label">System</span>
+                            <div class="sys-btns">
+                                <button class="action-btn" onclick="jarvis.lockScreen()">Lock</button>
+                                <button class="action-btn" onclick="jarvis.sleepSystem()">Sleep</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Settings Panel -->
+                <section class="panel settings-panel hidden" id="settingsPanel">
+                    <div class="panel-header">
+                        <h2>Settings</h2>
+                    </div>
+                    <div class="settings-container">
+                        <div class="settings-section">
+                            <h3>AI Configuration</h3>
+                            <div class="setting-row">
+                                <label>Model</label>
+                                <select id="aiModel">
+                                    <option value="local">Local (Ollama)</option>
+                                    <option value="rag">RAG Mode</option>
+                                    <option value="hybrid">Hybrid</option>
+                                </select>
+                            </div>
+                            <div class="setting-row">
+                                <label>Temperature</label>
+                                <div class="range-wrapper">
+                                    <input type="range" id="aiTemp" min="0" max="100" value="70">
+                                    <span class="range-value" id="tempValue">70%</span>
+                                </div>
+                            </div>
+                            <div class="setting-row">
+                                <label>Max Tokens</label>
+                                <div class="range-wrapper">
+                                    <input type="range" id="maxTokens" min="100" max="4000" value="1000">
+                                    <span class="range-value" id="tokensValue">1000</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="settings-section">
+                            <h3>Interface</h3>
+                            <div class="setting-row">
+                                <label>Theme</label>
+                                <select id="themeSelect">
+                                    <option value="dark">Dark</option>
+                                    <option value="holographic">Holographic</option>
+                                    <option value="light">Light</option>
+                                </select>
+                            </div>
+                            <div class="setting-row">
+                                <label>Refresh Interval</label>
+                                <select id="refreshInterval">
+                                    <option value="1000">1s</option>
+                                    <option value="3000" selected>3s</option>
+                                    <option value="5000">5s</option>
+                                </select>
+                            </div>
+                            <div class="setting-row">
+                                <label>Sound Effects</label>
+                                <label class="toggle">
+                                    <input type="checkbox" id="soundEffects" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="settings-section">
+                            <h3>Advanced</h3>
+                            <div class="setting-row">
+                                <label>Anonymous Mode</label>
+                                <label class="toggle">
+                                    <input type="checkbox" id="anonMode" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-row">
+                                <label>WebSocket Debug</label>
+                                <label class="toggle">
+                                    <input type="checkbox" id="wsDebug">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="settings-section">
+                            <h3>System Status</h3>
+                            <div id="aiStatus" class="status-grid"></div>
+                        </div>
+
+                        <!-- Connections Panel: Email & Integrations -->
+                        <div class="settings-section" id="connectionsSection">
+                            <h3>🔌 Connections & Integrations</h3>
+                            <p class="section-desc">Connect AI to your email and other services. Admin access required.</p>
+                            
+                            <!-- Email Connector Configuration -->
+                            <div class="connector-card" id="emailConnectorCard">
+                                <div class="connector-header">
+                                    <span class="connector-icon">📧</span>
+                                    <div class="connector-info">
+                                        <h4>Email (IMAP + SMTP)</h4>
+                                        <span class="connector-status" id="emailStatus">Not Configured</span>
+                                    </div>
+                                    <button class="action-btn primary" id="configureEmailBtn" onclick="jarvis.configureEmail()">Configure</button>
+                                </div>
+                                <div class="connector-form hidden" id="emailForm">
+                                    <div class="form-row">
+                                        <input type="text" id="imapHost" placeholder="IMAP Host (e.g., imap.gmail.com)">
+                                        <input type="number" id="imapPort" placeholder="Port" value="993" min="1" max="65535">
+                                    </div>
+                                    <div class="form-row">
+                                        <input type="text" id="imapUser" placeholder="Email Address">
+                                        <input type="password" id="imapPassword" placeholder="App Password">
+                                    </div>
+                                    <div class="form-row">
+                                        <input type="text" id="smtpHost" placeholder="SMTP Host (e.g., smtp.gmail.com)">
+                                        <input type="number" id="smtpPort" placeholder="Port" value="587" min="1" max="65535">
+                                    </div>
+                                    <div class="form-row">
+                                        <input type="text" id="sendFrom" placeholder="From Address">
+                                        <label class="toggle">
+                                            <input type="checkbox" id="imapSsl" checked>
+                                            <span class="toggle-slider"></span>
+                                            <span class="toggle-label">SSL</span>
+                                        </label>
+                                    </div>
+                                    <div class="form-row capabilities-row">
+                                        <label>Capabilities:</label>
+                                        <div class="capability-toggles">
+                                            <label class="toggle"><input type="checkbox" id="capRead" checked><span class="toggle-slider"></span><span class="toggle-label">Read</span></label>
+                                            <label class="toggle"><input type="checkbox" id="capSummarize" checked><span class="toggle-slider"></span><span class="toggle-label">Summarize</span></label>
+                                            <label class="toggle"><input type="checkbox" id="capDraft" checked><span class="toggle-slider"></span><span class="toggle-label">Draft</span></label>
+                                            <label class="toggle"><input type="checkbox" id="capSend" checked><span class="toggle-slider"></span><span class="toggle-label">Send</span></label>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <button class="action-btn primary" onclick="jarvis.saveEmailConnector()">Save & Test</button>
+                                        <button class="action-btn" onclick="jarvis.testEmailConnector()">Test Connection</button>
+                                        <button class="action-btn" onclick="jarvis.toggleEmailForm()">Cancel</button>
+                                    </div>
+                                </div>
+                                <div class="connector-actions hidden" id="emailActions">
+                                    <button class="action-btn" onclick="jarvis.loadEmailActivity()">View Activity Log</button>
+                                    <button class="action-btn" onclick="jarvis.deleteEmailConnector()">Disconnect</button>
+                                </div>
+                            </div>
+
+                            <!-- Other Connectors -->
+                            <div class="connector-card" id="otherConnectorsCard">
+                                <div class="connector-header">
+                                    <span class="connector-icon">📎</span>
+                                    <div class="connector-info">
+                                        <h4>Other Integrations</h4>
+                                        <span class="connector-status">Coming Soon</span>
+                                    </div>
+                                </div>
+                                <div class="connector-placeholder">
+                                    <p>Calendar, Files, Database, and Slack connectors are available in the extension marketplace.</p>
+                                    <button class="action-btn primary" onclick="jarvis.openExtensions()">Browse Extensions</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Developer Tools Panel -->
+                        <div class="settings-section" id="developerSection">
+                            <h3>🛠️ Developer Tools & AI Access</h3>
+                            <p class="section-desc">Configure AI access to email and other extensions for enhanced functionality.</p>
+                            
+                            <div class="dev-tools-grid">
+                                <div class="dev-tool-card">
+                                    <span class="dt-icon">📧</span>
+                                    <span class="dt-label">Email Access</span>
+                                    <p>Grant AI read/send access to your inbox</p>
+                                    <label class="toggle">
+                                        <input type="checkbox" id="aiEmailAccess" onchange="jarvis.toggleAIAccess('email')">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                                <div class="dev-tool-card">
+                                    <span class="dt-icon">📅</span>
+                                    <span class="dt-label">Calendar</span>
+                                    <p>AI can manage events and schedules</p>
+                                    <label class="toggle">
+                                        <input type="checkbox" id="aiCalendarAccess" onchange="jarvis.toggleAIAccess('calendar')">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                                <div class="dev-tool-card">
+                                    <span class="dt-icon">📁</span>
+                                    <span class="dt-label">File System</span>
+                                    <p>AI can read/write project files</p>
+                                    <label class="toggle">
+                                        <input type="checkbox" id="aiFileSystemAccess" checked onchange="jarvis.toggleAIAccess('filesystem')">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                                <div class="dev-tool-card">
+                                    <span class="dt-icon">🌐</span>
+                                    <span class="dt-label">Web Access</span>
+                                    <p>AI can search and browse the web</p>
+                                    <label class="toggle">
+                                        <input type="checkbox" id="aiWebAccess" checked onchange="jarvis.toggleAIAccess('web')">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                                <div class="dev-tool-card">
+                                    <span class="dt-icon">🔑</span>
+                                    <span class="dt-label">API Keys</span>
+                                    <p>Manage AI provider API keys</p>
+                                    <button class="action-btn primary" onclick="jarvis.openApiKeys()">Manage</button>
+                                </div>
+                                <div class="dev-tool-card">
+                                    <span class="dt-icon">⚡</span>
+                                    <span class="dt-label">Extensions</span>
+                                    <p>Install plugins for more features</p>
+                                    <button class="action-btn primary" onclick="jarvis.openExtensions()">Browse</button>
+                                </div>
+                            </div>
+
+                            <!-- AI Capabilities Summary -->
+                            <div class="capabilities-summary">
+                                <h4>AI Capabilities Summary</h4>
+                                <div id="capabilitiesSummary" class="summary-grid"></div>
+                            </div>
+                        </div>
+
+                        <!-- Extensions Marketplace Panel -->
+                        <div class="settings-section" id="extensionsSection">
+                            <h3>🧩 Extension Marketplace</h3>
+                            <p class="section-desc">Install and manage extensions to add more facilities and features.</p>
+                            
+                            <div class="extensions-grid" id="extensionsGrid">
+                                <!-- Populated by JS -->
+                            </div>
+                            
+                            <div class="form-row" style="margin-top:16px;">
+                                <input type="text" id="extensionSearch" placeholder="Search extensions..." oninput="jarvis.searchExtensions()">
+                                <select id="extensionCategory">
+                                    <option value="all">All</option>
+                                    <option value="productivity">Productivity</option>
+                                    <option value="communication">Communication</option>
+                                    <option value="development">Development</option>
+                                    <option value="data">Data & Analytics</option>
+                                </select>
+                                <button class="action-btn primary" onclick="jarvis.installExtension()">Install</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

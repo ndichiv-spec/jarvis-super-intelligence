@@ -1,0 +1,2237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JARVIS AI | Next-Gen Assistant</title>
+    <style>
+        :root {
+            --bg-void: #030508;
+            --bg-deep: #060a12;
+            --bg-surface: #0a0f1a;
+            --bg-elevated: #0d1525;
+            --bg-glass: rgba(15, 25, 40, 0.6);
+            --accent-cyan: #00f0ff;
+            --accent-magenta: #ff00aa;
+            --accent-violet: #8b5cf6;
+            --accent-gold: #fbbf24;
+            --accent-emerald: #10b981;
+            --text-primary: #f0f8ff;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --glass-border: rgba(255, 255, 255, 0.08);
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: var(--bg-void);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        /* Immediate background */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: 
+                radial-gradient(ellipse 80% 50% at 20% 10%, rgba(0, 240, 255, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse 60% 40% at 80% 90%, rgba(139, 92, 246, 0.06) 0%, transparent 50%),
+                linear-gradient(180deg, var(--bg-void) 0%, var(--bg-deep) 100%);
+            z-index: -1;
+        }
+        
+
+        
+        /* App Container */
+        .app {
+            display: flex;
+            min-height: 100vh;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            width: 260px;
+            background: var(--bg-glass);
+            border-right: 1px solid var(--glass-border);
+            backdrop-filter: blur(30px);
+            padding: 20px;
+            position: fixed;
+            height: 100vh;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--glass-border);
+            margin-bottom: 20px;
+        }
+        
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            border: 2px solid var(--accent-cyan);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: spin 10s linear infinite;
+        }
+        
+        .logo-icon::before {
+            content: '';
+            width: 20px;
+            height: 20px;
+            background: var(--accent-cyan);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--accent-cyan);
+        }
+        
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        .logo-text {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-magenta));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        /* Navigation */
+        .nav-section {
+            margin-bottom: 20px;
+        }
+        
+        .nav-title {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+            padding: 0 10px;
+        }
+        
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            color: var(--text-secondary);
+        }
+        
+        .nav-item:hover, .nav-item.active {
+            background: rgba(0, 240, 255, 0.1);
+            color: var(--text-primary);
+        }
+        
+        .nav-item.active {
+            border-left: 3px solid var(--accent-cyan);
+        }
+        
+        .nav-icon {
+            font-size: 18px;
+        }
+        
+        /* Main Content */
+        .main {
+            flex: 1;
+            margin-left: 260px;
+            padding: 30px;
+        }
+        
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 24px;
+            color: var(--text-primary);
+        }
+        
+        .header-subtitle {
+            color: var(--text-muted);
+            font-size: 12px;
+        }
+        
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--bg-glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--accent-emerald);
+            border-radius: 50%;
+            animation: blink 2s infinite;
+        }
+        
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        
+        /* Dashboard Grid */
+        .dashboard {
+            display: grid;
+            gap: 24px;
+        }
+        
+        /* Hero Card */
+        .hero {
+            background: linear-gradient(135deg, var(--bg-elevated), var(--bg-surface));
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -20%;
+            width: 60%;
+            height: 200%;
+            background: radial-gradient(ellipse, rgba(0, 240, 255, 0.15) 0%, transparent 60%);
+        }
+        
+        .hero-content {
+            position: relative;
+            z-index: 1;
+        }
+        
+        .hero h2 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 28px;
+            color: var(--accent-cyan);
+            margin-bottom: 8px;
+        }
+        
+        .hero p {
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+        }
+        
+        .hero-stats {
+            display: flex;
+            gap: 30px;
+        }
+        
+        .hero-stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 18px;
+            color: var(--accent-cyan);
+        }
+        
+        .hero-stat-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+        
+        /* Cards Grid */
+        .cards-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+        
+        .card {
+            background: var(--bg-glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 20px;
+            backdrop-filter: blur(20px);
+        }
+        
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        
+        .card-title {
+            font-size: 14px;
+            color: var(--text-primary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .card-icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-violet));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* Metrics */
+        .metrics {
+            display: flex;
+            justify-content: space-around;
+            padding: 20px 0;
+        }
+        
+        .metric {
+            text-align: center;
+        }
+        
+        .metric-ring {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            border: 3px solid var(--glass-border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 10px;
+            position: relative;
+        }
+        
+        .metric-ring::before {
+            content: '';
+            position: absolute;
+            inset: -3px;
+            border-radius: 50%;
+            border: 3px solid transparent;
+            border-top-color: var(--accent-cyan);
+            animation: rotate 2s linear infinite;
+        }
+        
+        @keyframes rotate { to { transform: rotate(360deg); } }
+        
+        .metric-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 16px;
+            color: var(--accent-cyan);
+        }
+        
+        .metric-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+        
+        /* Quick Actions */
+        .quick-actions {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+        
+        .action {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            padding: 16px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .action:hover {
+            background: rgba(0, 240, 255, 0.1);
+            border-color: var(--accent-cyan);
+            transform: translateY(-2px);
+        }
+        
+        .action-icon {
+            font-size: 24px;
+        }
+        
+        .action-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        
+        /* Chat Panel */
+        .chat-panel {
+            background: var(--bg-glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            height: calc(100vh - 200px);
+            display: none;
+            flex-direction: column;
+        }
+        
+        .chat-panel.active {
+            display: flex;
+        }
+        
+        .chat-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--glass-border);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .chat-avatar {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-violet));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 700;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .message {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        
+        .message-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+        }
+        
+        .jarvis-message .message-avatar {
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-violet));
+        }
+        
+        .user-message .message-avatar {
+            background: linear-gradient(135deg, var(--accent-magenta), var(--accent-violet));
+        }
+        
+        .message-content {
+            max-width: 70%;
+            padding: 12px 16px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+        }
+        
+        .user-message .message-content {
+            background: linear-gradient(135deg, rgba(0, 240, 255, 0.1), rgba(139, 92, 246, 0.1));
+            border-color: rgba(0, 240, 255, 0.2);
+        }
+        
+        .chat-input-area {
+            padding: 16px 20px;
+            border-top: 1px solid var(--glass-border);
+            display: flex;
+            gap: 12px;
+        }
+        
+        .chat-input {
+            flex: 1;
+            padding: 14px 18px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-family: inherit;
+            outline: none;
+        }
+        
+        .chat-input:focus {
+            border-color: var(--accent-cyan);
+        }
+        
+        .send-btn {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-violet));
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* Logs */
+        .logs {
+            max-height: 200px;
+            overflow-y: auto;
+            padding: 16px;
+            background: var(--bg-elevated);
+            border-radius: 12px;
+        }
+        
+        .log-entry {
+            display: flex;
+            gap: 12px;
+            padding: 8px 0;
+            font-size: 12px;
+            border-bottom: 1px solid var(--glass-border);
+        }
+        
+        .log-time {
+            color: var(--text-muted);
+            flex-shrink: 0;
+        }
+        
+        .log-msg {
+            color: var(--text-secondary);
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Orbitron:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Loading Screen - with fallback hiding -->
+    <div id="loading" style="position:fixed;inset:0;background:#030508;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;">
+        <div style="font-family:'Orbitron',sans-serif;font-size:48px;font-weight:700;color:#00f0ff;text-shadow:0 0 30px #00f0ff;">JARVIS</div>
+        <div style="color:#94a3b8;margin-top:20px;font-size:14px;">Initializing...</div>
+    </div>
+    <script>
+        // Immediately hide loading - no dependencies needed
+        setTimeout(function() {
+            var el = document.getElementById('loading');
+            if (el) el.style.display = 'none';
+        }, 500);
+    </script>
+    
+    <div class="app" id="app">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <div class="logo-icon"></div>
+                <span class="logo-text">JARVIS</span>
+            </div>
+            
+            <nav>
+                <div class="nav-section">
+                    <div class="nav-title">Main</div>
+                    <div class="nav-item active" data-panel="dashboard">
+                        <span class="nav-icon">◈</span>
+                        <span>Dashboard</span>
+                    </div>
+                    <div class="nav-item" data-panel="chat">
+                        <span class="nav-icon">💬</span>
+                        <span>Chat</span>
+                    </div>
+                    <div class="nav-item" data-panel="voice">
+                        <span class="nav-icon">🎤</span>
+                        <span>Voice</span>
+                    </div>
+                </div>
+                
+                <div class="nav-section">
+                    <div class="nav-title">Tools</div>
+                    <div class="nav-item" data-panel="web">
+                        <span class="nav-icon">🌐</span>
+                        <span>Web</span>
+                    </div>
+                    <div class="nav-item" data-panel="processes">
+                        <span class="nav-icon">⚡</span>
+                        <span>Processes</span>
+                    </div>
+                    <div class="nav-item" data-panel="files">
+                        <span class="nav-icon">📁</span>
+                        <span>Files</span>
+                    </div>
+                    <div class="nav-item" data-panel="monitor">
+                        <span class="nav-icon">📊</span>
+                        <span>Monitor</span>
+                    </div>
+                </div>
+                
+                <div class="nav-section">
+                    <div class="nav-title">AI Engine</div>
+                    <div class="nav-item" data-panel="knowledge">
+                        <span class="nav-icon">🧠</span>
+                        <span>Knowledge</span>
+                    </div>
+                    <div class="nav-item" data-panel="training">
+                        <span class="nav-icon">⬢</span>
+                        <span>Training</span>
+                    </div>
+                    <div class="nav-item" data-panel="system">
+                        <span class="nav-icon">⚙</span>
+                        <span>System</span>
+                    </div>
+                </div>
+                
+                <div class="nav-section">
+                    <div class="nav-item" data-panel="settings">
+                        <span class="nav-icon">✎</span>
+                        <span>Settings</span>
+                    </div>
+                </div>
+            </nav>
+        </aside>
+        
+        <!-- Main Content -->
+        <main class="main">
+            <header class="header">
+                <div>
+                    <h1 id="panelTitle">Dashboard</h1>
+                    <div class="header-subtitle" id="panelSubtitle">System Overview</div>
+                </div>
+                <div class="status">
+                    <div class="status-dot"></div>
+                    <span>Online</span>
+                </div>
+            </header>
+            
+            <!-- Dashboard Panel -->
+            <div id="dashboard" class="dashboard">
+                <div class="hero">
+                    <div class="hero-content">
+                        <h2>Welcome to JARVIS</h2>
+                        <p>Your AI assistant is ready</p>
+                        <div class="hero-stats">
+                            <div>
+                                <div class="hero-stat-value" id="uptime">0s</div>
+                                <div class="hero-stat-label">Uptime</div>
+                            </div>
+                            <div>
+                                <div class="hero-stat-value" id="requests">0</div>
+                                <div class="hero-stat-label">Requests</div>
+                            </div>
+                            <div>
+                                <div class="hero-stat-value" id="memory">0%</div>
+                                <div class="hero-stat-label">Memory</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="cards-row">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">System Metrics</span>
+                            <div class="card-icon">⚡</div>
+                        </div>
+                        <div class="metrics">
+                            <div class="metric">
+                                <div class="metric-ring">
+                                    <span class="metric-value" id="cpuValue">0%</span>
+                                </div>
+                                <div class="metric-label">CPU</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-ring">
+                                    <span class="metric-value" id="ramValue">0%</span>
+                                </div>
+                                <div class="metric-label">Memory</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-ring">
+                                    <span class="metric-value" id="diskValue">0%</span>
+                                </div>
+                                <div class="metric-label">Disk</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">Quick Actions</span>
+                            <div class="card-icon">⚡</div>
+                        </div>
+                        <div class="quick-actions">
+                            <div class="action" onclick="showPanel('chat')">
+                                <span class="action-icon">💬</span>
+                                <span class="action-label">New Chat</span>
+                            </div>
+                            <div class="action" onclick="showPanel('voice')">
+                                <span class="action-icon">🎤</span>
+                                <span class="action-label">Voice</span>
+                            </div>
+                            <div class="action" onclick="showPanel('web')">
+                                <span class="action-icon">🔍</span>
+                                <span class="action-label">Search</span>
+                            </div>
+                            <div class="action">
+                                <span class="action-icon">📸</span>
+                                <span class="action-label">Screenshot</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">Activity</span>
+                        </div>
+                        <div class="logs" id="logs">
+                            <div class="log-entry">
+                                <span class="log-time">--:--:--</span>
+                                <span class="log-msg">System initialized</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Chat Panel -->
+            <div id="chat" class="chat-panel">
+                <div class="chat-header">
+                    <div class="chat-avatar">J</div>
+                    <div>
+                        <div style="font-family: 'Orbitron', sans-serif; color: var(--accent-cyan);">JARVIS</div>
+                        <div style="font-size: 12px; color: var(--text-muted);">Online</div>
+                    </div>
+                    <button class="clear-chat-btn" onclick="clearChat()">🗑️</button>
+                </div>
+                <div class="chat-messages" id="chatMessages">
+                    <div class="message jarvis-message">
+                        <div class="message-avatar">J</div>
+                        <div class="message-content">
+                            <p>Greetings, sir. All systems operational. How may I assist you today?</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="chat-input-area">
+                    <input type="text" class="chat-input" id="chatInput" placeholder="Ask me anything...">
+                    <button class="send-btn" onclick="sendMessage()">
+                        <svg width="20" height="20" fill="white" viewBox="0 0 24 24">
+                            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Files Panel -->
+            <div id="files" class="panel-content">
+                <div class="panel-header-row">
+                    <h2>📁 File Browser</h2>
+                </div>
+                <div class="path-bar">
+                    <button class="path-btn" onclick="navigateUp()">⬆️ Up</button>
+                    <input type="text" class="path-input" id="currentPath" value="." onkeypress="if(event.key==='Enter') navigateToPath()">
+                    <button class="path-btn" onclick="navigateToPath()">Go</button>
+                    <button class="path-btn" onclick="loadFiles('.')">🏠 Home</button>
+                </div>
+                <div class="file-table">
+                    <div class="table-header">
+                        <span>Name</span><span>Size</span><span>Modified</span>
+                    </div>
+                    <div class="table-body" id="fileList">
+                        <div class="loading-row">Click Home to load files...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Processes Panel -->
+            <div id="processes" class="panel-content">
+                <div class="panel-header-row">
+                    <h2>⚡ Process Manager</h2>
+                    <button class="refresh-btn" onclick="loadProcesses()">🔄 Refresh</button>
+                </div>
+                <div class="search-bar">
+                    <input type="text" id="processSearch" placeholder="Search processes..." oninput="filterProcesses()">
+                </div>
+                <div class="process-table">
+                    <div class="table-header">
+                        <span>PID</span><span>Name</span><span>CPU%</span><span>Memory%</span><span>Action</span>
+                    </div>
+                    <div class="table-body" id="processList">
+                        <div class="loading-row">Click Refresh to load processes...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Knowledge Panel -->
+            <div id="knowledge" class="panel-content">
+                <div class="panel-header-row">
+                    <h2>🧠 Knowledge Base</h2>
+                </div>
+                <div class="stats-row">
+                    <div class="stat-box">
+                        <span class="stat-num" id="knowledgeCount">0</span>
+                        <span class="stat-label">Entries</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-num" id="patternCount">0</span>
+                        <span class="stat-label">Patterns</span>
+                    </div>
+                </div>
+                <div class="search-section">
+                    <input type="text" id="knowledgeSearch" placeholder="Search knowledge..." class="search-input">
+                    <button onclick="searchKnowledge()">🔍 Search</button>
+                </div>
+                <div class="knowledge-results" id="knowledgeResults">
+                    <div class="empty-state">Search or add knowledge entries...</div>
+                </div>
+                <div class="add-form">
+                    <input type="text" id="knowledgeKey" placeholder="Key">
+                    <input type="text" id="knowledgeValue" placeholder="Value">
+                    <select id="knowledgeCategory">
+                        <option value="general">General</option>
+                        <option value="system">System</option>
+                        <option value="user">User</option>
+                    </select>
+                    <button onclick="addKnowledge()">➕ Add</button>
+                </div>
+            </div>
+            
+            <!-- Training Panel -->
+            <div id="training" class="panel-content">
+                <div class="panel-header-row">
+                    <h2>⬢ Training Engine</h2>
+                </div>
+                <div class="stats-row">
+                    <div class="stat-box">
+                        <span class="stat-num" id="vocabSize">0</span>
+                        <span class="stat-label">Vocabulary</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-num" id="sampleCount">0</span>
+                        <span class="stat-label">Samples</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-num" id="avgRating">0</span>
+                        <span class="stat-label">Avg Rating</span>
+                    </div>
+                </div>
+                <div class="training-form">
+                    <h3>Add Training Sample</h3>
+                    <input type="text" id="trainInput" placeholder="Input text">
+                    <input type="text" id="trainOutput" placeholder="Expected output">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="trainValidated" checked> Validated
+                    </label>
+                    <button onclick="addTrainingSample()">🚀 Train</button>
+                </div>
+                <div class="training-samples" id="trainingSamples">
+                    <div class="empty-state">Training samples will appear here...</div>
+                </div>
+            </div>
+            
+            <!-- Monitor Panel -->
+            <div id="monitor" class="panel-content">
+                <div class="panel-header-row">
+                    <h2>📊 Real-time Monitor</h2>
+                    <button class="refresh-btn" onclick="loadMonitor()">🔄 Refresh</button>
+                </div>
+                <div class="monitor-grid">
+                    <div class="monitor-card">
+                        <div class="monitor-label">CPU Usage</div>
+                        <div class="monitor-value" id="monitorCpu">0%</div>
+                        <div class="monitor-bar"><div class="monitor-fill" id="monitorCpuBar" style="width: 0%"></div></div>
+                    </div>
+                    <div class="monitor-card">
+                        <div class="monitor-label">Memory</div>
+                        <div class="monitor-value" id="monitorMem">0%</div>
+                        <div class="monitor-bar"><div class="monitor-fill" id="monitorMemBar" style="width: 0%"></div></div>
+                    </div>
+                    <div class="monitor-card">
+                        <div class="monitor-label">Disk</div>
+                        <div class="monitor-value" id="monitorDisk">0%</div>
+                        <div class="monitor-bar"><div class="monitor-fill" id="monitorDiskBar" style="width: 0%"></div></div>
+                    </div>
+                </div>
+                <div class="events-section">
+                    <h3>Recent Events</h3>
+                    <div class="events-list" id="eventsList">
+                        <div class="empty-state">No events yet...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Voice Panel -->
+            <div id="voice" class="panel-content">
+                <div class="panel-header-row">
+                    <h2>🎤 Voice Interface</h2>
+                </div>
+                <div class="voice-container">
+                    <div class="voice-visualizer">
+                        <div class="wave-container" id="waveContainer">
+                            <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+                            <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+                            <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+                        </div>
+                    </div>
+                    <button class="voice-btn" id="voiceButton" onmousedown="startVoice()" onmouseup="stopVoice()">
+                        <span class="mic-icon">🎤</span>
+                        <span>Hold to Speak</span>
+                    </button>
+                    <div class="transcript-box">
+                        <div class="transcript-label">Transcript</div>
+                        <div class="transcript-text" id="voiceTranscript">Press the button and speak...</div>
+                    </div>
+                    <div class="voice-actions">
+                        <button class="action-btn" onclick="speakText()">🔊 Speak</button>
+                        <button class="action-btn" onclick="clearTranscript()">🗑️ Clear</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Web Tools Panel -->
+            <div id="web" class="panel-content">
+                <div class="panel-header-row">
+                    <h2>🌐 Web Tools</h2>
+                </div>
+                <div class="web-tools">
+                    <div class="web-tool">
+                        <h3>🔍 Web Search</h3>
+                        <div class="tool-row">
+                            <input type="text" id="searchQuery" placeholder="Search the web...">
+                            <button onclick="doWebSearch()">Search</button>
+                        </div>
+                        <div class="tool-results" id="searchResults"></div>
+                    </div>
+                    <div class="web-tool">
+                        <h3>🌤️ Weather</h3>
+                        <button onclick="getWeather()">Get Current Weather</button>
+                        <div class="weather-display" id="weatherDisplay">
+                            <span class="temp">--°C</span>
+                            <span class="desc">Click to get weather</span>
+                        </div>
+                    </div>
+                    <div class="web-tool">
+                        <h3>📰 News</h3>
+                        <select id="newsCategory">
+                            <option value="tech">Technology</option>
+                            <option value="science">Science</option>
+                            <option value="world">World</option>
+                        </select>
+                        <button onclick="getNews()">Get News</button>
+                        <div class="news-list" id="newsList"></div>
+                    </div>
+                    <div class="web-tool">
+                        <h3>📚 Wikipedia</h3>
+                        <div class="tool-row">
+                            <input type="text" id="wikiQuery" placeholder="Search Wikipedia...">
+                            <button onclick="getWiki()">Search</button>
+                        </div>
+                        <div class="wiki-result" id="wikiResult"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- System Panel -->
+            <div id="system" class="panel-content">
+                <div class="panel-header-row">
+                    <h2>⚙️ System Tools</h2>
+                </div>
+                <div class="system-tools-grid">
+                    <div class="sys-tool-card">
+                        <span class="tool-icon">📋</span>
+                        <span class="tool-label">Clipboard</span>
+                        <input type="text" id="clipboardText" placeholder="Text to copy...">
+                        <button onclick="copyToClipboard()">Copy</button>
+                    </div>
+                    <div class="sys-tool-card">
+                        <span class="tool-icon">📸</span>
+                        <span class="tool-label">Screenshot</span>
+                        <button onclick="takeScreenshot()">Capture</button>
+                    </div>
+                    <div class="sys-tool-card">
+                        <span class="tool-icon">🚀</span>
+                        <span class="tool-label">Launch App</span>
+                        <select id="appSelect">
+                            <option value="notepad">Notepad</option>
+                            <option value="calculator">Calculator</option>
+                            <option value="explorer">Explorer</option>
+                            <option value="cmd">CMD</option>
+                        </select>
+                        <button onclick="launchApp()">Launch</button>
+                    </div>
+                    <div class="sys-tool-card">
+                        <span class="tool-icon">🔒</span>
+                        <span class="tool-label">System Control</span>
+                        <button onclick="lockScreen()">Lock</button>
+                        <button onclick="sleepSystem()">Sleep</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Settings Panel -->
+            <div id="settings" class="panel-content">
+                <div class="panel-header-row">
+                    <h2>✎ Settings</h2>
+                </div>
+                <div class="settings-section">
+                    <h3>🤖 AI Model</h3>
+                    <select id="aiModel">
+                        <option value="local">Local (Ollama)</option>
+                        <option value="rag">RAG Mode</option>
+                        <option value="hybrid">Hybrid</option>
+                    </select>
+                </div>
+                <div class="settings-section">
+                    <h3>🌡️ Temperature</h3>
+                    <input type="range" id="aiTemp" min="0" max="100" value="70">
+                    <span class="range-value" id="tempValue">70%</span>
+                </div>
+                <div class="settings-section">
+                    <h3>⚡ Refresh Interval</h3>
+                    <select id="refreshInterval">
+                        <option value="1000">1 second</option>
+                        <option value="3000" selected>3 seconds</option>
+                        <option value="5000">5 seconds</option>
+                    </select>
+                </div>
+                <div class="settings-section">
+                    <h3>🔒 Privacy</h3>
+                    <label class="toggle-label">
+                        <input type="checkbox" id="anonMode" checked>
+                        <span>Anonymous Mode</span>
+                    </label>
+                </div>
+            </div>
+        </main>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <script>
+        // State
+        let uptime = 0;
+        let requestCount = 0;
+        let currentPanel = 'dashboard';
+        
+        // DOM Elements
+        const loading = document.getElementById('loading');
+        const uptimeEl = document.getElementById('uptime');
+        const requestsEl = document.getElementById('requests');
+        const memoryEl = document.getElementById('memory');
+        const cpuEl = document.getElementById('cpuValue');
+        const ramEl = document.getElementById('ramValue');
+        const diskEl = document.getElementById('diskValue');
+        const logsEl = document.getElementById('logs');
+        
+        // Hide loading immediately when page loads
+        window.addEventListener('load', function() {
+            setTimeout(function() {
+                var loading = document.getElementById('loading');
+                if (loading) {
+                    loading.style.opacity = '0';
+                    loading.style.pointerEvents = 'none';
+                }
+            }, 300);
+        });
+        
+        // Fallback: hide after 2 seconds regardless
+        setTimeout(function() {
+            var loading = document.getElementById('loading');
+            if (loading && !loading.classList.contains('hidden')) {
+                loading.style.display = 'none';
+            }
+        }, 2000);
+        
+        // Navigation
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                showPanel(item.dataset.panel);
+            });
+        });
+        
+        function showPanel(panelId) {
+            currentPanel = panelId;
+            
+            // Hide all panels
+            document.getElementById('dashboard').style.display = 'none';
+            document.getElementById('chat').classList.remove('active');
+            document.getElementById('chat').style.display = 'none';
+            document.querySelectorAll('.panel-content').forEach(p => p.classList.remove('active'));
+            
+            // Show selected panel
+            if (panelId === 'dashboard') {
+                document.getElementById('dashboard').style.display = 'block';
+            } else if (panelId === 'chat') {
+                document.getElementById('chat').style.display = 'flex';
+                document.getElementById('chat').classList.add('active');
+            } else {
+                const panel = document.getElementById(panelId);
+                if (panel) {
+                    panel.classList.add('active');
+                    // Load data for this panel
+                    loadPanelData(panelId);
+                }
+            }
+            
+            // Update nav
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.toggle('active', item.dataset.panel === panelId);
+            });
+            
+            // Update header
+            const titles = {
+                'dashboard': ['Dashboard', 'System Overview'],
+                'chat': ['AI Assistant', 'Natural Language'],
+                'voice': ['Voice Interface', 'Speech Recognition'],
+                'web': ['Web Tools', 'Search & APIs'],
+                'processes': ['Process Manager', 'Running Tasks'],
+                'files': ['File Browser', 'Navigation'],
+                'monitor': ['Monitoring', 'Real-time Metrics'],
+                'knowledge': ['Knowledge Base', 'Data Store'],
+                'training': ['Training Engine', 'ML Model'],
+                'system': ['System Tools', 'Utilities'],
+                'settings': ['Settings', 'Configuration']
+            };
+            
+            if (titles[panelId]) {
+                document.getElementById('panelTitle').textContent = titles[panelId][0];
+                document.getElementById('panelSubtitle').textContent = titles[panelId][1];
+            }
+            
+            addLog(`Opened: ${panelId}`);
+        }
+        
+        function loadPanelData(panelId) {
+            if (panelId === 'files') loadFiles('.');
+            if (panelId === 'processes') loadProcesses();
+            if (panelId === 'knowledge') loadKnowledge();
+            if (panelId === 'training') loadTraining();
+            if (panelId === 'monitor') loadMonitor();
+        }
+        
+        // ==================== PANEL DATA FUNCTIONS ====================
+        
+        // Files
+        let currentPath = '.';
+        
+        async function loadFiles(path) {
+            currentPath = path;
+            document.getElementById('currentPath').value = path;
+            try {
+                const res = await fetch('/api/files?path=' + encodeURIComponent(path));
+                const data = await res.json();
+                const list = document.getElementById('fileList');
+                if (data.success && data.files) {
+                    list.innerHTML = data.files.map(f => `
+                        <div class="file-row ${f.is_dir ? 'directory' : ''}" onclick="${f.is_dir ? 'loadFiles(\"' + f.name + '\")' : ''}">
+                            <span>${f.is_dir ? '📁 ' : '📄 '}${escapeHtml(f.name)}</span>
+                            <span>${formatSize(f.size)}</span>
+                            <span>${f.modified ? new Date(f.modified).toLocaleDateString() : '-'}</span>
+                        </div>
+                    `).join('');
+                }
+            } catch (e) {
+                document.getElementById('fileList').innerHTML = '<div class="loading-row">Error loading files</div>';
+            }
+        }
+        
+        function navigateUp() {
+            const parts = currentPath.split(/[/\\]/);
+            parts.pop();
+            loadFiles(parts.join('/') || '.');
+        }
+        
+        function navigateToPath() {
+            loadFiles(document.getElementById('currentPath').value);
+        }
+        
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+            if (bytes < 1024*1024*1024) return (bytes/1024/1024).toFixed(1) + ' MB';
+            return (bytes/1024/1024/1024).toFixed(1) + ' GB';
+        }
+        
+        // Processes
+        async function loadProcesses() {
+            try {
+                const res = await fetch('/api/system/processes?limit=30');
+                const data = await res.json();
+                const list = document.getElementById('processList');
+                if (data.success && data.processes) {
+                    list.innerHTML = data.processes.map(p => `
+                        <div class="process-row">
+                            <span>${p.pid}</span>
+                            <span>${escapeHtml(p.name)}</span>
+                            <span>${p.cpu}%</span>
+                            <span>${p.memory}%</span>
+                            <button class="kill-btn" onclick="killProcess(${p.pid})">✕</button>
+                        </div>
+                    `).join('');
+                }
+            } catch (e) {
+                document.getElementById('processList').innerHTML = '<div class="loading-row">Error loading processes</div>';
+            }
+        }
+        
+        function filterProcesses() {
+            const query = document.getElementById('processSearch').value.toLowerCase();
+            document.querySelectorAll('.process-row').forEach(row => {
+                const name = row.querySelector('span:nth-child(2)').textContent.toLowerCase();
+                row.style.display = name.includes(query) ? '' : 'none';
+            });
+        }
+        
+        async function killProcess(pid) {
+            try {
+                await fetch('/api/system/process/kill', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({pid: pid})
+                });
+                addLog('Process ' + pid + ' terminated');
+                loadProcesses();
+            } catch (e) {
+                addLog('Failed to kill process');
+            }
+        }
+        
+        // Knowledge
+        async function loadKnowledge() {
+            try {
+                const res = await fetch('/api/knowledge');
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('knowledgeCount').textContent = data.stats?.total_entries || 0;
+                    document.getElementById('patternCount').textContent = data.stats?.total_patterns || 0;
+                    const results = document.getElementById('knowledgeResults');
+                    if (data.entries && data.entries.length > 0) {
+                        results.innerHTML = data.entries.slice(0, 20).map(e => `
+                            <div class="knowledge-item">
+                                <strong>${escapeHtml(e.key)}</strong>: ${escapeHtml(e.value)}
+                            </div>
+                        `).join('');
+                    } else {
+                        results.innerHTML = '<div class="empty-state">No knowledge entries</div>';
+                    }
+                }
+            } catch (e) {
+                document.getElementById('knowledgeResults').innerHTML = '<div class="empty-state">Error loading knowledge</div>';
+            }
+        }
+        
+        async function searchKnowledge() {
+            const query = document.getElementById('knowledgeSearch').value;
+            if (!query) return;
+            try {
+                const res = await fetch('/api/knowledge?search=' + encodeURIComponent(query));
+                const data = await res.json();
+                const results = document.getElementById('knowledgeResults');
+                if (data.success && data.results) {
+                    results.innerHTML = data.results.map(e => `
+                        <div class="knowledge-item">
+                            <strong>${escapeHtml(e.key)}</strong>: ${escapeHtml(e.value)}
+                        </div>
+                    `).join('');
+                }
+            } catch (e) {}
+        }
+        
+        async function addKnowledge() {
+            const key = document.getElementById('knowledgeKey').value;
+            const value = document.getElementById('knowledgeValue').value;
+            const category = document.getElementById('knowledgeCategory').value;
+            if (!key || !value) return;
+            try {
+                await fetch('/api/knowledge', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({key, value, category})
+                });
+                addLog('Knowledge added: ' + key);
+                document.getElementById('knowledgeKey').value = '';
+                document.getElementById('knowledgeValue').value = '';
+                loadKnowledge();
+            } catch (e) {}
+        }
+        
+        // Training
+        async function loadTraining() {
+            try {
+                const res = await fetch('/api/training');
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('vocabSize').textContent = data.stats?.model_stats?.vocabulary_size || 0;
+                    document.getElementById('sampleCount').textContent = data.stats?.total_samples || 0;
+                    document.getElementById('avgRating').textContent = data.stats?.avg_rating || 'N/A';
+                    const list = document.getElementById('trainingSamples');
+                    if (data.recent_samples && data.recent_samples.length > 0) {
+                        list.innerHTML = data.recent_samples.slice(0, 10).map(s => `
+                            <div class="training-item">
+                                <strong>Input:</strong> ${escapeHtml(s.input_text)}<br>
+                                <strong>Output:</strong> ${escapeHtml(s.output_text)}
+                            </div>
+                        `).join('');
+                    } else {
+                        list.innerHTML = '<div class="empty-state">No training samples</div>';
+                    }
+                }
+            } catch (e) {}
+        }
+        
+        async function addTrainingSample() {
+            const input = document.getElementById('trainInput').value;
+            const output = document.getElementById('trainOutput').value;
+            const validated = document.getElementById('trainValidated').checked;
+            if (!input || !output) return;
+            try {
+                await fetch('/api/training', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({input_text: input, output_text: output, validated: validated})
+                });
+                addLog('Training sample added');
+                document.getElementById('trainInput').value = '';
+                document.getElementById('trainOutput').value = '';
+                loadTraining();
+            } catch (e) {}
+        }
+        
+        // Monitor
+        async function loadMonitor() {
+            try {
+                const res = await fetch('/api/system/status');
+                const data = await res.json();
+                if (data.success && data.system) {
+                    document.getElementById('monitorCpu').textContent = data.system.cpu.usage + '%';
+                    document.getElementById('monitorCpuBar').style.width = data.system.cpu.usage + '%';
+                    document.getElementById('monitorMem').textContent = data.system.memory.percent + '%';
+                    document.getElementById('monitorMemBar').style.width = data.system.memory.percent + '%';
+                    document.getElementById('monitorDisk').textContent = data.system.disk.percent + '%';
+                    document.getElementById('monitorDiskBar').style.width = data.system.disk.percent + '%';
+                }
+            } catch (e) {}
+        }
+        
+        // Web Tools
+        async function doWebSearch() {
+            const query = document.getElementById('searchQuery').value;
+            if (!query) return;
+            try {
+                const res = await fetch('/api/web/search?q=' + encodeURIComponent(query) + '&num=5');
+                const data = await res.json();
+                const results = document.getElementById('searchResults');
+                if (data.success && data.results) {
+                    results.innerHTML = data.results.map(r => `
+                        <div class="search-result-item">
+                            <a href="${r.url}" target="_blank">${escapeHtml(r.title)}</a>
+                            <p>${escapeHtml(r.snippet)}</p>
+                        </div>
+                    `).join('');
+                }
+            } catch (e) {}
+        }
+        
+        async function getWeather() {
+            try {
+                const res = await fetch('/api/web/weather');
+                const data = await res.json();
+                const display = document.getElementById('weatherDisplay');
+                if (data.success) {
+                    display.innerHTML = '<span class="temp">' + data.temperature + '°C</span><span class="desc">' + (data.description || 'Clear') + '</span>';
+                }
+            } catch (e) {}
+        }
+        
+        async function getNews() {
+            const category = document.getElementById('newsCategory').value;
+            try {
+                const res = await fetch('/api/web/news?category=' + category + '&limit=5');
+                const data = await res.json();
+                const list = document.getElementById('newsList');
+                if (data.success && data.articles) {
+                    list.innerHTML = data.articles.map(a => '<div class="news-item"><a href="' + a.link + '" target="_blank">' + escapeHtml(a.title) + '</a></div>').join('');
+                }
+            } catch (e) {}
+        }
+        
+        async function getWiki() {
+            const query = document.getElementById('wikiQuery').value;
+            if (!query) return;
+            try {
+                const res = await fetch('/api/web/wikipedia?q=' + encodeURIComponent(query) + '&action=summary');
+                const data = await res.json();
+                const result = document.getElementById('wikiResult');
+                if (data.success) {
+                    result.innerHTML = '<p>' + escapeHtml(data.extract || 'No results') + '</p>';
+                }
+            } catch (e) {}
+        }
+        
+        // System Tools
+        async function copyToClipboard() {
+            const text = document.getElementById('clipboardText').value;
+            try {
+                await fetch('/api/system/clipboard', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({text: text})
+                });
+                addLog('Copied to clipboard');
+            } catch (e) {}
+        }
+        
+        async function takeScreenshot() {
+            try {
+                const res = await fetch('/api/system/screenshot', {method: 'POST'});
+                const data = await res.json();
+                if (data.success) addLog('Screenshot saved');
+            } catch (e) {}
+        }
+        
+        async function launchApp() {
+            const app = document.getElementById('appSelect').value;
+            try {
+                await fetch('/api/system/launch', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({app: app})
+                });
+                addLog('Launched: ' + app);
+            } catch (e) {}
+        }
+        
+        async function lockScreen() {
+            try {
+                await fetch('/api/system/control', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'lock'})
+                });
+                addLog('Screen locked');
+            } catch (e) {}
+        }
+        
+        async function sleepSystem() {
+            try {
+                await fetch('/api/system/control', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'sleep'})
+                });
+            } catch (e) {}
+        }
+        
+        // Voice
+        let recognition = null;
+        
+        function startVoice() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (SpeechRecognition) {
+                recognition = new SpeechRecognition();
+                recognition.continuous = true;
+                recognition.onresult = function(event) {
+                    const transcript = Array.from(event.results).map(r => r[0].transcript).join('');
+                    document.getElementById('voiceTranscript').textContent = transcript;
+                };
+                recognition.start();
+                addLog('Voice recognition started');
+            }
+        }
+        
+        function stopVoice() {
+            if (recognition) {
+                recognition.stop();
+                recognition = null;
+            }
+        }
+        
+        function speakText() {
+            const text = document.getElementById('voiceTranscript').textContent;
+            if (text && text !== 'Press the button and speak...') {
+                fetch('/api/speech/speak', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({text: text})
+                });
+                addLog('Speaking...');
+            }
+        }
+        
+        function clearTranscript() {
+            document.getElementById('voiceTranscript').textContent = 'Press the button and speak...';
+        }
+        
+        // Clear chat
+        function clearChat() {
+            document.getElementById('chatMessages').innerHTML = `
+                <div class="message jarvis-message">
+                    <div class="message-avatar">J</div>
+                    <div class="message-content">
+                        <p>Greetings, sir. All systems operational. How may I assist you today?</p>
+                    </div>
+                </div>
+            `;
+            addLog('Chat cleared');
+        }
+        
+        // System monitoring
+        async function fetchSystemStatus() {
+            try {
+                const response = await fetch('/api/system/status');
+                const data = await response.json();
+                
+                if (data.success && data.system) {
+                    cpuEl.textContent = data.system.cpu.usage + '%';
+                    ramEl.textContent = data.system.memory.percent + '%';
+                    diskEl.textContent = data.system.disk.percent + '%';
+                    memoryEl.textContent = data.system.memory.percent + '%';
+        }
+        
+        /* Panel Content Base */
+        .panel-content {
+            display: none;
+            animation: fadeIn 0.3s;
+        }
+        
+        .panel-content.active {
+            display: block;
+        }
+        
+        .panel-header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .panel-header-row h2 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 20px;
+            color: var(--accent-cyan);
+        }
+        
+        .refresh-btn {
+            padding: 8px 16px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+        
+        .refresh-btn:hover {
+            background: var(--accent-cyan);
+            color: var(--bg-void);
+        }
+        
+        /* Files Panel */
+        .path-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        
+        .path-btn {
+            padding: 10px 16px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+        
+        .path-btn:hover {
+            background: var(--accent-cyan);
+            color: var(--bg-void);
+        }
+        
+        .path-input {
+            flex: 1;
+            padding: 10px 14px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            color: var(--text-primary);
+        }
+        
+        .file-table, .process-table {
+            background: var(--bg-elevated);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        .table-header {
+            display: grid;
+            padding: 12px 16px;
+            background: var(--bg-surface);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+        }
+        
+        .file-table .table-header {
+            grid-template-columns: 1fr 100px 150px;
+        }
+        
+        .process-table .table-header {
+            grid-template-columns: 80px 1fr 80px 80px 80px;
+        }
+        
+        .table-body {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .file-row, .process-row {
+            display: grid;
+            padding: 10px 16px;
+            border-bottom: 1px solid var(--glass-border);
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .file-row:hover, .process-row:hover {
+            background: rgba(0, 240, 255, 0.05);
+        }
+        
+        .file-row.directory {
+            color: var(--accent-cyan);
+        }
+        
+        .loading-row {
+            padding: 40px;
+            text-align: center;
+            color: var(--text-muted);
+        }
+        
+        /* Stats Box */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-box {
+            background: var(--bg-elevated);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .stat-num {
+            display: block;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 24px;
+            color: var(--accent-cyan);
+        }
+        
+        .stat-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+        
+        /* Search */
+        .search-section, .search-bar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        
+        .search-input {
+            flex: 1;
+            padding: 12px 16px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--glass-border);
+            border-radius: 10px;
+            color: var(--text-primary);
+        }
+        
+        .search-section button, .search-bar button {
+            padding: 12px 20px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-violet));
+            border: none;
+            border-radius: 10px;
+            color: white;
+            cursor: pointer;
+        }
+        
+        /* Knowledge */
+        .knowledge-results, .training-samples {
+            background: var(--bg-elevated);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .knowledge-item, .training-item {
+            padding: 12px;
+            border-bottom: 1px solid var(--glass-border);
+        }
+        
+        .knowledge-item:last-child, .training-item:last-child {
+            border-bottom: none;
+        }
+        
+        .add-form {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        
+        .add-form input, .add-form select {
+            flex: 1;
+            min-width: 150px;
+            padding: 12px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            color: var(--text-primary);
+        }
+        
+        .add-form button {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-violet));
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+        }
+        
+        .training-form {
+            background: var(--bg-elevated);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+        
+        .training-form h3 {
+            margin-bottom: 16px;
+            color: var(--text-primary);
+        }
+        
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-secondary);
+        }
+        
+        /* Monitor */
+        .monitor-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        
+        .monitor-card {
+            background: var(--bg-elevated);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+        
+        .monitor-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+        
+        .monitor-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 24px;
+            color: var(--accent-cyan);
+            margin-bottom: 8px;
+        }
+        
+        .monitor-bar {
+            height: 6px;
+            background: var(--bg-surface);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        
+        .monitor-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-violet));
+            transition: width 0.3s;
+        }
+        
+        .events-section h3 {
+            margin-bottom: 12px;
+            color: var(--text-secondary);
+        }
+        
+        .events-list {
+            background: var(--bg-elevated);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 16px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .event-item {
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--glass-border);
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        
+        .event-item:last-child {
+            border-bottom: none;
+        }
+        
+        /* Voice */
+        .voice-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 30px;
+        }
+        
+        .voice-visualizer {
+            width: 100%;
+            height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-elevated);
+            border-radius: 12px;
+        }
+        
+        .wave-container {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+        }
+        
+        .wave-bar {
+            width: 6px;
+            height: 20px;
+            background: var(--accent-cyan);
+            border-radius: 3px;
+            animation: wave 1s ease-in-out infinite;
+        }
+        
+        .wave-bar:nth-child(odd) {
+            animation-delay: 0.1s;
+        }
+        
+        @keyframes wave {
+            0%, 100% { height: 20px; }
+            50% { height: 60px; }
+        }
+        
+        .voice-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            padding: 24px 48px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-violet));
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+        }
+        
+        .voice-btn .mic-icon {
+            font-size: 32px;
+        }
+        
+        .voice-btn span {
+            color: white;
+            font-weight: 600;
+        }
+        
+        .transcript-box {
+            width: 100%;
+            max-width: 500px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 16px;
+        }
+        
+        .transcript-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+        
+        .transcript-text {
+            font-size: 16px;
+            color: var(--text-primary);
+            min-height: 40px;
+        }
+        
+        .voice-actions {
+            display: flex;
+            gap: 16px;
+        }
+        
+        .voice-actions .action-btn {
+            padding: 12px 24px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+        
+        .voice-actions .action-btn:hover {
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+        }
+        
+        /* Web Tools */
+        .web-tools {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+        
+        .web-tool {
+            background: var(--bg-elevated);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+        
+        .web-tool h3 {
+            margin-bottom: 16px;
+            color: var(--accent-cyan);
+        }
+        
+        .tool-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        
+        .tool-row input {
+            flex: 1;
+            padding: 10px 14px;
+            background: var(--bg-surface);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            color: var(--text-primary);
+        }
+        
+        .tool-row button, .web-tool > button {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-violet));
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+        }
+        
+        .tool-results, .weather-display, .news-list, .wiki-result {
+            margin-top: 12px;
+            padding: 12px;
+            background: var(--bg-surface);
+            border-radius: 8px;
+            min-height: 60px;
+        }
+        
+        .weather-display {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .weather-display .temp {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 32px;
+            color: var(--accent-cyan);
+        }
+        
+        /* System Tools */
+        .system-tools-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+        
+        .sys-tool-card {
+            background: var(--bg-elevated);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .sys-tool-card .tool-icon {
+            font-size: 24px;
+        }
+        
+        .sys-tool-card .tool-label {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        
+        .sys-tool-card input, .sys-tool-card select {
+            padding: 10px 14px;
+            background: var(--bg-surface);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            color: var(--text-primary);
+        }
+        
+        .sys-tool-card button {
+            padding: 10px;
+            background: var(--bg-surface);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+        
+        .sys-tool-card button:hover {
+            background: var(--accent-cyan);
+            color: var(--bg-void);
+        }
+        
+        /* Settings */
+        .settings-section {
+            background: var(--bg-elevated);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+        
+        .settings-section h3 {
+            color: var(--accent-cyan);
+            margin-bottom: 16px;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .settings-section select, .settings-section input[type="range"] {
+            width: 100%;
+            padding: 10px;
+            background: var(--bg-surface);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            color: var(--text-primary);
+        }
+        
+        .range-value {
+            display: inline-block;
+            margin-left: 12px;
+            color: var(--accent-cyan);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .toggle-label {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+        
+        .toggle-label input {
+            width: 20px;
+            height: 20px;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted);
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Clear Chat Button */
+        .clear-chat-btn {
+            margin-left: auto;
+            background: transparent;
+            border: 1px solid var(--glass-border);
+            padding: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            color: var(--text-muted);
+        }
+        
+        .clear-chat-btn:hover {
+            background: var(--accent-magenta);
+            color: white;
+        }
+        
+        /* Typing Dots */
+        .typing-dots span {
+            display: inline-block;
+            animation: typingBounce 1.4s infinite;
+        }
+        
+        .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+        
+        @keyframes typingBounce {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-10px); }
+        }
+            } catch (e) {
+                console.log('System status unavailable');
+            }
+        }
+        
+        // Update stats
+        setInterval(() => {
+            uptime += 3;
+            const hours = Math.floor(uptime / 3600);
+            const minutes = Math.floor((uptime % 3600) / 60);
+            const seconds = uptime % 60;
+            uptimeEl.textContent = `${hours}h ${minutes}m ${seconds}s`;
+        }, 3000);
+        
+        // Fetch system status
+        setInterval(fetchSystemStatus, 3000);
+        fetchSystemStatus();
+        
+        // Logging
+        function addLog(msg) {
+            const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="log-time">${time}</span><span class="log-msg">${msg}</span>`;
+            logsEl.appendChild(entry);
+            logsEl.scrollTop = logsEl.scrollHeight;
+            
+            if (logsEl.children.length > 20) {
+                logsEl.removeChild(logsEl.firstChild);
+            }
+        }
+        
+        // Chat
+        const chatInput = document.getElementById('chatInput');
+        const chatMessages = document.getElementById('chatMessages');
+        
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+        
+        function sendMessage() {
+            const msg = chatInput.value.trim();
+            if (!msg) return;
+            
+            requestCount++;
+            requestsEl.textContent = requestCount;
+            
+            // Add user message
+            const userMsg = document.createElement('div');
+            userMsg.className = 'message user-message';
+            userMsg.innerHTML = `<div class="message-avatar">U</div><div class="message-content"><p>${escapeHtml(msg)}</p></div>`;
+            chatMessages.appendChild(userMsg);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            
+            chatInput.value = '';
+            addLog(`Chat: ${msg.substring(0, 30)}`);
+            
+            // Show typing indicator
+            showTypingIndicator();
+            
+            // Call actual AI API
+            fetch('/api/chat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({message: msg, model: 'local'})
+            })
+            .then(res => res.json())
+            .then(data => {
+                hideTypingIndicator();
+                const response = data.response || 'I received your message: ' + msg;
+                addJarvisMessage(response);
+            })
+            .catch(err => {
+                hideTypingIndicator();
+                addJarvisMessage('I\'m processing your request... (' + msg.substring(0, 20) + '...)');
+            });
+        }
+        
+        function showTypingIndicator() {
+            const typing = document.createElement('div');
+            typing.id = 'typingIndicator';
+            typing.className = 'message jarvis-message';
+            typing.innerHTML = `<div class="message-avatar">J</div><div class="message-content"><p style="color: var(--text-muted);"><span class="typing-dots"><span>.</span><span>.</span><span>.</span></span> JARVIS is thinking...</p></div>`;
+            chatMessages.appendChild(typing);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        function hideTypingIndicator() {
+            const typing = document.getElementById('typingIndicator');
+            if (typing) typing.remove();
+        }
+        
+        function addJarvisMessage(text) {
+            const jarvisMsg = document.createElement('div');
+            jarvisMsg.className = 'message jarvis-message';
+            jarvisMsg.innerHTML = `<div class="message-avatar">J</div><div class="message-content"><p>${escapeHtml(text)}</p></div>`;
+            chatMessages.appendChild(jarvisMsg);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Initialize WebSocket connection
+        function initWebSocket() {
+            if (typeof io !== 'undefined') {
+                const socket = io();
+                socket.on('connect', function() {
+                    addLog('WebSocket connected');
+                    document.querySelector('.status span').textContent = 'Online';
+                });
+                socket.on('disconnect', function() {
+                    addLog('WebSocket disconnected');
+                    document.querySelector('.status span').textContent = 'Offline';
+                });
+                socket.on('voice_response', function(data) {
+                    document.getElementById('voiceTranscript').textContent = data.response;
+                });
+                return socket;
+            }
+            return null;
+        }
+        
+        // Start monitoring
+        const ws = initWebSocket();
+        setInterval(loadMonitor, 5000);
+        
+        // Initialize
+        addLog('Dashboard initialized');
+    </script>
+</body>
+</html>

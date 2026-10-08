@@ -1,0 +1,113 @@
+> For the complete documentation index, see [llms.txt](https://agpt.co/docs/llms.txt). Markdown versions of documentation pages are available by appending `.md` to page URLs; this page is available as [Markdown](https://agpt.co/docs/platform/api-and-integrations/api-guide.md).
+
+# API Introduction
+
+The AutoGPT Platform provides an External API that allows you to programmatically interact with agents, blocks, the store, and more.
+
+## API Documentation
+
+Full API documentation with interactive examples is available at:
+
+[**https://backend.agpt.co/external-api/docs**](https://backend.agpt.co/external-api/docs)
+
+This Swagger UI documentation includes all available endpoints, request/response schemas, and allows you to try out API calls directly.
+
+## Authentication Methods
+
+The External API supports two authentication methods:
+
+### 1. API Keys
+
+API keys are the simplest way to authenticate. Generate an API key from your AutoGPT Platform account settings and include it in your requests:
+
+```http
+GET /external-api/v1/blocks
+X-API-Key: your_api_key_here
+```
+
+API keys are ideal for:
+
+* Server-to-server integrations
+* Personal scripts and automation
+* Backend services
+
+### 2. OAuth 2.0 (Single Sign-On)
+
+For applications that need to act on behalf of users, use OAuth 2.0. This allows users to authorize your application to access their AutoGPT resources.
+
+OAuth is ideal for:
+
+* Third-party applications
+* "Sign in with AutoGPT" (SSO, Single Sign-On) functionality
+* Applications that need user-specific permissions
+
+See the [OAuth Integration Guide](/docs/platform/api-and-integrations/oauth-guide.md) for complete OAuth implementation details.
+
+## Available Scopes
+
+When using OAuth, request only the scopes your application needs:
+
+| Scope                 | Description                         |
+| --------------------- | ----------------------------------- |
+| `IDENTITY`            | Read user ID, e-mail, and timezone  |
+| `EXECUTE_GRAPH`       | Run agents                          |
+| `READ_GRAPH`          | Read agent run results              |
+| `WRITE_GRAPH`         | Create and update agent graphs      |
+| `EXECUTE_BLOCK`       | Run individual blocks               |
+| `READ_BLOCK`          | Read block definitions              |
+| `READ_STORE`          | Access the agent store              |
+| `WRITE_LIBRARY`       | Add agents to your library          |
+| `USE_TOOLS`           | Use platform tools                  |
+| `MANAGE_INTEGRATIONS` | Create and update user integrations |
+| `READ_INTEGRATIONS`   | Read user integration status        |
+| `DELETE_INTEGRATIONS` | Remove user integrations            |
+
+## Quick Start
+
+### Using an API Key
+
+```bash
+# List available blocks
+curl -H "X-API-Key: YOUR_API_KEY" \
+  https://backend.agpt.co/external-api/v1/blocks
+```
+
+### Using OAuth
+
+1. Register an OAuth application (contact platform administrator)
+2. Implement the OAuth flow as described in the [OAuth Guide](/docs/platform/api-and-integrations/oauth-guide.md)
+3. Use the obtained access token:
+
+```bash
+curl -H "Authorization: Bearer agpt_xt_..." \
+  https://backend.agpt.co/external-api/v1/blocks
+```
+
+## Support
+
+For issues or questions about API integration:
+
+* Open an issue on [GitHub](https://github.com/Significant-Gravitas/AutoGPT)
+* Check the [Swagger documentation](https://backend.agpt.co/external-api/docs)
+
+
+---
+
+# Agent Instructions
+This documentation is published with GitBook. GitBook is the documentation platform designed so that both humans and AI agents can read, navigate, and reason over technical content effectively. Learn more at gitbook.com.
+
+## Querying This Documentation
+If you need additional information that is not directly available in this page, you can query the documentation dynamically by asking a question.
+
+Perform an HTTP GET request on the current page URL with the `ask` query parameter, and the optional `goal` query parameter:
+
+```
+GET https://agpt.co/docs/platform/api-and-integrations/api-guide.md?ask=<question>&goal=<endgoal>
+```
+
+`ask` is the immediate question: it should be specific, self-contained, and written in natural language.
+`goal` is optional and describes the broader end goal you are ultimately trying to accomplish on behalf of the user. GitBook uses it to tailor the answer towards what is most useful for that goal.
+
+The response will contain a direct answer to the question and relevant excerpts and sources from the documentation.
+
+Use this mechanism when the answer is not explicitly present in the current page, you need clarification or additional context, or you want to retrieve related documentation sections.

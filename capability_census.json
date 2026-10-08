@@ -1,0 +1,4522 @@
+{
+  "capabilities": {
+    "brain": {
+      "name": "JARVIS Brain",
+      "files_found": 1,
+      "routes": [
+        {
+          "router": "control_plane",
+          "route": "/brain"
+        },
+        {
+          "router": "control_plane",
+          "route": "/development/brain"
+        },
+        {
+          "router": "health",
+          "route": "/api/brain/status"
+        },
+        {
+          "router": "health",
+          "route": "/api/brain/models"
+        },
+        {
+          "router": "research",
+          "route": "/brain/capabilities"
+        }
+      ],
+      "classification": [
+        {
+          "file": "jarvis_backend\\core.py",
+          "status": "REAL"
+        }
+      ],
+      "status": "REAL + DISCONNECTED"
+    },
+    "silverwing": {
+      "name": "Silverwing",
+      "files_found": 1,
+      "routes": [
+        {
+          "router": "control_plane",
+          "route": "/silverwing"
+        },
+        {
+          "router": "control_plane",
+          "route": "/development/silverwing"
+        }
+      ],
+      "classification": [
+        {
+          "file": "silverwing-backend\\main.py",
+          "status": "REAL"
+        }
+      ],
+      "status": "REAL + DISCONNECTED"
+    },
+    "conversation": {
+      "name": "Conversation",
+      "files_found": 2,
+      "routes": [
+        {
+          "router": "legacy",
+          "route": "/api/chat/messages/{session_id}/{message_id}/regenerate"
+        },
+        {
+          "router": "legacy",
+          "route": "/api/chat/messages/{session_id}/{message_id}"
+        },
+        {
+          "router": "legacy",
+          "route": "/api/chat/messages/{session_id}/{message_id}/resend"
+        },
+        {
+          "router": "legacy",
+          "route": "/api/chat/messages/{session_id}/{message_id}/feedback"
+        }
+      ],
+      "classification": [
+        {
+          "file": "jarvis_backend\\routers\\ai.py",
+          "status": "SIMULATED"
+        },
+        {
+          "file": "jarvis_backend\\db.py",
+          "status": "REAL"
+        }
+      ],
+      "status": "REAL + DISCONNECTED"
+    },
+    "voice": {
+      "name": "Voice",
+      "files_found": 1,
+      "routes": [
+        {
+          "router": "voice",
+          "route": "/voices"
+        }
+      ],
+      "classification": [
+        {
+          "file": "jarvis_backend\\routers\\voice.py",
+          "status": "REAL"
+        }
+      ],
+      "status": "REAL + DISCONNECTED"
+    },
+    "vision": {
+      "name": "Vision",
+      "files_found": 0,
+      "routes": [
+        {
+          "router": "curriculum",
+          "route": "/models/revisions"
+        },
+        {
+          "router": "system",
+          "route": "/screenshot"
+        }
+      ],
+      "classification": [],
+      "status": "PARTIAL"
+    },
+    "image_gen": {
+      "name": "Image Generation",
+      "files_found": 1,
+      "routes": [
+        {
+          "router": "media",
+          "route": "/image/generate"
+        },
+        {
+          "router": "multimodal",
+          "route": "/upload/image"
+        }
+      ],
+      "classification": [
+        {
+          "file": "jarvis_backend\\routers\\multimodal.py",
+          "status": "REAL"
+        }
+      ],
+      "status": "REAL + DISCONNECTED"
+    },
+    "memory": {
+      "name": "Memory",
+      "files_found": 1,
+      "routes": [
+        {
+          "router": "browser",
+          "route": "/evidence/{evidence_id}/to-memory"
+        },
+        {
+          "router": "memory",
+          "route": "/memory/store"
+        },
+        {
+          "router": "memory",
+          "route": "/memory/recall"
+        },
+        {
+          "router": "memory",
+          "route": "/memory/stats"
+        },
+        {
+          "router": "memory",
+          "route": "/memory/consolidate"
+        },
+        {
+          "router": "misc",
+          "route": "/dashboard/widgets/data/memory-stats"
+        }
+      ],
+      "classification": [
+        {
+          "file": "jarvis_backend\\routers\\memory.py",
+          "status": "REAL"
+        }
+      ],
+      "status": "REAL + DISCONNECTED"
+    },
+    "knowledge": {
+      "name": "Knowledge/RAG",
+      "files_found": 2,
+      "routes": [
+        {
+          "router": "browser",
+          "route": "/search"
+        },
+        {
+          "router": "browser",
+          "route": "/page/extract-to-knowledge"
+        },
+        {
+          "router": "geography",
+          "route": "/offline_search"
+        },
+        {
+          "router": "global_knowledge",
+          "route": "/knowledge/global/search"
+        },
+        {
+          "router": "global_knowledge",
+          "route": "/knowledge/global/trends"
+        },
+        {
+          "router": "global_knowledge",
+          "route": "/knowledge/global/code"
+        },
+        {
+          "router": "global_knowledge",
+          "route": "/knowledge/global/sources"
+        },
+        {
+          "router": "knowledge",
+          "route": "/search"
+        },
+        {
+          "router": "memory",
+          "route": "/knowledge/search"
+        },
+        {
+          "router": "misc",
+          "route": "/dashboard/knowledge-graph/sample"
+        },
+        {
+          "router": "models",
+          "route": "/search"
+        },
+        {
+          "router": "research",
+          "route": "/research"
+        },
+        {
+          "router": "research",
+          "route": "/research/{session_id}"
+        },
+        {
+          "router": "search",
+          "route": "/to/research"
+        },
+        {
+          "router": "search",
+          "route": "/to/knowledge"
+        }
+      ],
+      "classification": [
+        {
+          "file": "jarvis_backend\\routers\\knowledge.py",
+          "status": "REAL"
+        },
+        {
+          "file": "jarvis_backend\\routers\\search.py",
+          "status": "REAL"
+        }
+      ],
+      "status": "REAL + DISCONNECTED"
+    },
+    "tools": {
+      "name": "Tools/Connectors",
+      "files_found": 39,
+      "routes": [
+        {
+          "router": "browser",
+          "route": "/actions"
+        },
+        {
+          "router": "browser",
+          "route": "/actions"
+        },
+        {
+          "router": "browser",
+          "route": "/actions/{action_id}/execute"
+        },
+        {
+          "router": "browser",
+          "route": "/actions/replay/{session_id}"
+        },
+        {
+          "router": "connectors",
+          "route": "/{kind}/actions"
+        },
+        {
+          "router": "control_plane",
+          "route": "/development/next-action"
+        },
+        {
+          "router": "misc",
+          "route": "/components/{component_id}/{action}"
+        },
+        {
+          "router": "stark",
+          "route": "/tool"
+        }
+      ],
+      "classification": [
+        {
+          "file": "jarvis_backend\\routers/",
+          "status": "EXISTS"
+        },
+        {
+          "file": "providers/",
+          "status": "EXISTS"
+        }
+      ],
+      "status": "REAL + DISCONNECTED"
+    },
+    "browser": {
+      "name": "Browser",
+      "files_found": 2,
+      "routes": [
+        {
+          "router": "browser",
+          "route": "/missions/{mission_id}/browser-task"
+        },
+        {
+          "router": "browser",
+          "route": "/remote-browser/status"
+        },
+        {
+          "router": "browser",
+          "route": "/remote-browser/sessions"
+        },
+        {
+          "router": "legacy",
+          "route": "/api/browser/system/initialize"
+        },
+        {
+          "router": "legacy",
+          "route": "/api/browser/system/status"
+        },
+        {
+          "router": "legacy",
+          "route": "/api/browser/create"
+        },
+        {
+          "router": "legacy",
+          "route": "/api/browser/navigate"
+        },
+        {
+          "router": "legacy",
+          "route": "/api/browser/load-content"
+        },
+        {
+          "router": "legacy",
+          "route": "/api/browser/execute-script"
+        },
+        {
+          "router": "legacy",
+          "route": "/api/browser/{window_id}/show"
+        },
+        {
+          "router": "legacy",
+          "route": "/api/browser/{window_id}/hide"
+        },
+        {
+          "router": "legacy",
+          "route": "/api/browser/{window_id}"
+        },
+        {
+          "router": "search",
+          "route": "/to/browser"
+        }
+      ],
+      "classification": [
+        {
+          "file": "jarvis_backend\\routers\\browser.py",
+          "status": "REAL"
+        },
+        {
+          "file": "jarvis_backend\\browser_engine.py",
+          "status": "REAL"
+        }
+      ],
+      "status": "REAL + DISCONNECTED"
+    },
+    "tasks": {
+      "name": "Tasks/Jobs",
+      "files_found": 38,
+      "routes": [
+        {
+          "router": "agents",
+          "route": "/task"
+        },
+        {
+          "router": "agents",
+          "route": "/tasks"
+        },
+        {
+          "router": "agents",
+          "route": "/tasks/{task_id}/toggle"
+        },
+        {
+          "router": "agents",
+          "route": "/tasks/{task_id}/run"
+        },
+        {
+          "router": "agents",
+          "route": "/tasks/{task_id}"
+        },
+        {
+          "router": "agents",
+          "route": "/scheduler/status"
+        },
+        {
+          "router": "agents",
+          "route": "/scheduler/toggle"
+        },
+        {
+          "router": "agents",
+          "route": "/collaboration/tasks/list"
+        },
+        {
+          "router": "agents",
+          "route": "/collaboration/task/create"
+        },
+        {
+          "router": "agents",
+          "route": "/collaboration/task/execute"
+        },
+        {
+          "router": "ai",
+          "route": "/ai/tasks"
+        },
+        {
+          "router": "ai",
+          "route": "/ai/tasks"
+        },
+        {
+          "router": "ai",
+          "route": "/ai/tasks/{task_id}"
+        },
+        {
+          "router": "ai",
+          "route": "/ai/tasks/{task_id}"
+        },
+        {
+          "router": "ai",
+          "route": "/ai/tasks/{task_id}/cancel"
+        },
+        {
+          "router": "automation",
+          "route": "/task/{task_id}/run"
+        },
+        {
+          "router": "browser",
+          "route": "/sessions/{session_id}/permissions"
+        },
+        {
+          "router": "browser",
+          "route": "/autonomous"
+        },
+        {
+          "router": "browser",
+          "route": "/tasks"
+        },
+        {
+          "router": "browser",
+          "route": "/tasks"
+        },
+        {
+          "router": "browser",
+          "route": "/tasks/{task_id}/step/{step_id}/execute"
+        },
+        {
+          "router": "browser",
+          "route": "/tasks/{task_id}/checkpoint"
+        },
+        {
+          "router": "browser",
+          "route": "/tasks/{task_id}/resume"
+        },
+        {
+          "router": "browser",
+          "route": "/tasks/{task_id}/pause"
+        },
+        {
+          "router": "browser",
+          "route": "/tasks/{task_id}/cancel"
+        },
+        {
+          "router": "browser",
+          "route": "/evidence/{evidence_id}/to-mission"
+        },
+        {
+          "router": "browser",
+          "route": "/missions/{mission_id}/context"
+        },
+        {
+          "router": "browser",
+          "route": "/missions/{mission_id}/browser-task"
+        },
+        {
+          "router": "browser",
+          "route": "/tasks/{task_id}/plan"
+        },
+        {
+          "router": "control_plane",
+          "route": "/jobs"
+        },
+        {
+          "router": "control_plane",
+          "route": "/jobs"
+        },
+        {
+          "router": "control_plane",
+          "route": "/jobs/{job_id}"
+        },
+        {
+          "router": "control_plane",
+          "route": "/compute/job/submit"
+        },
+        {
+          "router": "control_plane",
+          "route": "/compute/job/{job_id}"
+        },
+        {
+          "router": "control_plane",
+          "route": "/compute/job/{job_id}/cancel"
+        },
+        {
+          "router": "experiments",
+          "route": "/mission/{mission_id}"
+        },
+        {
+          "router": "rbac",
+          "route": "/permissions"
+        }
+      ],
+      "classification": [
+        {
+          "file": "jarvis_backend\\routers/",
+          "status": "EXISTS"
+        }
+      ],
+      "status": "REAL + DISCONNECTED"
+    },
+    "learning": {
+      "name": "Learning",
+      "files_found": 79,
+      "routes": [
+        {
+          "router": "browser",
+          "route": "/tasks/{task_id}/checkpoint"
+        },
+        {
+          "router": "control_plane",
+          "route": "/compute/training"
+        },
+        {
+          "router": "control_plane",
+          "route": "/compute/training"
+        },
+        {
+          "router": "control_plane",
+          "route": "/compute/evaluation"
+        },
+        {
+          "router": "curriculum",
+          "route": "/datasets"
+        },
+        {
+          "router": "curriculum",
+          "route": "/training/runs"
+        },
+        {
+          "router": "curriculum",
+          "route": "/training/runs"
+        },
+        {
+          "router": "experiments",
+          "route": "/evaluation-suites"
+        },
+        {
+          "router": "experiments",
+          "route": "/evaluation-suites/{suite_id}"
+        },
+        {
+          "router": "experiments",
+          "route": "/evaluation-suites/run"
+        },
+        {
+          "router": "experiments",
+          "route": "/datasets/validate"
+        },
+        {
+          "router": "experiments",
+          "route": "/datasets"
+        },
+        {
+          "router": "experiments",
+          "route": "/datasets/{dataset_id}"
+        },
+        {
+          "router": "improvements",
+          "route": "/learning/lessons"
+        },
+        {
+          "router": "improvements",
+          "route": "/learning/graph"
+        },
+        {
+          "router": "research",
+          "route": "/learning/lessons"
+        },
+        {
+          "router": "research",
+          "route": "/learning/lessons/{lesson_id}"
+        }
+      ],
+      "classification": [
+        {
+          "file": "infrastructure/",
+          "status": "EXISTS"
+        }
+      ],
+      "status": "REAL + DISCONNECTED"
+    },
+    "providers": {
+      "name": "Providers",
+      "files_found": 2,
+      "routes": [
+        {
+          "router": "control_plane",
+          "route": "/providers"
+        },
+        {
+          "router": "control_plane",
+          "route": "/providers/{provider_id}"
+        },
+        {
+          "router": "control_plane",
+          "route": "/providers/{provider_id}"
+        },
+        {
+          "router": "control_plane",
+          "route": "/costs/usage-by-provider"
+        },
+        {
+          "router": "health",
+          "route": "/api/providers"
+        },
+        {
+          "router": "identity",
+          "route": "/login/google"
+        },
+        {
+          "router": "identity",
+          "route": "/callback/google"
+        },
+        {
+          "router": "provider_status",
+          "route": "/providers"
+        },
+        {
+          "router": "system",
+          "route": "/provider-settings"
+        },
+        {
+          "router": "system",
+          "route": "/provider-settings"
+        }
+      ],
+      "classification": [
+        {
+          "file": "jarvis_backend\\gateway.py",
+          "status": "SIMULATED"
+        },
+        {
+          "file": "providers/",
+          "status": "EXISTS"
+        }
+      ],
+      "status": "REAL + DISCONNECTED"
+    },
+    "security": {
+      "name": "Security",
+      "files_found": 2,
+      "routes": [
+        {
+          "router": "browser",
+          "route": "/sessions/{session_id}/permissions"
+        },
+        {
+          "router": "browser",
+          "route": "/auth-state"
+        },
+        {
+          "router": "connectors",
+          "route": "/{kind}/oauth/authorize"
+        },
+        {
+          "router": "connectors",
+          "route": "/oauth/callback/{kind}"
+        },
+        {
+          "router": "control_plane",
+          "route": "/audit"
+        },
+        {
+          "router": "control_plane",
+          "route": "/audit/count"
+        },
+        {
+          "router": "extensions",
+          "route": "/oauth/callback/{extension_id}"
+        },
+        {
+          "router": "rbac",
+          "route": "/permissions"
+        },
+        {
+          "router": "rbac",
+          "route": "/audit-logs"
+        },
+        {
+          "router": "rbac",
+          "route": "/audit-logs/export"
+        }
+      ],
+      "classification": [
+        {
+          "file": "jarvis_backend\\core.py",
+          "status": "REAL"
+        },
+        {
+          "file": "tests\\test_sec1_security.py",
+          "status": "TEST-ONLY"
+        }
+      ],
+      "status": "REAL + DISCONNECTED"
+    },
+    "ui": {
+      "name": "UI/Frontend",
+      "files_found": 0,
+      "routes": [
+        {
+          "router": "misc",
+          "route": "/components"
+        },
+        {
+          "router": "misc",
+          "route": "/components/start-all"
+        },
+        {
+          "router": "misc",
+          "route": "/components/stop-all"
+        },
+        {
+          "router": "misc",
+          "route": "/components/{component_id}/{action}"
+        },
+        {
+          "router": "misc",
+          "route": "/dashboard/widgets/data/system-metrics"
+        },
+        {
+          "router": "misc",
+          "route": "/dashboard/widgets/data/memory-stats"
+        },
+        {
+          "router": "misc",
+          "route": "/dashboard/widgets/data/ai-status"
+        },
+        {
+          "router": "misc",
+          "route": "/dashboard/widgets/data/agent-status"
+        },
+        {
+          "router": "misc",
+          "route": "/dashboard/knowledge-graph/sample"
+        },
+        {
+          "router": "system",
+          "route": "/dashboard"
+        }
+      ],
+      "classification": [
+        {
+          "file": "frontend\\web\\src/",
+          "status": "EXISTS"
+        }
+      ],
+      "status": "PARTIAL"
+    },
+    "events": {
+      "name": "Events",
+      "files_found": 91,
+      "routes": [
+        {
+          "router": "browser",
+          "route": "/network/events"
+        },
+        {
+          "router": "global_knowledge",
+          "route": "/observation/events"
+        },
+        {
+          "router": "legacy",
+          "route": "/api/chat/stream"
+        }
+      ],
+      "classification": [
+        {
+          "file": "jarvis_backend/",
+          "status": "EXISTS"
+        }
+      ],
+      "status": "REAL + DISCONNECTED"
+    },
+    "persistence": {
+      "name": "Persistence",
+      "files_found": 2,
+      "routes": [
+        {
+          "router": "legacy",
+          "route": "/api/chat/sessions/{session_id}/restore"
+        },
+        {
+          "router": "memory",
+          "route": "/memory/store"
+        }
+      ],
+      "classification": [
+        {
+          "file": "jarvis_backend\\db.py",
+          "status": "REAL"
+        },
+        {
+          "file": "jarvis_backend\\core.py",
+          "status": "REAL"
+        }
+      ],
+      "status": "REAL + DISCONNECTED"
+    }
+  },
+  "routers": [
+    {
+      "module": "agents",
+      "file": "jarvis_backend\\routers\\agents.py",
+      "routes": [
+        "/stats",
+        "/task",
+        "/tasks",
+        "/tasks/{task_id}/toggle",
+        "/tasks/{task_id}/run",
+        "/executions",
+        "/tasks/{task_id}",
+        "/scheduler/status",
+        "/scheduler/toggle",
+        "/service-tailoring",
+        "/goals",
+        "/collaboration/agents/list",
+        "/collaboration/tasks/list",
+        "/collaboration/task/create",
+        "/collaboration/task/execute",
+        "/collaboration/metrics",
+        "/collaboration/self-organize",
+        "/{agent_id}",
+        "/{agent_id}/act"
+      ],
+      "route_count": 19
+    },
+    {
+      "module": "ai",
+      "file": "jarvis_backend\\routers\\ai.py",
+      "routes": [
+        "/ai/process",
+        "/ai/generate",
+        "/ai/feedback",
+        "/ai/models",
+        "/ai/status",
+        "/ai/tasks",
+        "/ai/tasks",
+        "/ai/tasks/{task_id}",
+        "/ai/tasks/{task_id}",
+        "/ai/tasks/{task_id}/cancel",
+        "/llm/chat",
+        "/llm/status",
+        "/holographic/state"
+      ],
+      "route_count": 13
+    },
+    {
+      "module": "auth",
+      "file": "jarvis_backend\\routers\\auth.py",
+      "routes": [
+        "/login",
+        "/register",
+        "/logout",
+        "/refresh",
+        "/me",
+        "/me",
+        "/forgot-password",
+        "/reset-password",
+        "/change-password",
+        "/sessions",
+        "/sessions/{session_id}",
+        "/sessions",
+        "/api-keys",
+        "/api-keys",
+        "/api-keys/{key_id}",
+        "/api-keys/{key_id}/rotate",
+        "/verify-email",
+        "/resend-verification"
+      ],
+      "route_count": 18
+    },
+    {
+      "module": "automation",
+      "file": "jarvis_backend\\routers\\automation.py",
+      "routes": [
+        "/task/{task_id}/run",
+        "/n8n/status",
+        "/n8n/workflows",
+        "/n8n/workflows/run"
+      ],
+      "route_count": 4
+    },
+    {
+      "module": "billing",
+      "file": "jarvis_backend\\routers\\billing.py",
+      "routes": [
+        "/usage",
+        "/plan"
+      ],
+      "route_count": 2
+    },
+    {
+      "module": "browser",
+      "file": "jarvis_backend\\routers\\browser.py",
+      "routes": [
+        "/sessions",
+        "/sessions",
+        "/sessions/{session_id}/permissions",
+        "/sessions/{session_id}",
+        "/sessions/{session_id}",
+        "/tabs",
+        "/tabs",
+        "/tabs/{tab_id}",
+        "/navigate",
+        "/extract",
+        "/security/prompt-injection",
+        "/security/report",
+        "/search",
+        "/evidence",
+        "/evidence",
+        "/history",
+        "/bookmarks",
+        "/bookmarks",
+        "/bookmarks/{bookmark_id}",
+        "/downloads",
+        "/page",
+        "/autonomous",
+        "/status",
+        "/actions",
+        "/actions",
+        "/actions/{action_id}/execute",
+        "/observe-act",
+        "/page-state",
+        "/tasks",
+        "/tasks",
+        "/tasks/{task_id}/step/{step_id}/execute",
+        "/tasks/{task_id}/checkpoint",
+        "/tasks/{task_id}/resume",
+        "/tasks/{task_id}/pause",
+        "/tasks/{task_id}/cancel",
+        "/workspaces",
+        "/workspaces",
+        "/workspaces/{workspace_id}",
+        "/workspaces/{workspace_id}/associate",
+        "/telemetry",
+        "/telemetry",
+        "/source-graph",
+        "/source-graph",
+        "/timeline",
+        "/timeline",
+        "/actions/replay/{session_id}",
+        "/model-route",
+        "/evidence/{evidence_id}/promote",
+        "/evidence/{evidence_id}/to-mission",
+        "/missions/{mission_id}/context",
+        "/missions/{mission_id}/browser-task",
+        "/evidence/{evidence_id}/to-memory",
+        "/remote-browser/status",
+        "/remote-browser/sessions",
+        "/tasks/{task_id}/plan",
+        "/auth-state",
+        "/security/high-risk-dom",
+        "/summon",
+        "/artifacts",
+        "/resource-usage",
+        "/health",
+        "/diagnostics/dns",
+        "/diagnostics/proxy",
+        "/diagnostics/network",
+        "/recover",
+        "/network/events",
+        "/network/timeline",
+        "/navigate/context",
+        "/navigate/classify-failure",
+        "/open-context",
+        "/profiles",
+        "/profiles/{profile_name}",
+        "/engine",
+        "/page/understand",
+        "/page/extract-to-knowledge",
+        "/sessions/{session_id}/context"
+      ],
+      "route_count": 76
+    },
+    {
+      "module": "challenges",
+      "file": "jarvis_backend\\routers\\challenges.py",
+      "routes": [
+        "/challenges/run",
+        "/challenges/{run_id}",
+        "/challenges/{run_id}/execute",
+        "/problems/generate",
+        "/profiles",
+        "/adversarial/edge-cases",
+        "/resources/usage"
+      ],
+      "route_count": 7
+    },
+    {
+      "module": "codegen",
+      "file": "jarvis_backend\\routers\\codegen.py",
+      "routes": [
+        "/generate",
+        "/review",
+        "/deploy"
+      ],
+      "route_count": 3
+    },
+    {
+      "module": "connectors",
+      "file": "jarvis_backend\\routers\\connectors.py",
+      "routes": [
+        "/activity",
+        "/{kind}",
+        "/{kind}/oauth/authorize",
+        "/oauth/callback/{kind}",
+        "/{kind}/test",
+        "/{kind}",
+        "/{kind}",
+        "/{kind}",
+        "/{kind}/actions"
+      ],
+      "route_count": 9
+    },
+    {
+      "module": "control_plane",
+      "file": "jarvis_backend\\routers\\control_plane.py",
+      "routes": [
+        "/providers",
+        "/providers/{provider_id}",
+        "/providers/{provider_id}",
+        "/models",
+        "/models/{model_id}/provenance",
+        "/models/{model_id}/promote",
+        "/models/{model_id}/block",
+        "/routing/decide",
+        "/jobs",
+        "/jobs",
+        "/jobs/{job_id}",
+        "/costs",
+        "/costs/budget/{user_id}",
+        "/budget",
+        "/costs/usage-by-provider",
+        "/audit",
+        "/audit/count",
+        "/health",
+        "/brain",
+        "/silverwing",
+        "/development-fabric",
+        "/development-pipeline",
+        "/development/status",
+        "/development/brain",
+        "/development/silverwing",
+        "/development/next-action",
+        "/deployments",
+        "/remote/status",
+        "/remote/resources",
+        "/remote/verify",
+        "/cloud/status",
+        "/cloud/compute/select",
+        "/capabilities",
+        "/capabilities/discover",
+        "/integrations",
+        "/integrations/{system}",
+        "/compute/discover",
+        "/compute/verify/{resource_id}",
+        "/compute/inference",
+        "/compute/training",
+        "/compute/training",
+        "/compute/evaluation",
+        "/compute/embedding",
+        "/compute/artifact/upload",
+        "/compute/artifact/download",
+        "/compute/job/submit",
+        "/compute/job/{job_id}",
+        "/compute/job/{job_id}/cancel",
+        "/compute/resource/health"
+      ],
+      "route_count": 49
+    },
+    {
+      "module": "curriculum",
+      "file": "jarvis_backend\\routers\\curriculum.py",
+      "routes": [
+        "/hub/health",
+        "/hub/models",
+        "/teachers",
+        "/episodes",
+        "/datasets",
+        "/models/revisions",
+        "/models/{record_id}/lineage",
+        "/training/runs",
+        "/training/runs"
+      ],
+      "route_count": 9
+    },
+    {
+      "module": "developer",
+      "file": "jarvis_backend\\routers\\developer.py",
+      "routes": [
+        "/access",
+        "/access",
+        "/access/{extension}",
+        "/capabilities",
+        "/api-keys",
+        "/api-keys",
+        "/status"
+      ],
+      "route_count": 7
+    },
+    {
+      "module": "experiments",
+      "file": "jarvis_backend\\routers\\experiments.py",
+      "routes": [
+        "/design",
+        "/prepare",
+        "/baseline-candidate",
+        "/",
+        "/mission/{mission_id}",
+        "/resources",
+        "/resources/select",
+        "/resources/{resource_id}/health",
+        "/evaluation-suites",
+        "/evaluation-suites/{suite_id}",
+        "/evaluation-suites/run",
+        "/datasets/validate",
+        "/datasets",
+        "/datasets/{dataset_id}",
+        "/{exp_id}/run",
+        "/{exp_id}/analyze",
+        "/{exp_id}/verify",
+        "/{exp_id}/complete",
+        "/{exp_id}",
+        "/{exp_id}/comparison",
+        "/{exp_id}/manifest",
+        "/{exp_id}/baseline",
+        "/{exp_id}/candidate",
+        "/{exp_id}/promote",
+        "/{exp_id}/status",
+        "/{exp_id}/block",
+        "/{exp_id}/critique"
+      ],
+      "route_count": 27
+    },
+    {
+      "module": "extensions",
+      "file": "jarvis_backend\\routers\\extensions.py",
+      "routes": [
+        "/installed",
+        "/capabilities",
+        "/{extension_id}",
+        "/install",
+        "/{extension_id}/launch",
+        "/oauth/callback/{extension_id}",
+        "/{extension_id}/connect",
+        "/uninstall",
+        "/{extension_id}",
+        "/{extension_id}/invoke"
+      ],
+      "route_count": 10
+    },
+    {
+      "module": "geography",
+      "file": "jarvis_backend\\routers\\geography.py",
+      "routes": [
+        "/capabilities",
+        "/coordinates/parse",
+        "/distance",
+        "/bearing",
+        "/area",
+        "/offline_search"
+      ],
+      "route_count": 6
+    },
+    {
+      "module": "global_knowledge",
+      "file": "jarvis_backend\\routers\\global_knowledge.py",
+      "routes": [
+        "/knowledge/global/search",
+        "/knowledge/global/trends",
+        "/knowledge/global/code",
+        "/knowledge/global/sources",
+        "/observation/status",
+        "/observation/report",
+        "/observation/events",
+        "/observation/metrics",
+        "/rss/feeds",
+        "/rss/latest",
+        "/rss/refresh"
+      ],
+      "route_count": 11
+    },
+    {
+      "module": "health",
+      "file": "jarvis_backend\\routers\\health.py",
+      "routes": [
+        "/health",
+        "/api/ping",
+        "/api/version",
+        "/api/v1/health/status",
+        "/api/v1/metrics",
+        "/health/live",
+        "/health/ready",
+        "/",
+        "/api/status",
+        "/api/capabilities",
+        "/api/providers",
+        "/api/models",
+        "/api/brain/status",
+        "/api/brain/models"
+      ],
+      "route_count": 14
+    },
+    {
+      "module": "identity",
+      "file": "jarvis_backend\\routers\\identity.py",
+      "routes": [
+        "/login/google",
+        "/callback/google",
+        "/sessions",
+        "/sessions/{session_id}"
+      ],
+      "route_count": 4
+    },
+    {
+      "module": "improvements",
+      "file": "jarvis_backend\\routers\\improvements.py",
+      "routes": [
+        "/",
+        "/create",
+        "/{impr_id}/run",
+        "/{impr_id}/baseline",
+        "/{impr_id}/evaluate",
+        "/{impr_id}/critique",
+        "/{impr_id}/verify",
+        "/{impr_id}",
+        "/{impr_id}/transition",
+        "/learning/lessons",
+        "/learning/graph"
+      ],
+      "route_count": 11
+    },
+    {
+      "module": "knowledge",
+      "file": "jarvis_backend\\routers\\knowledge.py",
+      "routes": [
+        "/search",
+        "/patterns"
+      ],
+      "route_count": 2
+    },
+    {
+      "module": "legacy",
+      "file": "jarvis_backend\\routers\\legacy.py",
+      "routes": [
+        "/api/chat",
+        "/api/chat/stream",
+        "/api/chat/sessions",
+        "/api/chat/sessions",
+        "/api/chat/sessions/{session_id}",
+        "/api/chat/sessions/{session_id}/restore",
+        "/api/chat/sessions/{session_id}/export",
+        "/api/chat/history/{session_id}",
+        "/api/chat/history/{session_id}",
+        "/api/chat/messages/{session_id}/{message_id}/regenerate",
+        "/api/chat/messages/{session_id}/{message_id}",
+        "/api/chat/messages/{session_id}/{message_id}/resend",
+        "/api/chat/messages/{session_id}/{message_id}/feedback",
+        "/api/chat/switch",
+        "/api/notes",
+        "/api/notes",
+        "/api/notes/{note_id}",
+        "/api/notes/{note_id}",
+        "/api/reminders",
+        "/api/reminders",
+        "/api/reminders/{reminder_id}",
+        "/api/reminders/{reminder_id}",
+        "/api/reminders/{reminder_id}/complete",
+        "/api/browser/system/initialize",
+        "/api/browser/system/status",
+        "/api/browser/create",
+        "/api/browser/navigate",
+        "/api/browser/load-content",
+        "/api/browser/execute-script",
+        "/api/browser/{window_id}/show",
+        "/api/browser/{window_id}/hide",
+        "/api/browser/{window_id}"
+      ],
+      "route_count": 32
+    },
+    {
+      "module": "media",
+      "file": "jarvis_backend\\routers\\media.py",
+      "routes": [
+        "/video/analyze",
+        "/video/extract-frames",
+        "/video/info",
+        "/image/generate"
+      ],
+      "route_count": 4
+    },
+    {
+      "module": "memory",
+      "file": "jarvis_backend\\routers\\memory.py",
+      "routes": [
+        "/memory/store",
+        "/memory/recall",
+        "/memory/stats",
+        "/memory/consolidate",
+        "/consciousness/report",
+        "/process",
+        "/emotion/analyze",
+        "/knowledge/search",
+        "/user/{user_id}/profile",
+        "/context/{user_id}",
+        "/consciousness/reflect",
+        "/consciousness/focus",
+        "/consciousness/goal"
+      ],
+      "route_count": 13
+    },
+    {
+      "module": "misc",
+      "file": "jarvis_backend\\routers\\misc.py",
+      "routes": [
+        "/tier4/status",
+        "/enterprise/sso/test",
+        "/cascade-ai/health",
+        "/cascade-ai/initialize",
+        "/cascade-ai/test-error",
+        "/cascade-ai/fix/{error_id}",
+        "/cascade-ai/status",
+        "/components",
+        "/components/start-all",
+        "/components/stop-all",
+        "/components/{component_id}/{action}",
+        "/{subsystem}/status",
+        "/dashboard/widgets/data/system-metrics",
+        "/dashboard/widgets/data/memory-stats",
+        "/dashboard/widgets/data/ai-status",
+        "/dashboard/widgets/data/agent-status",
+        "/dashboard/knowledge-graph/sample"
+      ],
+      "route_count": 17
+    },
+    {
+      "module": "models",
+      "file": "jarvis_backend\\routers\\models.py",
+      "routes": [
+        "/search",
+        "/me",
+        "/{model_id}",
+        "/{model_id}",
+        "/{model_id}",
+        "/health"
+      ],
+      "route_count": 6
+    },
+    {
+      "module": "monitoring",
+      "file": "jarvis_backend\\routers\\monitoring.py",
+      "routes": [
+        "/health-report",
+        "/metrics",
+        "/optimization-report",
+        "/optimize",
+        "/system/diagnostics",
+        "/recovery-history",
+        "/trigger-recovery",
+        "/health"
+      ],
+      "route_count": 8
+    },
+    {
+      "module": "multimodal",
+      "file": "jarvis_backend\\routers\\multimodal.py",
+      "routes": [
+        "/upload/image",
+        "/upload/document",
+        "/files",
+        "/files/{filename}",
+        "/status"
+      ],
+      "route_count": 5
+    },
+    {
+      "module": "platform_identity",
+      "file": "jarvis_backend\\routers\\platform_identity.py",
+      "routes": [
+        "/identity",
+        "/identity"
+      ],
+      "route_count": 2
+    },
+    {
+      "module": "provider_status",
+      "file": "jarvis_backend\\routers\\provider_status.py",
+      "routes": [
+        "/providers"
+      ],
+      "route_count": 1
+    },
+    {
+      "module": "rbac",
+      "file": "jarvis_backend\\routers\\rbac.py",
+      "routes": [
+        "/users",
+        "/users",
+        "/users/{user_id}",
+        "/users/{user_id}",
+        "/roles",
+        "/roles",
+        "/roles/{role_id}",
+        "/roles/{role_id}",
+        "/permissions",
+        "/audit-logs",
+        "/audit-logs/export",
+        "/tenant/settings",
+        "/tenant/settings"
+      ],
+      "route_count": 13
+    },
+    {
+      "module": "research",
+      "file": "jarvis_backend\\routers\\research.py",
+      "routes": [
+        "/research",
+        "/research/{session_id}",
+        "/verification",
+        "/verification/{verification_id}",
+        "/learning/lessons",
+        "/learning/lessons/{lesson_id}",
+        "/brain/capabilities"
+      ],
+      "route_count": 7
+    },
+    {
+      "module": "sandbox",
+      "file": "jarvis_backend\\routers\\sandbox.py",
+      "routes": [
+        "/python",
+        "/run",
+        "/runs/{run_id}",
+        "/policy"
+      ],
+      "route_count": 4
+    },
+    {
+      "module": "search",
+      "file": "jarvis_backend\\routers\\search.py",
+      "routes": [
+        "/",
+        "/",
+        "/domains",
+        "/suggest",
+        "/status",
+        "/history",
+        "/explain",
+        "/to/browser",
+        "/to/research",
+        "/to/knowledge",
+        "/inspect/{source}/{item_id}"
+      ],
+      "route_count": 11
+    },
+    {
+      "module": "stark",
+      "file": "jarvis_backend\\routers\\stark.py",
+      "routes": [
+        "/chat",
+        "/tool",
+        "/status",
+        "/health"
+      ],
+      "route_count": 4
+    },
+    {
+      "module": "system",
+      "file": "jarvis_backend\\routers\\system.py",
+      "routes": [
+        "/status",
+        "/capabilities",
+        "/dashboard",
+        "/processes",
+        "/processes/kill",
+        "/process/kill",
+        "/provider-settings",
+        "/provider-settings",
+        "/files",
+        "/files/read",
+        "/clipboard",
+        "/clipboard",
+        "/diagnose",
+        "/launch",
+        "/launch/apps",
+        "/screenshot",
+        "/windows",
+        "/file-structure"
+      ],
+      "route_count": 18
+    },
+    {
+      "module": "verification",
+      "file": "jarvis_backend\\routers\\verification.py",
+      "routes": [
+        "/verify/code",
+        "/verify/document",
+        "/verify/data",
+        "/verify",
+        "/verification/status",
+        "/verify/capabilities",
+        "/activity/timeline"
+      ],
+      "route_count": 7
+    },
+    {
+      "module": "voice",
+      "file": "jarvis_backend\\routers\\voice.py",
+      "routes": [
+        "/speak",
+        "/listen",
+        "/transcribe",
+        "/profile/create",
+        "/profile/list",
+        "/profile",
+        "/profile",
+        "/voices",
+        "/status"
+      ],
+      "route_count": 9
+    },
+    {
+      "module": "__init__",
+      "file": "jarvis_backend\\routers\\__init__.py",
+      "routes": [],
+      "route_count": 0
+    }
+  ],
+  "simulations": [
+    {
+      "file": "migration_status.py",
+      "classification": "REAL",
+      "indicators": [
+        "Sample"
+      ]
+    },
+    {
+      "file": "verify_gate.py",
+      "classification": "REAL",
+      "indicators": [
+        "Sample"
+      ]
+    },
+    {
+      "file": "_db_debug.py",
+      "classification": "REAL",
+      "indicators": [
+        "hardcod"
+      ]
+    },
+    {
+      "file": "_diag.py",
+      "classification": "REAL",
+      "indicators": [
+        "hardcod"
+      ]
+    },
+    {
+      "file": "_diag_fakecloud.py",
+      "classification": "REAL",
+      "indicators": [
+        "hardcod"
+      ]
+    },
+    {
+      "file": "_fail_truthful_retest.py",
+      "classification": "REAL",
+      "indicators": [
+        "fake",
+        "Fake",
+        "hardcod"
+      ]
+    },
+    {
+      "file": "_persist_check.py",
+      "classification": "REAL",
+      "indicators": [
+        "hardcod"
+      ]
+    },
+    {
+      "file": "_persist_quick.py",
+      "classification": "REAL",
+      "indicators": [
+        "hardcod"
+      ]
+    },
+    {
+      "file": "_persist_restart_create.py",
+      "classification": "REAL",
+      "indicators": [
+        "hardcod"
+      ]
+    },
+    {
+      "file": "_persist_restart_verify.py",
+      "classification": "REAL",
+      "indicators": [
+        "hardcod"
+      ]
+    },
+    {
+      "file": "_pg_check.py",
+      "classification": "REAL",
+      "indicators": [
+        "hardcod"
+      ]
+    },
+    {
+      "file": "_search_fallback.py",
+      "classification": "SIMULATED",
+      "indicators": [
+        "echo response",
+        "self-reliant",
+        "Self-Reliant",
+        "placeholder",
+        "fake"
+      ]
+    },
+    {
+      "file": "_search_fallback2.py",
+      "classification": "SIMULATED",
+      "indicators": [
+        "hardcod",
+        "echo response",
+        "self-reliant",
+        "Self-Reliant",
+        "placeholder"
+      ]
+    },
+    {
+      "file": "drive_engine\\ai_orchestrator.py",
+      "classification": "REAL",
+      "indicators": [
+        "simulat",
+        "Demo",
+        "Simulat",
+        "sample"
+      ]
+    },
+    {
+      "file": "drive_engine\\auto_optimizer.py",
+      "classification": "REAL",
+      "indicators": [
+        "Simulat",
+        "Placeholder"
+      ]
+    },
+    {
+      "file": "drive_engine\\control_panel.py",
+      "classification": "REAL",
+      "indicators": [
+        "placeholder",
+        "Mock",
+        "Demo",
+        "demo"
+      ]
+    },
+    {
+      "file": "drive_engine\\deployment_manager.py",
+      "classification": "REAL",
+      "indicators": [
+        "simulat",
+        "mock",
+        "Simulat",
+        "Demo"
+      ]
+    },
+    {
+      "file": "drive_engine\\deployment_manager_v2.py",
+      "classification": "REAL",
+      "indicators": [
+        "Simulat"
+      ]
+    },
+    {
+      "file": "drive_engine\\documentation_system.py",
+      "classification": "REAL",
+      "indicators": [
+        "Demo"
+      ]
+    },
+    {
+      "file": "drive_engine\\monitoring_interface.py",
+      "classification": "REAL",
+      "indicators": [
+        "Demo",
+        "Simulat",
+        "Placeholder"
+      ]
+    },
+    {
+      "file": "drive_engine\\multimodal_ai.py",
+      "classification": "REAL",
+      "indicators": [
+        "Simulat"
+      ]
+    },
+    {
+      "file": "drive_engine\\neuro_symbolic.py",
+      "classification": "REAL",
+      "indicators": [
+        "Simulat"
+      ]
+    },
+    {
+      "file": "drive_engine\\performance_optimizer.py",
+      "classification": "REAL",
+      "indicators": [
+        "Demo"
+      ]
+    },
+    {
+      "file": "drive_engine\\quantum_ai.py",
+      "classification": "REAL",
+      "indicators": [
+        "Simulat"
+      ]
+    },
+    {
+      "file": "drive_engine\\swarm_intelligence.py",
+      "classification": "REAL",
+      "indicators": [
+        "Simulat"
+      ]
+    },
+    {
+      "file": "frontend\\jarvis_desktop_app.py",
+      "classification": "SIMULATED",
+      "indicators": [
+        "Self-reliant",
+        "simulat",
+        "Simulat"
+      ]
+    },
+    {
+      "file": "frontend\\package_jarvis_app.py",
+      "classification": "REAL",
+      "indicators": [
+        "Self-Reliant"
+      ]
+    },
+    {
+      "file": "jarvis_backend\\brain_fabric.py",
+      "classification": "SIMULATED",
+      "indicators": [
+        "if False else"
+      ]
+    },
+    {
+      "file": "jarvis_backend\\chat_service.py",
+      "classification": "REAL",
+      "indicators": [
+        "fake"
+      ]
+    },
+    {
+      "file": "jarvis_backend\\cloud_fabric.py",
+      "classification": "REAL",
+      "indicators": [
+        "hardcod"
+      ]
+    },
+    {
+      "file": "jarvis_backend\\core.py",
+      "classification": "REAL",
+      "indicators": [
+        "placeholder",
+        "hardcod"
+      ]
+    },
+    {
+      "file": "jarvis_backend\\critic.py",
+      "classification": "REAL",
+      "indicators": [
+        "sample"
+      ]
+    },
+    {
+      "file": "jarvis_backend\\db.py",
+      "classification": "REAL",
+      "indicators": [
+        "simulat"
+      ]
+    },
+    {
+      "file": "jarvis_backend\\experiment.py",
+      "classification": "REAL",
+      "indicators": [
+        "sample"
+      ]
+    },
+    {
+      "file": "jarvis_backend\\gateway.py",
+      "classification": "SIMULATED",
+      "indicators": [
+        "stub",
+        "fake",
+        "echo response"
+      ]
+    },
+    {
+      "file": "jarvis_backend\\network_diagnostics.py",
+      "classification": "REAL",
+      "indicators": [
+        "fake"
+      ]
+    },
+    {
+      "file": "jarvis_backend\\observability.py",
+      "classification": "REAL",
+      "indicators": [
+        "not implemented"
+      ]
+    },
+    {
+      "file": "jarvis_backend\\project_intel.py",
+      "classification": "REAL",
+      "indicators": [
+        "simulat",
+        "hardcod",
+        "dummy",
+        "TODO",
+        "not implemented"
+      ]
+    },
+    {
+      "file": "jarvis_backend\\remote_host.py",
+      "classification": "REAL",
+      "indicators": [
+        "Not implemented",
+        "not implemented",
+        "hardcod"
+      ]
+    },
+    {
+      "file": "jarvis_backend\\self_improvement_engine.py",
+      "classification": "REAL",
+      "indicators": [
+        "placeholder",
+        "simulat",
+        "Simulat",
+        "sample"
+      ]
+    },
+    {
+      "file": "kaggle_kernel\\build_jarvis_brain_sft.py",
+      "classification": "REAL",
+      "indicators": [
+        "todo",
+        "sample"
+      ]
+    },
+    {
+      "file": "kaggle_kernel\\jarvis_brain_qwen3_4b.py",
+      "classification": "REAL",
+      "indicators": [
+        "sample"
+      ]
+    },
+    {
+      "file": "kaggle_kernel\\kaggle_train_jarvis_lora.py",
+      "classification": "REAL",
+      "indicators": [
+        "sample"
+      ]
+    },
+    {
+      "file": "models\\train.py",
+      "classification": "REAL",
+      "indicators": [
+        "placeholder",
+        "TODO"
+      ]
+    },
+    {
+      "file": "performance\\performance_optimizer.py",
+      "classification": "REAL",
+      "indicators": [
+        "Sample",
+        "simulat",
+        "Simulat"
+      ]
+    },
+    {
+      "file": "providers\\__init__.py",
+      "classification": "REAL",
+      "indicators": [
+        "stub"
+      ]
+    },
+    {
+      "file": "scripts\\kaggle_train_jarvis_lora.py",
+      "classification": "REAL",
+      "indicators": [
+        "sample"
+      ]
+    },
+    {
+      "file": "scripts\\prepare_training_data.py",
+      "classification": "REAL",
+      "indicators": [
+        "placeholder"
+      ]
+    },
+    {
+      "file": "scripts\\train_jarvis_lora.py",
+      "classification": "REAL",
+      "indicators": [
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\main.py",
+      "classification": "REAL",
+      "indicators": [
+        "Sample",
+        "simulat",
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\model_catalog.py",
+      "classification": "REAL",
+      "indicators": [
+        "placeholder"
+      ]
+    },
+    {
+      "file": "tests\\conftest.py",
+      "classification": "REAL",
+      "indicators": [
+        "Sample",
+        "Mock",
+        "mock",
+        "sample"
+      ]
+    },
+    {
+      "file": "tests\\smoke_email_connector.py",
+      "classification": "REAL",
+      "indicators": [
+        "fake",
+        "Fake"
+      ]
+    },
+    {
+      "file": "tools\\_patch_brain.py",
+      "classification": "REAL",
+      "indicators": [
+        "hardcod"
+      ]
+    },
+    {
+      "file": "tests\\fakes\\mail_servers.py",
+      "classification": "REAL",
+      "indicators": [
+        "fake"
+      ]
+    },
+    {
+      "file": "tests\\infrastructure\\conftest.py",
+      "classification": "REAL",
+      "indicators": [
+        "Mock"
+      ]
+    },
+    {
+      "file": "tests\\utils\\factories.py",
+      "classification": "REAL",
+      "indicators": [
+        "mock"
+      ]
+    },
+    {
+      "file": "tests\\utils\\mocks.py",
+      "classification": "REAL",
+      "indicators": [
+        "simulat",
+        "Mock",
+        "mock",
+        "Simulat"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\intelligence_fabric\\fabric.py",
+      "classification": "REAL",
+      "indicators": [
+        "Simulat"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\intelligence_fabric\\fabric_models.py",
+      "classification": "REAL",
+      "indicators": [
+        "hardcod"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\training_advisor\\analysis.py",
+      "classification": "REAL",
+      "indicators": [
+        "stub",
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\training_advisor\\lr_advisor.py",
+      "classification": "REAL",
+      "indicators": [
+        "stub"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\training_advisor\\metrics.py",
+      "classification": "REAL",
+      "indicators": [
+        "stub"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\training_advisor\\prompts.py",
+      "classification": "REAL",
+      "indicators": [
+        "stub"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\training_advisor\\provenance.py",
+      "classification": "REAL",
+      "indicators": [
+        "stub"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\training_advisor\\schemas.py",
+      "classification": "REAL",
+      "indicators": [
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\typing_extensions.py",
+      "classification": "REAL",
+      "indicators": [
+        "simulat",
+        "dummy",
+        "Placeholder",
+        "TODO",
+        "stub"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\cffi\\backend_ctypes.py",
+      "classification": "REAL",
+      "indicators": [
+        "not implemented"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\cffi\\recompiler.py",
+      "classification": "REAL",
+      "indicators": [
+        "not implemented",
+        "placeholder"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\cffi\\setuptools_ext.py",
+      "classification": "REAL",
+      "indicators": [
+        "PLACEHOLDER"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\cffi\\vengine_cpy.py",
+      "classification": "REAL",
+      "indicators": [
+        "not implemented"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\cffi\\vengine_gen.py",
+      "classification": "REAL",
+      "indicators": [
+        "not implemented"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\charset_normalizer\\constant.py",
+      "classification": "REAL",
+      "indicators": [
+        "Sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\click\\core.py",
+      "classification": "REAL",
+      "indicators": [
+        "fake"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\click\\types.py",
+      "classification": "REAL",
+      "indicators": [
+        "dummy"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\click\\utils.py",
+      "classification": "REAL",
+      "indicators": [
+        "Simulat"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\click\\_textwrap.py",
+      "classification": "REAL",
+      "indicators": [
+        "placeholder"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\colorama\\winterm.py",
+      "classification": "REAL",
+      "indicators": [
+        "Mock"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\fastapi\\applications.py",
+      "classification": "REAL",
+      "indicators": [
+        "not implemented",
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\fastapi\\encoders.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\fastapi\\routing.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\h11\\_events.py",
+      "classification": "REAL",
+      "indicators": [
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\h11\\_readers.py",
+      "classification": "REAL",
+      "indicators": [
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\h11\\_writers.py",
+      "classification": "REAL",
+      "indicators": [
+        "placeholder",
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\httpcore\\__init__.py",
+      "classification": "REAL",
+      "indicators": [
+        "mock"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\httpx\\_auth.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\httpx\\_status_codes.py",
+      "classification": "REAL",
+      "indicators": [
+        "Not Implemented"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\idna\\compat.py",
+      "classification": "REAL",
+      "indicators": [
+        "Stub"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\idna\\core.py",
+      "classification": "REAL",
+      "indicators": [
+        "fake"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\iniconfig\\__init__.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\multipart\\__init__.py",
+      "classification": "REAL",
+      "indicators": [
+        "not implemented"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\packaging\\metadata.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\packaging\\requirements.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\packaging\\tags.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\packaging\\version.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pluggy\\_hooks.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pyasn1_modules\\rfc1155.py",
+      "classification": "REAL",
+      "indicators": [
+        "Sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pyasn1_modules\\rfc1157.py",
+      "classification": "REAL",
+      "indicators": [
+        "Sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pyasn1_modules\\rfc2251.py",
+      "classification": "REAL",
+      "indicators": [
+        "Sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pyasn1_modules\\rfc2314.py",
+      "classification": "REAL",
+      "indicators": [
+        "Sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pyasn1_modules\\rfc2315.py",
+      "classification": "REAL",
+      "indicators": [
+        "Sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pyasn1_modules\\rfc2437.py",
+      "classification": "REAL",
+      "indicators": [
+        "Sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pyasn1_modules\\rfc2459.py",
+      "classification": "REAL",
+      "indicators": [
+        "Sample",
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pyasn1_modules\\rfc2511.py",
+      "classification": "REAL",
+      "indicators": [
+        "Sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pyasn1_modules\\rfc2985.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pyasn1_modules\\rfc3447.py",
+      "classification": "REAL",
+      "indicators": [
+        "Sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pyasn1_modules\\rfc5208.py",
+      "classification": "REAL",
+      "indicators": [
+        "Sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\alias_generators.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\dataclasses.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\fields.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\functional_serializers.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\functional_validators.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\json_schema.py",
+      "classification": "REAL",
+      "indicators": [
+        "fixme",
+        "TODO",
+        "Placeholder"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\main.py",
+      "classification": "REAL",
+      "indicators": [
+        "stub",
+        "mock",
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\mypy.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\type_adapter.py",
+      "classification": "REAL",
+      "indicators": [
+        "mock",
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic_core\\core_schema.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexer.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\util.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\python_multipart\\multipart.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\requests\\adapters.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\requests\\auth.py",
+      "classification": "REAL",
+      "indicators": [
+        "not implemented"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\requests\\cookies.py",
+      "classification": "REAL",
+      "indicators": [
+        "mock"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\requests\\hooks.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\requests\\models.py",
+      "classification": "REAL",
+      "indicators": [
+        "simulat",
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\requests\\utils.py",
+      "classification": "REAL",
+      "indicators": [
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\requests\\_types.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\typing_inspection\\introspection.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\urllib3\\connection.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\urllib3\\connectionpool.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\urllib3\\exceptions.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\urllib3\\response.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO",
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\urllib3\\_base_connection.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\websockets\\frames.py",
+      "classification": "REAL",
+      "indicators": [
+        "dummy"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\yaml\\constructor.py",
+      "classification": "REAL",
+      "indicators": [
+        "dummy"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\yaml\\scanner.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\_pytest\\cacheprovider.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO",
+        "dummy"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\_pytest\\capture.py",
+      "classification": "REAL",
+      "indicators": [
+        "fake",
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\_pytest\\compat.py",
+      "classification": "REAL",
+      "indicators": [
+        "fake",
+        "mock",
+        "TODO",
+        "stub"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\_pytest\\doctest.py",
+      "classification": "REAL",
+      "indicators": [
+        "mock",
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\_pytest\\fixtures.py",
+      "classification": "REAL",
+      "indicators": [
+        "simulat",
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\_pytest\\junitxml.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\_pytest\\legacypath.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\_pytest\\main.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\_pytest\\monkeypatch.py",
+      "classification": "REAL",
+      "indicators": [
+        "mock"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\_pytest\\nodes.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\_pytest\\outcomes.py",
+      "classification": "REAL",
+      "indicators": [
+        "fake"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\_pytest\\pathlib.py",
+      "classification": "REAL",
+      "indicators": [
+        "dummy",
+        "demo"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\_pytest\\python.py",
+      "classification": "REAL",
+      "indicators": [
+        "mock",
+        "TODO",
+        "todo"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\_pytest\\raises.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\_pytest\\reports.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\_pytest\\setupplan.py",
+      "classification": "REAL",
+      "indicators": [
+        "dummy"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\_pytest\\terminal.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO",
+        "todo"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\_pytest\\unittest.py",
+      "classification": "REAL",
+      "indicators": [
+        "Todo",
+        "dummy"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\_yaml\\__init__.py",
+      "classification": "REAL",
+      "indicators": [
+        "stub"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\_pytest\\assertion\\highlight.py",
+      "classification": "REAL",
+      "indicators": [
+        "Dummy"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\_pytest\\assertion\\rewrite.py",
+      "classification": "REAL",
+      "indicators": [
+        "placeholder",
+        "mock",
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\_pytest\\config\\argparsing.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\_pytest\\config\\__init__.py",
+      "classification": "REAL",
+      "indicators": [
+        "mock"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\_pytest\\mark\\structures.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\uvicorn\\middleware\\message_logger.py",
+      "classification": "REAL",
+      "indicators": [
+        "placeholder"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\uvicorn\\protocols\\websockets\\wsproto_impl.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\urllib3\\http2\\connection.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\urllib3\\http2\\__init__.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\urllib3\\util\\request.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\urllib3\\util\\response.py",
+      "classification": "REAL",
+      "indicators": [
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\urllib3\\util\\url.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\starlette\\middleware\\exceptions.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\starlette\\middleware\\gzip.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\filters\\__init__.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO",
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\formatters\\img.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\formatters\\latex.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\formatters\\terminal256.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\actionscript.py",
+      "classification": "REAL",
+      "indicators": [
+        "Sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\ada.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\arturo.py",
+      "classification": "REAL",
+      "indicators": [
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\business.py",
+      "classification": "REAL",
+      "indicators": [
+        "DUMMY"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\css.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO",
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\c_like.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\dax.py",
+      "classification": "REAL",
+      "indicators": [
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\dns.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\dotnet.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\dsls.py",
+      "classification": "REAL",
+      "indicators": [
+        "placeholder"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\ecl.py",
+      "classification": "REAL",
+      "indicators": [
+        "SAMPLE"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\fantom.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\felix.py",
+      "classification": "REAL",
+      "indicators": [
+        "todo"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\gleam.py",
+      "classification": "REAL",
+      "indicators": [
+        "todo"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\graphics.py",
+      "classification": "REAL",
+      "indicators": [
+        "FIXME",
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\gsql.py",
+      "classification": "REAL",
+      "indicators": [
+        "SAMPLE",
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\haskell.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO",
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\hdl.py",
+      "classification": "REAL",
+      "indicators": [
+        "Simulat"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\inferno.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\int_fiction.py",
+      "classification": "REAL",
+      "indicators": [
+        "stub",
+        "Stub"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\javascript.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\julia.py",
+      "classification": "REAL",
+      "indicators": [
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\jvm.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO",
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\kusto.py",
+      "classification": "REAL",
+      "indicators": [
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\lisp.py",
+      "classification": "REAL",
+      "indicators": [
+        "placeholder"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\markup.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO",
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\matlab.py",
+      "classification": "REAL",
+      "indicators": [
+        "mock",
+        "demo"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\meson.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\mips.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\modeling.py",
+      "classification": "REAL",
+      "indicators": [
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\modula2.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\mojo.py",
+      "classification": "REAL",
+      "indicators": [
+        "not implemented",
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\nix.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\oberon.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\objective.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO",
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\openscad.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO",
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\parsers.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\perl.py",
+      "classification": "REAL",
+      "indicators": [
+        "placeholder",
+        "TODO",
+        "todo"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\praat.py",
+      "classification": "REAL",
+      "indicators": [
+        "demo"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\python.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO",
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\rdf.py",
+      "classification": "REAL",
+      "indicators": [
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\rnc.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\rust.py",
+      "classification": "REAL",
+      "indicators": [
+        "todo"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\scripting.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO",
+        "Simulat"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\sql.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO",
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\templates.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO",
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\testing.py",
+      "classification": "REAL",
+      "indicators": [
+        "todo"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\textedit.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\textfmts.py",
+      "classification": "REAL",
+      "indicators": [
+        "Todo",
+        "todo"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\typst.py",
+      "classification": "REAL",
+      "indicators": [
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\urbi.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\wgsl.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO",
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\_asy_builtins.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO",
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\_lilypond_builtins.py",
+      "classification": "REAL",
+      "indicators": [
+        "stub"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\_mapping.py",
+      "classification": "REAL",
+      "indicators": [
+        "todo"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\_php_builtins.py",
+      "classification": "REAL",
+      "indicators": [
+        "dummy"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\_postgres_builtins.py",
+      "classification": "REAL",
+      "indicators": [
+        "Sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\_qlik_builtins.py",
+      "classification": "REAL",
+      "indicators": [
+        "Sample",
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\_scilab_builtins.py",
+      "classification": "REAL",
+      "indicators": [
+        "simulat",
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pygments\\lexers\\_stata_builtins.py",
+      "classification": "REAL",
+      "indicators": [
+        "simulat",
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\deprecated\\json.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\experimental\\pipeline.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\plugin\\_schema_validator.py",
+      "classification": "REAL",
+      "indicators": [
+        "not implemented"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\v1\\networks.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\v1\\utils.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\_internal\\_core_metadata.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\_internal\\_dataclasses.py",
+      "classification": "REAL",
+      "indicators": [
+        "mock"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\_internal\\_decorators.py",
+      "classification": "REAL",
+      "indicators": [
+        "simulat",
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\_internal\\_docs_extraction.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\_internal\\_fields.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\_internal\\_generate_schema.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\_internal\\_generics.py",
+      "classification": "REAL",
+      "indicators": [
+        "placeholder",
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\_internal\\_known_annotated_metadata.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\_internal\\_mock_val_ser.py",
+      "classification": "REAL",
+      "indicators": [
+        "mock"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\_internal\\_namespace_utils.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\_internal\\_repr.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\_internal\\_schema_gather.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\_internal\\_typing_extra.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\_internal\\_utils.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pydantic\\_internal\\_validators.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO",
+        "todo"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pyasn1\\type\\base.py",
+      "classification": "REAL",
+      "indicators": [
+        "not implemented"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pyasn1\\type\\constraint.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pyasn1\\type\\univ.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pyasn1\\codec\\ber\\decoder.py",
+      "classification": "REAL",
+      "indicators": [
+        "not implemented",
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pyasn1\\codec\\ber\\encoder.py",
+      "classification": "REAL",
+      "indicators": [
+        "Not implemented",
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pyasn1\\codec\\cer\\decoder.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pyasn1\\codec\\der\\decoder.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pyasn1\\codec\\der\\encoder.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pyasn1\\codec\\native\\encoder.py",
+      "classification": "REAL",
+      "indicators": [
+        "Not implemented"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\cache.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\cachecontrol\\controller.py",
+      "classification": "REAL",
+      "indicators": [
+        "placeholder",
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\cachecontrol\\filewrapper.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\distlib\\resources.py",
+      "classification": "REAL",
+      "indicators": [
+        "todo"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\distlib\\scripts.py",
+      "classification": "REAL",
+      "indicators": [
+        "hardcod"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\distlib\\util.py",
+      "classification": "REAL",
+      "indicators": [
+        "stub",
+        "TODO",
+        "todo"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\idna\\compat.py",
+      "classification": "REAL",
+      "indicators": [
+        "Stub"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\msgpack\\fallback.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\packaging\\metadata.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\packaging\\requirements.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\packaging\\tags.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\packaging\\version.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\pkg_resources\\__init__.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO",
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\pygments\\lexer.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\requests\\adapters.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\requests\\auth.py",
+      "classification": "REAL",
+      "indicators": [
+        "not implemented"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\requests\\cookies.py",
+      "classification": "REAL",
+      "indicators": [
+        "mock"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\requests\\hooks.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\requests\\models.py",
+      "classification": "REAL",
+      "indicators": [
+        "simulat",
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\requests\\utils.py",
+      "classification": "REAL",
+      "indicators": [
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\requests\\_types.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\rich\\layout.py",
+      "classification": "REAL",
+      "indicators": [
+        "placeholder"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\rich\\progress.py",
+      "classification": "REAL",
+      "indicators": [
+        "Sample",
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\rich\\text.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\truststore\\_macos.py",
+      "classification": "REAL",
+      "indicators": [
+        "not implemented",
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\urllib3\\connection.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\urllib3\\connectionpool.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\urllib3\\exceptions.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\urllib3\\response.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO",
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\urllib3\\_base_connection.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\urllib3\\http2\\connection.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\urllib3\\http2\\__init__.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\urllib3\\util\\request.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\urllib3\\util\\response.py",
+      "classification": "REAL",
+      "indicators": [
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\urllib3\\util\\url.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\pygments\\filters\\__init__.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO",
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\pygments\\lexers\\python.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO",
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\pygments\\lexers\\_mapping.py",
+      "classification": "REAL",
+      "indicators": [
+        "todo"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_vendor\\packaging\\licenses\\__init__.py",
+      "classification": "REAL",
+      "indicators": [
+        "placeholder"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\build_env\\base.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO",
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\build_env\\installer.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\build_env\\venv.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\cli\\base_command.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\cli\\main.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\commands\\inspect.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\index\\collector.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\locations\\base.py",
+      "classification": "REAL",
+      "indicators": [
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\metadata\\base.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\models\\installation_report.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\network\\lazy_wheel.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\network\\session.py",
+      "classification": "REAL",
+      "indicators": [
+        "hardcod"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\operations\\prepare.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO",
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\req\\constructors.py",
+      "classification": "REAL",
+      "indicators": [
+        "placeholder",
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\req\\req_file.py",
+      "classification": "REAL",
+      "indicators": [
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\req\\req_install.py",
+      "classification": "REAL",
+      "indicators": [
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\req\\req_set.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\req\\req_uninstall.py",
+      "classification": "REAL",
+      "indicators": [
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\utils\\compat.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\utils\\misc.py",
+      "classification": "REAL",
+      "indicators": [
+        "Simulat"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\utils\\pylock.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\vcs\\git.py",
+      "classification": "REAL",
+      "indicators": [
+        "stub",
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\vcs\\subversion.py",
+      "classification": "REAL",
+      "indicators": [
+        "FIXME"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\resolution\\resolvelib\\candidates.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\pip\\_internal\\resolution\\resolvelib\\factory.py",
+      "classification": "REAL",
+      "indicators": [
+        "fake",
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\packaging\\licenses\\__init__.py",
+      "classification": "REAL",
+      "indicators": [
+        "placeholder"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\httpx\\_transports\\__init__.py",
+      "classification": "REAL",
+      "indicators": [
+        "mock"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\google\\auth\\pluggable.py",
+      "classification": "REAL",
+      "indicators": [
+        "Dummy"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\google\\auth\\_helpers.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\google\\genai\\batches.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\google\\genai\\caches.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\google\\genai\\documents.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\google\\genai\\files.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\google\\genai\\file_search_stores.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\google\\genai\\live.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\google\\genai\\live_music.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\google\\genai\\models.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\google\\genai\\operations.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\google\\genai\\tokens.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\google\\genai\\tunings.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO",
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\google\\genai\\types.py",
+      "classification": "REAL",
+      "indicators": [
+        "placeholder",
+        "TODO",
+        "Placeholder",
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\google\\genai\\_base_transformers.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\google\\genai\\_transformers.py",
+      "classification": "REAL",
+      "indicators": [
+        "placeholder",
+        "TODO",
+        "Placeholder"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\google\\genai\\tests\\conftest.py",
+      "classification": "REAL",
+      "indicators": [
+        "mock",
+        "dummy"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\google\\genai\\_gaos\\google_genai.py",
+      "classification": "REAL",
+      "indicators": [
+        "stub"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\google\\genai\\_gaos\\types\\interactions\\audiocontent.py",
+      "classification": "REAL",
+      "indicators": [
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\google\\genai\\_gaos\\types\\interactions\\audiodelta.py",
+      "classification": "REAL",
+      "indicators": [
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\google\\genai\\_gaos\\types\\interactions\\audioresponseformat.py",
+      "classification": "REAL",
+      "indicators": [
+        "Sample"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\google\\auth\\aio\\_helpers.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\google\\auth\\compute_engine\\_metadata.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\google\\auth\\transport\\grpc.py",
+      "classification": "REAL",
+      "indicators": [
+        "stub"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\google\\auth\\transport\\_custom_tls_signer.py",
+      "classification": "REAL",
+      "indicators": [
+        "mock"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\fastapi\\dependencies\\utils.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\fastapi\\openapi\\utils.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\fastapi\\security\\http.py",
+      "classification": "REAL",
+      "indicators": [
+        "stub"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\fastapi\\security\\open_id_connect_url.py",
+      "classification": "REAL",
+      "indicators": [
+        "stub"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\fastapi\\_compat\\shared.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\fastapi\\_compat\\v2.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\cryptography\\x509\\extensions.py",
+      "classification": "REAL",
+      "indicators": [
+        "not implemented"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\cryptography\\x509\\name.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\cryptography\\hazmat\\asn1\\asn1.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\anyio\\streams\\stapled.py",
+      "classification": "REAL",
+      "indicators": [
+        "not implemented"
+      ]
+    },
+    {
+      "file": "silverwing-backend\\venv\\Lib\\site-packages\\aiosqlite\\tests\\smoke.py",
+      "classification": "REAL",
+      "indicators": [
+        "mock",
+        "Fake"
+      ]
+    },
+    {
+      "file": "silverwing\\kaggle\\silverwing_train.py",
+      "classification": "REAL",
+      "indicators": [
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing\\model\\silverwing.py",
+      "classification": "REAL",
+      "indicators": [
+        "Sample"
+      ]
+    },
+    {
+      "file": "silverwing\\tokenizer\\train_tokenizer.py",
+      "classification": "REAL",
+      "indicators": [
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing\\training\\train.py",
+      "classification": "REAL",
+      "indicators": [
+        "dummy",
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing\\kaggle\\train_kernel\\silverwing_train.py",
+      "classification": "REAL",
+      "indicators": [
+        "sample"
+      ]
+    },
+    {
+      "file": "silverwing\\kaggle\\train_kernel_cpu\\silverwing_train.py",
+      "classification": "REAL",
+      "indicators": [
+        "sample"
+      ]
+    },
+    {
+      "file": "memory\\analytics\\dashboard_engine.py",
+      "classification": "REAL",
+      "indicators": [
+        "simulat"
+      ]
+    },
+    {
+      "file": "memory\\migrations\\002_data_migration.py",
+      "classification": "REAL",
+      "indicators": [
+        "placeholder"
+      ]
+    },
+    {
+      "file": "jarvis_backend\\routers\\ai.py",
+      "classification": "SIMULATED",
+      "indicators": [
+        "self-reliant",
+        "fake"
+      ]
+    },
+    {
+      "file": "jarvis_backend\\routers\\extensions.py",
+      "classification": "REAL",
+      "indicators": [
+        "not implemented",
+        "demo"
+      ]
+    },
+    {
+      "file": "jarvis_backend\\routers\\geography.py",
+      "classification": "REAL",
+      "indicators": [
+        "TODO"
+      ]
+    },
+    {
+      "file": "jarvis_backend\\routers\\legacy.py",
+      "classification": "REAL",
+      "indicators": [
+        "simulat"
+      ]
+    },
+    {
+      "file": "jarvis_backend\\routers\\media.py",
+      "classification": "REAL",
+      "indicators": [
+        "not implemented"
+      ]
+    },
+    {
+      "file": "jarvis_backend\\routers\\misc.py",
+      "classification": "REAL",
+      "indicators": [
+        "Sample",
+        "sample"
+      ]
+    },
+    {
+      "file": "jarvis_backend\\routers\\provider_status.py",
+      "classification": "REAL",
+      "indicators": [
+        "not implemented"
+      ]
+    },
+    {
+      "file": "jarvis_backend\\routers\\search.py",
+      "classification": "REAL",
+      "indicators": [
+        "Not implemented"
+      ]
+    },
+    {
+      "file": "jarvis_backend\\routers\\system.py",
+      "classification": "REAL",
+      "indicators": [
+        "simulat",
+        "fake"
+      ]
+    },
+    {
+      "file": "infrastructure\\knowledge\\index.py",
+      "classification": "REAL",
+      "indicators": [
+        "Mock",
+        "mock"
+      ]
+    },
+    {
+      "file": "infrastructure\\knowledge\\rag.py",
+      "classification": "REAL",
+      "indicators": [
+        "simulat",
+        "placeholder",
+        "Mock"
+      ]
+    },
+    {
+      "file": "infrastructure\\observability\\metrics.py",
+      "classification": "REAL",
+      "indicators": [
+        "sample"
+      ]
+    },
+    {
+      "file": "infrastructure\\plugins\\capabilities.py",
+      "classification": "REAL",
+      "indicators": [
+        "stub"
+      ]
+    },
+    {
+      "file": "infrastructure\\plugins\\lifecycle.py",
+      "classification": "REAL",
+      "indicators": [
+        "placeholder"
+      ]
+    },
+    {
+      "file": "frontend\\dashboard\\architecture_visualizer.py",
+      "classification": "REAL",
+      "indicators": [
+        "simulat"
+      ]
+    },
+    {
+      "file": "frontend\\dashboard\\code_metrics.py",
+      "classification": "REAL",
+      "indicators": [
+        "placeholder",
+        "Placeholder",
+        "hardcod"
+      ]
+    },
+    {
+      "file": "frontend\\dashboard\\web_dashboard.py",
+      "classification": "REAL",
+      "indicators": [
+        "placeholder"
+      ]
+    },
+    {
+      "file": "frontend\\mobile\\backend_api.py",
+      "classification": "REAL",
+      "indicators": [
+        "simulat",
+        "mock"
+      ]
+    },
+    {
+      "file": ".jarvis\\platform-audit\\_gen\\build_classification.py",
+      "classification": "REAL",
+      "indicators": [
+        "simulat",
+        "hardcod",
+        "STUB",
+        "stub",
+        "placeholder"
+      ]
+    },
+    {
+      "file": ".jarvis\\platform-audit\\_gen\\build_frontend_architecture_map.py",
+      "classification": "REAL",
+      "indicators": [
+        "hardcod"
+      ]
+    },
+    {
+      "file": ".jarvis\\platform-audit\\_gen\\build_inventory.py",
+      "classification": "REAL",
+      "indicators": [
+        "hardcod",
+        "demo",
+        "STUB",
+        "stub",
+        "HARDCOD"
+      ]
+    },
+    {
+      "file": ".jarvis\\platform-audit\\_gen\\build_maps.py",
+      "classification": "REAL",
+      "indicators": [
+        "stub",
+        "simulat",
+        "hardcod"
+      ]
+    },
+    {
+      "file": ".jarvis\\platform-audit\\_gen\\build_registry_map.py",
+      "classification": "REAL",
+      "indicators": [
+        "HARDCOD",
+        "hardcod"
+      ]
+    },
+    {
+      "file": ".jarvis\\platform-audit\\_gen\\build_security_map.py",
+      "classification": "REAL",
+      "indicators": [
+        "hardcod"
+      ]
+    },
+    {
+      "file": ".jarvis\\platform-audit\\_gen\\build_security_matrix.py",
+      "classification": "REAL",
+      "indicators": [
+        "stub",
+        "TODO",
+        "STUB"
+      ]
+    },
+    {
+      "file": ".jarvis\\platform-audit\\_gen\\build_truthfulness_report.py",
+      "classification": "REAL",
+      "indicators": [
+        "simulat",
+        "hardcod",
+        "stub",
+        "placeholder",
+        "fake"
+      ]
+    },
+    {
+      "file": ".jarvis\\platform-audit\\_gen\\build_upgrade_recommendations.py",
+      "classification": "REAL",
+      "indicators": [
+        "stub",
+        "simulat",
+        "hardcod"
+      ]
+    }
+  ],
+  "summary": {}
+}

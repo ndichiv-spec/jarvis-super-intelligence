@@ -1,0 +1,18 @@
+786: // ─── Main Page ───────────────────────────────────────────────────────────────
+787: 
+788: export default function AgentsPage() {
+789:   const [tasks, setTasks] = useState<AgentTask[]>([]);
+790:   const [executions, setExecutions] = useState<TaskExecution[]>([]);
+791:   const [stats, setStats] = useState<AgentStats>({
+792:     total_tasks: 0,
+---
+1091:         {/* ── Create Task Dialog ──────────────────────────────────────── */}
+1092:         <CreateTaskDialog
+1093:           open={dialogOpen}
+1094:           onOpenChange={setDialogOpen}
+1095:           onSubmit={handleCreateTask}
+1096:         />
+1097:       </div>
+1098:     </div>
+1099:   );
+1100: }

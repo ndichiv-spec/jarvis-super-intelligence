@@ -1,0 +1,285 @@
+{
+  "artifact": "registry-map",
+  "generated_by": "JARVIS Platform X-Ray - §5 registry questionnaire",
+  "questionnaire_legend": {
+    "1": "single source of truth (no competing definitions)",
+    "2": "persists state (survives restart)",
+    "3": "API access (read/write endpoints)",
+    "4": "frontend consumer",
+    "5": "backend consumer (other than the owner)",
+    "6": "supports discovery (list/filter/query)",
+    "7": "supports health (liveness/readiness)",
+    "8": "supports permissions (authz on access)",
+    "9": "supports provenance (who/when/why)",
+    "10": "supports lifecycle state (registered->active->retired)"
+  },
+  "registries": [
+    {
+      "registry": "Capability Registry",
+      "status": "REAL",
+      "location": "jarvis_backend/routers/system.py L60-154",
+      "questionnaire": {
+        "single_source_of_truth": "YES - system.py _CAPABILITIES tuple is the authoritative definition; no competing copy",
+        "persists_state": "NO - derived at request time from misc.provider_settings + ai_service.enabled (not persisted as a collection)",
+        "api_access": "YES - GET /api/v1/system/capabilities (system.py L98-154)",
+        "frontend_consumer": "YES - SystemMonitor.tsx CAPABILITIES panel (jarvisAPI.getCapabilities), developer/capabilities page",
+        "backend_consumer": "YES - /system/dashboard reads provider_settings; system.capabilities() builder",
+        "supports_discovery": "YES - list all + filter by category/provider/needs_ai (system.py)",
+        "supports_health": "YES - per-entry availability + health fields (available/ok, unavailable/offline) derived live",
+        "supports_permissions": "PARTIAL - permissions listed per capability but not enforced at registry level (enforcement is per-endpoint via get_current_user; system.py itself has no auth)",
+        "supports_provenance": "YES - provenance:'jarvis_backend/routers/system.py:capabilities' + last_checked(now_iso) on every entry",
+        "supports_lifecycle_state": "NO - capabilities are static tuples, no registered->active->deprecated lifecycle"
+      }
+    },
+    {
+      "registry": "Connector Registry",
+      "status": "REAL",
+      "location": "jarvis_backend/connectors/registry.py",
+      "questionnaire": {
+        "single_source_of_truth": "YES - single registry.save/load over jarvis_data/connectors/<kind>.json per kind",
+        "persists_state": "YES - on-disk JSON files (registry._path) + audit JSONL",
+        "api_access": "YES - GET/POST/PATCH/DELETE /connectors/{kind} + /test + /actions (connectors.py)",
+        "frontend_consumer": "YES - connections page, desktop page",
+        "backend_consumer": "YES - dispatch.execute_connector_action, oauth callback, browser extract-to-knowledge",
+        "supports_discovery": "YES - load_by_id / list / kind lookup",
+        "supports_health": "YES - connector.test() (live IMAP+SMTP), public_config._set flags",
+        "supports_permissions": "YES - actions gated by CapabilityDenied (consent) + get_current_user on mutate endpoints",
+        "supports_provenance": "YES - registry.audit JSONL append (timestamp/user/id); provenance in ActionSpec",
+        "supports_lifecycle_state": "PARTIAL - CRUD lifecycle present but no 'deprecated/sunset' lifecycle state on connector manifests"
+      }
+    },
+    {
+      "registry": "Agent Registry",
+      "status": "PARTIAL",
+      "location": "jarvis_backend/routers/agents.py (_DEFAULT_AGENTS L15) + get_store('agents')",
+      "questionnaire": {
+        "single_source_of_truth": "PARTIAL - dual source: static _DEFAULT_AGENTS roster (code) + mutable 'agents' store (data); no single authority",
+        "persists_state": "YES - 'agents' KV collection persists agent records",
+        "api_access": "YES - GET /agents, /agents/{id}, /agents/stats, collaboration endpoints",
+        "frontend_consumer": "YES - agents page, AgentsApp, SystemMonitor (agent counts)",
+        "backend_consumer": "YES - agent_act dispatch, /system/dashboard by_role composition",
+        "supports_discovery": "YES - list_or_default_agents maps _DEFAULT_AGENTS by id",
+        "supports_health": "PARTIAL - status field (idle/active) but no explicit health probe per agent",
+        "supports_permissions": "YES - agent_act requires get_current_user; capability gating (email) enforced (L331-334)",
+        "supports_provenance": "PARTIAL - provenance on executed tasks; agent records lack creation provenance/audit",
+        "supports_lifecycle_state": "PARTIAL - status field exists but no formal registered->active->retired lifecycle"
+      }
+    },
+    {
+      "registry": "Provider / Model Registry (Phase 6)",
+      "status": "PARTIAL",
+      "location": "F:/AI/providers (external) + gateway.py tier3",
+      "questionnaire": {
+        "single_source_of_truth": "PARTIAL - ProviderRouter/ModelRegistry/ModelManager (F:/AI/providers) is single source but EXTERNAL to audited repo",
+        "persists_state": "NO - in-process registry, no local persistence committed in repo",
+        "api_access": "PARTIAL - indirectly via /api/v1/ai/models (gateway surface) but no direct GET of registry entries",
+        "frontend_consumer": "NO - no frontend consumer (ai_enabled=False; /system/dashboard providers.configured=[])",
+        "backend_consumer": "YES - ProviderGateway tier3 calls bootstrap_fabric()/ProviderRouter",
+        "supports_discovery": "YES - ProviderRouter routes by model/provider (F:/AI/providers/routing)",
+        "supports_health": "NO - no health endpoint exposed; ai_enabled=False means all offline",
+        "supports_permissions": "PARTIAL - get_current_user on ai.py; provider-level auth is key-gated at gateway (honesty guard), not RBAC",
+        "supports_provenance": "PARTIAL - provenance in gateway event log but no per-registry lineage field",
+        "supports_lifecycle_state": "NO - no lifecycle state on models/providers"
+      }
+    },
+    {
+      "registry": "APP_REGISTRY (frontend window manager)",
+      "status": "HARDCODED",
+      "location": "frontend/web/src/components/desktop/DesktopProvider.tsx L111",
+      "questionnaire": {
+        "single_source_of_truth": "NO - hardcoded list in DesktopProvider.tsx; no backend authority",
+        "persists_state": "NO - client component state only (lost on refresh)",
+        "api_access": "NO - not an API",
+        "frontend_consumer": "YES - DesktopProvider maps APP_REGISTRY[id].component",
+        "backend_consumer": "NO",
+        "supports_discovery": "NO - static array, no runtime discovery",
+        "supports_health": "NO",
+        "supports_permissions": "NO - no auth/permission check (DesktopProvider has no get_current_user dependency)",
+        "supports_provenance": "NO",
+        "supports_lifecycle_state": "NO - static definition, no lifecycle"
+      }
+    },
+    {
+      "registry": "Plugin Registry",
+      "status": "DISCONNECTED",
+      "location": "infrastructure/plugins/{registry,loader,lifecycle,...}.py",
+      "questionnaire": {
+        "single_source_of_truth": "YES (in package) - but NOT consumed by the application",
+        "persists_state": "NO - not wired to db; in-process only",
+        "api_access": "NO - no router exposes plugins",
+        "frontend_consumer": "NO",
+        "backend_consumer": "NO - main.build_app() does not load plugins",
+        "supports_discovery": "YES - PluginRegistry.lookup/list (within package)",
+        "supports_health": "YES - lifecycle start/health (within package)",
+        "supports_permissions": "NO - not reachable",
+        "supports_provenance": "PARTIAL - lifecycle hooks exist (hook.py) but never invoked",
+        "supports_lifecycle_state": "YES (within package - install/start/stop/uninstall) but DEAD at runtime"
+      }
+    },
+    {
+      "registry": "Search Domain Index (_DOMAIN_INDEX)",
+      "status": "PARTIAL",
+      "location": "jarvis_backend/routers/search.py L793",
+      "questionnaire": {
+        "single_source_of_truth": "YES - _DOMAIN_INDEX is the single domain->searcher map",
+        "persists_state": "NO - index is in-process static; per-search reads from KV stores at query time",
+        "api_access": "YES - GET /search/, /domains, /to/{browser,research,knowledge}",
+        "frontend_consumer": "YES - GlobalSearch, knowledge-hub, search page",
+        "backend_consumer": "YES - search.py handlers",
+        "supports_discovery": "YES - /domains lists registered domains",
+        "supports_health": "PARTIAL - per-source read, no aggregate health indicator",
+        "supports_permissions": "NO - /search has no Depends(get_current_user) (public) => PARTIAL/no auth on search",
+        "supports_provenance": "PARTIAL - no per-result provenance; search_history logged",
+        "supports_lifecycle_state": "NO - no lifecycle state on domains"
+      }
+    },
+    {
+      "registry": "RBAC store (users/roles/permissions)",
+      "status": "REAL",
+      "location": "jarvis_backend/routers/rbac.py + core._seed_canonical_roles",
+      "questionnaire": {
+        "single_source_of_truth": "YES - users/roles/permissions/tenant in KV store; seeded canonical roles",
+        "persists_state": "YES - kv persistence via get_store",
+        "api_access": "YES - GET/POST/PUT/DELETE /users,/roles,/permissions,/audit-logs,/tenant/settings",
+        "frontend_consumer": "YES - admin page, control-center security/permissions tabs",
+        "backend_consumer": "YES - rbac.py enforces _require_admin/_require_auth on every RBAC endpoint",
+        "supports_discovery": "YES - /roles, /permissions, /audit-logs list endpoints",
+        "supports_health": "NO - no per-role health; users store has no liveness probe",
+        "supports_permissions": "YES - admin gates on every mutating/list endpoint; _require_auth/_require_admin",
+        "supports_provenance": "PARTIAL - audit_logs appended but not attributed per-role-action provenance",
+        "supports_lifecycle_state": "NO - no role lifecycle (active/suspended/retired) beyond creation/deletion"
+      }
+    },
+    {
+      "registry": "Frontend backup_registry (autonomous-state-manager)",
+      "status": "HARDCODED",
+      "location": "frontend/web/src/lib/autonomous-state-manager.ts",
+      "questionnaire": {
+        "single_source_of_truth": "NO - hardcoded in browser localStorage (stateManager.get('backup_registry'))",
+        "persists_state": "YES - persisted to localStorage (per-browser, not cross-device)",
+        "api_access": "NO - not a backend API",
+        "frontend_consumer": "YES - control-center backup recovery tab",
+        "backend_consumer": "NO",
+        "supports_discovery": "NO - static key",
+        "supports_health": "NO",
+        "supports_permissions": "NO - localStorage is user-browser-only, no real authz",
+        "supports_provenance": "NO",
+        "supports_lifecycle_state": "NO"
+      }
+    },
+    {
+      "registry": "Knowledge store (get_store('knowledge'))",
+      "status": "REAL",
+      "location": "jarvis_backend/routers/knowledge.py + infrastructure/knowledge/store.py",
+      "questionnaire": {
+        "single_source_of_truth": "YES - get_store('knowledge') is the single knowledge KV; KnowledgeStore wraps it",
+        "persists_state": "YES - kv persistence (SQLite jarvis_db)",
+        "api_access": "YES - GET/POST/DELETE /knowledge + /knowledge/search",
+        "frontend_consumer": "YES - knowledge page, knowledge-hub, cognitive page",
+        "backend_consumer": "YES - knowledge.py, search.py, browser extract-to-knowledge",
+        "supports_discovery": "YES - /knowledge/search + KnowledgeStore.search",
+        "supports_health": "PARTIAL - store health via _notify('search') metrics, no endpoint liveness",
+        "supports_permissions": "YES - knowledge.py mutate endpoints are auth-gated; search.py is public (gap)",
+        "supports_provenance": "YES - _notify observers (store.py L43/70/89/97) record operation+doc_id",
+        "supports_lifecycle_state": "NO - knowledge entries have no lifecycle state (published/draft/archived)"
+      }
+    },
+    {
+      "registry": "Workflows (_DEFAULT_WORKFLOWS in misc)",
+      "status": "HARDCODED",
+      "location": "jarvis_backend/routers/automation.py L49 + get_store('misc').workflows",
+      "questionnaire": {
+        "single_source_of_truth": "PARTIAL - seed defaults in code + mutable misc.workflows; dual source",
+        "persists_state": "YES - misc KV store",
+        "api_access": "YES - GET /automation, /automation/n8n/workflows",
+        "frontend_consumer": "YES - workflows page, automation-monitor",
+        "backend_consumer": "YES - automation.py",
+        "supports_discovery": "YES - /automation lists workflows",
+        "supports_health": "NO - no workflow health",
+        "supports_permissions": "YES - GET /automation (auth) per routers/auth scan; PUT /task/{id}/run",
+        "supports_provenance": "PARTIAL - misc persists state but no per-workflow provenance lineage",
+        "supports_lifecycle_state": "NO - no lifecycle beyond run/idle"
+      }
+    },
+    {
+      "registry": "Extensions manifest (get_store('extensions'))",
+      "status": "PARTIAL",
+      "location": "jarvis_backend/routers/extensions.py",
+      "questionnaire": {
+        "single_source_of_truth": "PARTIAL - static manifest list in code (extensions.py L121-504) + persisted installed via get_store('extensions'); dual source",
+        "persists_state": "YES - extensions KV store",
+        "api_access": "YES - GET /extensions, /installed, POST /install, /launch, /invoke",
+        "frontend_consumer": "YES - extensions page, control-center extensions tab",
+        "backend_consumer": "YES - extensions.py",
+        "supports_discovery": "YES - /extensions lists + /capabilities",
+        "supports_health": "NO - no manifest health",
+        "supports_permissions": "YES - get_current_user/get_optional_user on endpoints",
+        "supports_provenance": "PARTIAL - oauth callback audited; manifest lacks creation provenance",
+        "supports_lifecycle_state": "NO - no extension lifecycle state (installed/blocked/retired) beyond present/absent"
+      }
+    },
+    {
+      "registry": "Browser session/workspace registry",
+      "status": "PARTIAL",
+      "location": "get_store('browser_sessions/tabs/tasks/...) (18 collections)",
+      "questionnaire": {
+        "single_source_of_truth": "PARTIAL - sessions/tabs/tasks/checkpoints/workspaces are per-surface collections, no single session coordinator",
+        "persists_state": "YES - 18 browser_* KV collections",
+        "api_access": "YES - remote-browser sessions + tab/workspace/task APIs (browser.py)",
+        "frontend_consumer": "YES - EmbeddedBrowser, desktop browser apps",
+        "backend_consumer": "YES - browser.py, browser_engine (via execute_action)",
+        "supports_discovery": "YES - /sessions, /tabs, /tasks",
+        "supports_health": "NO - no aggregate browser-engine health endpoint",
+        "supports_permissions": "YES - browser.py authenticated (get_current_user)",
+        "supports_provenance": "PARTIAL - evidence/action telemetry logged; no full operation provenance",
+        "supports_lifecycle_state": "PARTIAL - tasks have status but no unified session lifecycle"
+      }
+    },
+    {
+      "registry": "Device Registry",
+      "status": "ABSENT",
+      "location": "n/a - no device/identity registry in repository",
+      "questionnaire": {
+        "single_source_of_truth": "N/A",
+        "persists_state": "N/A",
+        "api_access": "N/A",
+        "frontend_consumer": "N/A",
+        "backend_consumer": "N/A",
+        "supports_discovery": "N/A",
+        "supports_health": "N/A",
+        "supports_permissions": "N/A",
+        "supports_provenance": "N/A",
+        "supports_lifecycle_state": "N/A"
+      }
+    }
+  ],
+  "convergence_and_duplication": [
+    {
+      "issue": "Agent vs Provider vs Capability vs Tool registries are separate and disconnected (no single registry backbone).",
+      "evidence": "agents _DEFAULT_AGENTS (static), providers (external), capabilities (static tuples), APP_REGISTRY (frontend) - 4 distinct, non-converging registries for 'what can this system do'."
+    },
+    {
+      "issue": "extensions.py (manifest registry) vs infrastructure/plugins (dead package) - two plugin-like systems, one used one not.",
+      "evidence": "extensions.py L1 docstring 'plugins and extensions'; rg no 'from infrastructure.plugins'. Plugin lifecycle never invoked."
+    },
+    {
+      "issue": "Frontend 3x API clients duplicate backend truth (search/system/agents overlap across jarvisAPI/apiClient/systemApi).",
+      "evidence": "lib/api.ts getCapabilities L533 vs features/system/api.ts L10; types.ts + features/system/types.ts both SystemCapability."
+    },
+    {
+      "issue": "Capability Registry vs Agent capabilities vs Connector capabilities vs RBAC permissions - 4 capability notions, no unification.",
+      "evidence": "system._CAPABILITIES[needs_ai]; agents.capabilities=['codegen','review','execute','email']; connector ActionSpec capabilities; rbac permissions list."
+    }
+  ],
+  "summary": {
+    "total_registries_found": 14,
+    "single_source_of_truth": 5,
+    "fully_converged": "NONE - every registry has a partial/none answer on >=2 questions",
+    "largest_duplication": "Capability notions: system._CAPABILITIES, agents.capabilities, connector ActionSpec capabilities, rbac permissions (4 separate, none cross-referenced)",
+    "dead_registries": [
+      "Device Registry (absent)",
+      "Plugin Registry (disconnected)",
+      "APP_REGISTRY (hardcoded frontend-only)"
+    ]
+  }
+}

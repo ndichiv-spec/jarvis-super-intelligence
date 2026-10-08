@@ -1,0 +1,81 @@
+{
+  "timestamp": "2026-10-02T13:56:40.378258",
+  "passed": 12,
+  "failed": 0,
+  "warnings": 0,
+  "total": 12,
+  "tests": [
+    {
+      "test": "A",
+      "description": "All 11 capabilities registered with live health status",
+      "status": "PASS",
+      "duration_ms": 7.075
+    },
+    {
+      "test": "B",
+      "description": "Brain capability produces real health check with provider data",
+      "status": "PASS",
+      "duration_ms": 6.937
+    },
+    {
+      "test": "C",
+      "description": "Conversation persistence: create -> add message -> retrieve -> verify",
+      "status": "PASS",
+      "duration_ms": 0.014
+    },
+    {
+      "test": "D",
+      "description": "Memory: store -> recall -> verify persistence in DB",
+      "status": "PASS",
+      "duration_ms": 0.012
+    },
+    {
+      "test": "E",
+      "description": "Browser automation: real HTTP fetch with content verification",
+      "status": "PASS",
+      "duration_ms": 1.295
+    },
+    {
+      "test": "F",
+      "description": "Tool execution: browser tool returns real HTTP data",
+      "status": "PASS",
+      "duration_ms": 1.916
+    },
+    {
+      "test": "G",
+      "description": "Provider/model orchestration: live provider status",
+      "status": "PASS",
+      "duration_ms": 7.293
+    },
+    {
+      "test": "H",
+      "description": "Task management: create task -> query incomplete -> verify persistence",
+      "status": "PASS",
+      "duration_ms": 0.006
+    },
+    {
+      "test": "I",
+      "description": "Event fabric: emit -> retrieve -> verify persistence in DB",
+      "status": "PASS",
+      "duration_ms": 0.013
+    },
+    {
+      "test": "J",
+      "description": "Model catalog: live 53-entry catalog from system.py",
+      "status": "PASS",
+      "duration_ms": 1.798
+    },
+    {
+      "test": "K",
+      "description": "Platform identity: live Git repository state from platform_identity",
+      "status": "PASS",
+      "duration_ms": 0.908
+    },
+    {
+      "test": "L",
+      "description": "Service orchestration: live service health from /services endpoint",
+      "status": "PASS",
+      "duration_ms": 6.344
+    }
+  ]
+}
