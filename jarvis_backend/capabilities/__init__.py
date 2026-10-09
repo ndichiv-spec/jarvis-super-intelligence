@@ -24,23 +24,23 @@ Capabilities:
 """
 
 import asyncio
-import sys
 import os
-from typing import Dict, Any, List, Optional
+import sys
+from typing import Any, Dict, List, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from jarvis_backend.capability import (
     Capability,
+    CapabilityRegistry,
     CapabilityStatus,
     ExecutionContext,
     ExecutionResult,
-    CapabilityRegistry,
     Orchestrator,
-    get_registry,
     get_orchestrator,
+    get_registry,
 )
-from jarvis_backend.event_fabric import EventBus, get_event_bus, Event
+from jarvis_backend.event_fabric import Event, EventBus, get_event_bus
 from jarvis_backend.persistence import initialize_persistence
 
 
@@ -147,7 +147,28 @@ def register_all_capabilities() -> CapabilityRegistry:
     except Exception as e:
         print(f"Failed to register browser: {e}")
 
-    # 8. Task - task management
+    # 8. Current location - authorized, user-consented browser location
+    try:
+        from jarvis_backend.capabilities.location import LocationCurrentCapability
+        location = LocationCurrentCapability()
+        registry.register(location, {
+            'version': location.version,
+            'category': location.category,
+            'description': 'Validate an authenticated user-consented current location.',
+            'permissions': ['location:read'],
+            'sensitive': True,
+        })
+        registry.register_output_contract('location.current', [{
+            'id': 'location.current.location',
+            'type': 'location',
+            'sensitivity': 'sensitive',
+            'freshness': {'required': True, 'maxAgeMs': 120000},
+        }])
+        capabilities.append(location)
+    except Exception as e:
+        print(f"Failed to register current location: {e}")
+
+    # 9. Task - task management
     try:
         from jarvis_backend.capabilities.task import TaskCapability
         task_cap = TaskCapability()
@@ -251,6 +272,9 @@ def register_all_capabilities() -> CapabilityRegistry:
     except Exception as e:
         print(f"Failed to register tech tracker: {e}")
 
+    from jarvis_backend.presentation.registry import register_builtin_capability_bindings
+
+    register_builtin_capability_bindings(registry)
     return registry
 
 

@@ -93,19 +93,34 @@ function normaliseSystemUsage(value: unknown): SystemResourceUsage | null {
   };
 }
 
-/** Build provider status list from the control/status endpoint. */
+/** Build provider status list from the real provider capability endpoint. */
 function normaliseProviders(raw: unknown): { providers: ProviderStatus[]; summary: { total: number; connected: number; disconnected: number } } {
   const data = isRecord(raw) ? raw : {};
   const providers = Array.isArray(data.providers)
-    ? data.providers.filter((provider): provider is ProviderStatus => {
-        return isRecord(provider) &&
-          typeof provider.provider === 'string' &&
-          typeof provider.display_name === 'string' &&
-          typeof provider.connected === 'boolean' &&
-          typeof provider.status === 'string' &&
-          Array.isArray(provider.capabilities) &&
-          typeof provider.model_count === 'number' &&
-          typeof provider.configured === 'boolean';
+    ? data.providers.flatMap((value): ProviderStatus[] => {
+        if (!isRecord(value)) return [];
+        const provider = value.provider ?? value.id;
+        const displayName = value.display_name ?? value.name;
+        if (
+          typeof provider !== 'string' ||
+          typeof displayName !== 'string' ||
+          typeof value.connected !== 'boolean' ||
+          typeof value.status !== 'string' ||
+          !Array.isArray(value.capabilities) ||
+          !value.capabilities.every((capability) => typeof capability === 'string') ||
+          typeof value.configured !== 'boolean'
+        ) {
+          return [];
+        }
+        return [{
+          provider,
+          display_name: displayName,
+          connected: value.connected,
+          status: value.status,
+          capabilities: value.capabilities,
+          configured: value.configured,
+          ...(typeof value.model_count === 'number' ? { model_count: value.model_count } : {}),
+        }];
       })
     : [];
   const summary = isRecord(data.provider_summary) ? data.provider_summary : {};
@@ -335,7 +350,7 @@ export const usePlatformStore = create<PlatformStore>()(
 
       refreshProviders: async () => {
         try {
-          const res = await fetch(`${env.API_URL}/api/v1/control/status`, {
+          const res = await fetch('/api/v1/integrations/providers?probe=false', {
             credentials: 'include',
           });
           if (res.ok) {

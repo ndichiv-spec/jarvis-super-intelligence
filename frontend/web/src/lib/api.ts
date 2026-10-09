@@ -8,6 +8,8 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
  * slowest realistic backend response.
  */
 const REQUEST_TIMEOUT_MS = 180_000;
+// Auth rehydration should recover quickly instead of holding the route indefinitely.
+const AUTH_SESSION_TIMEOUT_MS = 5_000;
 
 /**
  * Get the API base URL for client-side requests.
@@ -194,12 +196,22 @@ export interface PlatformIdentity {
   last_checked: string;
 }
 
+export interface Agent {
+  id: string;
+  name: string;
+  role: string;
+  status: 'active' | 'idle' | 'busy' | 'offline' | string;
+  capabilities?: string[];
+  created_at?: string;
+  last_activity?: string | null;
+}
+
 export interface AgentTask {
   id?: string;
   name: string;
   description?: string;
   schedule_type: string;
-  schedule_value: string;
+  schedule_value?: string | null;
   priority: string;
   enabled: boolean;
   timeout: number;
@@ -208,40 +220,57 @@ export interface AgentTask {
   last_run_status?: string;
   last_run_duration_ms?: number;
   created_at?: string;
+  status?: string;
+  user_id?: string;
+}
+
+export interface RegisterAgentTaskIn {
+  name: string;
+  description: string;
+  schedule_type: 'manual';
+  schedule_value?: null;
+  priority: string;
+  timeout: number;
+  max_retries: number;
 }
 
 export interface TaskExecution {
   id: string;
   task_name: string;
-  status: 'completed' | 'failed' | 'retrying' | 'running';
+  status: 'completed' | 'failed' | 'retrying' | 'running' | string;
   started_at: string;
   completed_at?: string;
-  duration_ms: number;
-  retries: number;
+  provider?: string | null;
+  model?: string | null;
+  session_id?: string | null;
   error?: string;
 }
 
 export interface AgentStats {
-  total_tasks: number;
-  active_tasks: number;
-  success_rate_percent: number;
-  avg_execution_time_ms: number;
+  total: number;
+  active: number;
+  idle: number;
+  by_role: Record<string, number>;
 }
 
 export interface SchedulerStatus {
   running: boolean;
-  total_scheduled: number;
-  next_run_at?: string;
+  status?: string;
+  total_scheduled?: number;
+  next_run_at?: string | null;
+  next_run?: string | null;
   single_worker_required?: boolean;
 }
 
 export interface ServiceTailoringStatus {
-  success: boolean;
-  changed: boolean;
+  success?: boolean;
+  changed?: boolean;
+  enabled?: boolean;
+  status?: 'NOT_CONFIGURED' | 'CONFIGURED' | string;
   last_synced_at?: string | null;
   last_change_at?: string | null;
-  sync_count: number;
-  changes_detected: number;
+  sync_count?: number;
+  changes_detected?: number;
   current_profile?: {
     configured_service_count: number;
     active_capabilities: string[];
@@ -272,15 +301,12 @@ export interface FileUploadResponse {
 
 export interface AuditLogEntry {
   id: string;
-  user_id: string;
-  user_email?: string;
-  user_name?: string;
+  user_id?: string;
+  actor_id?: string;
   action: string;
   resource_type: string;
   resource_id?: string;
-  details?: Record<string, any>;
-  ip_address?: string;
-  created_at: string;
+  timestamp: string;
 }
 
 export interface Role {
@@ -306,22 +332,25 @@ export interface User {
   username: string;
   full_name?: string;
   roles: string[];
-  status: 'active' | 'inactive' | 'suspended';
+  status: 'active' | 'pending_authorization' | 'suspended' | 'disabled';
+  email_verified?: boolean;
   last_login_at?: string;
   created_at?: string;
+  is_admin?: boolean;
 }
 
 export interface TenantSettings {
-  id: string;
-  name: string;
-  slug: string;
-  plan: string;
-  status: string;
-  created_at: string;
-  max_users: number;
-  max_storage_mb: number;
-  max_api_calls_per_day: number;
+  id?: string;
+  name?: string;
+  slug?: string;
+  plan?: string;
+  status?: string;
+  created_at?: string;
+  max_users?: number;
+  max_storage_mb?: number;
+  max_api_calls_per_day?: number;
   settings?: Record<string, any>;
+  [key: string]: any;
 }
 
 export interface ProviderSettings {
@@ -466,8 +495,6 @@ export interface StarkSystemStatus {
 }
 
 export interface AuditLogFilters {
-  date_from?: string;
-  date_to?: string;
   user_id?: string;
   action?: string;
   resource_type?: string;
@@ -502,7 +529,12 @@ class JarvisAPI {
     return new WebSocket(socketUrl.toString());
   }
 
-  private async request<T>(endpoint: string, options: RequestInit = {}, retries: number = 3): Promise<T> {
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {},
+    retries: number = 3,
+    timeoutMs: number = REQUEST_TIMEOUT_MS,
+  ): Promise<T> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string>),
@@ -516,11 +548,7 @@ class JarvisAPI {
           ...options,
           headers,
           credentials: 'include',
-          // Timeout. Must exceed real provider latency: a live chat completion via
-          // POST /api/v1/ai/process measured ~50s end to end (model latency ~39s).
-          // The previous 30s budget aborted every attempt and then retried, so the
-          // UI reported a failure for requests the backend was actually serving.
-          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+          signal: AbortSignal.timeout(timeoutMs),
         });
 
         // Update connection status on success
@@ -889,8 +917,12 @@ class JarvisAPI {
   }
 
   // Agents
-  async getAgents(): Promise<{ tasks: AgentTask[] }> {
+  async getAgents(): Promise<{ agents: Agent[] }> {
     return this.request('/api/v1/agents');
+  }
+
+  async getAgentTasks(limit: number = 50): Promise<{ tasks: AgentTask[]; total: number }> {
+    return this.request(`/api/v1/agents/tasks?limit=${limit}`);
   }
 
   async getAgentStatus(agentId: string): Promise<any> {
@@ -904,7 +936,7 @@ class JarvisAPI {
     });
   }
 
-  async registerCustomTask(task: Omit<AgentTask, 'id' | 'enabled' | 'last_run_at' | 'last_run_status' | 'last_run_duration_ms' | 'created_at'>): Promise<{ success: boolean; task: AgentTask }> {
+  async registerCustomTask(task: RegisterAgentTaskIn): Promise<AgentTask> {
     return this.request('/api/v1/agents/tasks', {
       method: 'POST',
       body: JSON.stringify(task),
@@ -1240,7 +1272,7 @@ class JarvisAPI {
 
   async getCollaborationTasks(status?: string, limit: number = 50): Promise<any> {
     const params = new URLSearchParams();
-    if (status) params.append('status', status);
+    if (status && status !== 'all') params.append('status', status);
     params.append('limit', limit.toString());
     return this.request(`/api/v1/agents/collaboration/tasks/list?${params}`);
   }
@@ -1347,7 +1379,7 @@ class JarvisAPI {
   }
 
   async getMe(): Promise<any> {
-    return this.request('/api/v1/auth/me');
+    return this.request('/api/v1/auth/me', {}, 1, AUTH_SESSION_TIMEOUT_MS);
   }
 
   async updateMe(data: { full_name?: string; username?: string; avatar_url?: string }): Promise<any> {
@@ -1410,14 +1442,14 @@ class JarvisAPI {
       return this.request(`/api/v1/rbac/users?${params}`);
     },
 
-    createUser: async (data: { email: string; username: string; password: string; full_name?: string; roles: string[] }): Promise<{ success: boolean; user: User }> => {
+    createUser: async (data: { email: string; username: string; password: string; full_name?: string }): Promise<User> => {
       return this.request('/api/v1/rbac/users', {
         method: 'POST',
         body: JSON.stringify(data),
       });
     },
 
-    updateUser: async (userId: string, data: Partial<User>): Promise<{ success: boolean; user: User }> => {
+    updateUser: async (userId: string, data: { roles?: string[]; status?: User['status'] }): Promise<User> => {
       return this.request(`/api/v1/rbac/users/${userId}`, {
         method: 'PUT',
         body: JSON.stringify(data),
@@ -1432,14 +1464,14 @@ class JarvisAPI {
       return this.request('/api/v1/rbac/roles');
     },
 
-    createRole: async (data: { name: string; description?: string; permissions: string[] }): Promise<{ success: boolean; role: Role }> => {
+    createRole: async (data: { name: string; description?: string; permissions: string[] }): Promise<Role> => {
       return this.request('/api/v1/rbac/roles', {
         method: 'POST',
         body: JSON.stringify(data),
       });
     },
 
-    updateRole: async (roleId: string, data: Partial<Role>): Promise<{ success: boolean; role: Role }> => {
+    updateRole: async (roleId: string, data: { name?: string; description?: string; permissions?: string[] }): Promise<Role> => {
       return this.request(`/api/v1/rbac/roles/${roleId}`, {
         method: 'PUT',
         body: JSON.stringify(data),
@@ -1455,10 +1487,8 @@ class JarvisAPI {
       return this.request(`/api/v1/rbac/permissions${params}`);
     },
 
-    getAuditLogs: async (filters: AuditLogFilters = {}): Promise<{ logs: AuditLogEntry[]; total: number; page: number; per_page: number }> => {
+    getAuditLogs: async (filters: AuditLogFilters = {}): Promise<{ logs: AuditLogEntry[]; total: number }> => {
       const params = new URLSearchParams();
-      if (filters.date_from) params.append('date_from', filters.date_from);
-      if (filters.date_to) params.append('date_to', filters.date_to);
       if (filters.user_id) params.append('user_id', filters.user_id);
       if (filters.action) params.append('action', filters.action);
       if (filters.resource_type) params.append('resource_type', filters.resource_type);
@@ -1467,17 +1497,21 @@ class JarvisAPI {
       return this.request(`/api/v1/rbac/audit-logs?${params}`);
     },
 
-    exportAuditLogs: async (filters: AuditLogFilters = {}): Promise<Blob> => {
-      const params = new URLSearchParams();
-      if (filters.date_from) params.append('date_from', filters.date_from);
-      if (filters.date_to) params.append('date_to', filters.date_to);
-      if (filters.user_id) params.append('user_id', filters.user_id);
-      if (filters.action) params.append('action', filters.action);
-      if (filters.resource_type) params.append('resource_type', filters.resource_type);
-      const response = await fetch(`${this.baseUrl}/api/v1/rbac/audit-logs/export?${params}`, {
+    exportAuditLogs: async (): Promise<Blob> => {
+      const response = await fetch(`${this.baseUrl}/api/v1/rbac/audit-logs/export`, {
         credentials: 'include',
       });
-      if (!response.ok) throw new Error('Export failed');
+      if (!response.ok) {
+        let message = `Audit export failed (${response.status})`;
+        try {
+          const body = await response.json() as { detail?: unknown; message?: unknown };
+          if (typeof body.detail === 'string') message = body.detail;
+          else if (typeof body.message === 'string') message = body.message;
+        } catch {
+          // Keep the HTTP status in the fallback message when the response is not JSON.
+        }
+        throw new ApiRequestError(message, response.status);
+      }
       return response.blob();
     },
 
@@ -1485,7 +1519,7 @@ class JarvisAPI {
       return this.request('/api/v1/rbac/tenant/settings');
     },
 
-    updateTenantSettings: async (data: { max_users: number; max_storage_mb: number; max_api_calls_per_day: number; settings: Record<string, any> }): Promise<{ success: boolean; settings: TenantSettings }> => {
+    updateTenantSettings: async (data: Partial<Pick<TenantSettings, 'max_users' | 'max_storage_mb' | 'max_api_calls_per_day' | 'settings'>>): Promise<TenantSettings> => {
       return this.request('/api/v1/rbac/tenant/settings', {
         method: 'PUT',
         body: JSON.stringify(data),

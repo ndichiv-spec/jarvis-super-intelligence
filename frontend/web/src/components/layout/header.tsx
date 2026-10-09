@@ -2,11 +2,9 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { useRouter } from 'next/navigation';
-import { useTheme } from 'next-themes';
-import { motion } from 'framer-motion';
+import { usePathname, useRouter } from 'next/navigation';
 import {
-  Menu, Bell, Sun, Moon, User, Settings,
+  Menu, Bell, Settings,
   LogOut, Globe, ChevronDown, CheckCheck,
   Activity, Shield, Brain,
 } from 'lucide-react';
@@ -66,7 +64,7 @@ interface BackendNotification {
   read: boolean;
 }
 
-async function fetchBackendNotifications(): Promise<NotificationItem[]> {
+async function fetchBackendNotifications(): Promise<NotificationItem[] | null> {
   try {
     const response = await apiClient.get<{ notifications: BackendNotification[] }>(
       API_ENDPOINTS.notifications.list,
@@ -83,33 +81,31 @@ async function fetchBackendNotifications(): Promise<NotificationItem[]> {
     }));
   } catch {
     console.error('Could not load user notifications.');
-    return [];
+    return null;
   }
 }
 
 interface HeaderProps {
+  navOpen: boolean;
   onMenuToggle: () => void;
 }
 
-export function Header({ onMenuToggle }: HeaderProps) {
+export function Header({ navOpen, onMenuToggle }: HeaderProps) {
   const router = useRouter();
-  const { theme, setTheme } = useTheme();
+  const pathname = usePathname() || '/';
   const [localNotifs, setLocalNotifs] = useState<NotificationItem[]>([]);
+  const [notificationState, setNotificationState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
-  const [mounted, setMounted] = useState(false);
-
-  // Defer to client-side theme resolution after mount to prevent
-  // hydration mismatches (server always renders 'dark').
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => setMounted(true));
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
-  const resolvedTheme = mounted && theme ? theme : 'dark';
 
   const backend = useBackend();
   const systemUsage = useSystemUsage();
   const platformNotifs = useNotifications();
   const user = useAuthStore((s) => s.user);
+  const routeContext = pathname === '/'
+    ? 'Conversation'
+    : pathname.split('/').filter((segment) => segment && segment !== 'dashboard')
+      .map((segment) => segment.replaceAll('-', ' '))
+      .join(' / ') || 'Workspace';
 
   // Merge backend notifications with platform store notifications
   const mergedNotifs = useMemo<NotificationItem[]>(() => [
@@ -125,7 +121,13 @@ export function Header({ onMenuToggle }: HeaderProps) {
   ], [localNotifs, platformNotifs]);
 
   const refreshNotifications = useCallback(async () => {
-    setLocalNotifs(await fetchBackendNotifications());
+    const notifications = await fetchBackendNotifications();
+    if (notifications === null) {
+      setNotificationState('error');
+      return;
+    }
+    setLocalNotifs(notifications);
+    setNotificationState('ready');
   }, []);
 
   // Initial load + periodic poll of backend notifications
@@ -182,25 +184,29 @@ export function Header({ onMenuToggle }: HeaderProps) {
     window.location.href = '/login';
   }, []);
 
-  const cpuPercent = systemUsage?.cpu_percent ?? 0;
-
   return (
-    <header className="sticky top-0 z-30 flex min-h-16 min-w-0 w-full max-w-full flex-wrap items-center gap-2 border-b border-white/5 bg-[hsl(222,47%,8%)]/80 px-3 py-2 backdrop-blur-xl sm:h-16 sm:flex-nowrap sm:gap-4 sm:px-4 sm:py-0 lg:px-6">
-      <Button variant="ghost" size="icon" onClick={onMenuToggle} className="h-9 w-9 lg:hidden">
+    <header className="sticky top-0 z-30 flex min-h-16 min-w-0 w-full max-w-full flex-wrap items-center gap-2 border-b border-slate-800/80 bg-[#090f1b] px-3 py-2 sm:h-16 sm:flex-nowrap sm:gap-4 sm:px-4 sm:py-0 lg:px-6">
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={onMenuToggle}
+        aria-label={navOpen ? 'Close navigation' : 'Open navigation'}
+        aria-expanded={navOpen}
+        aria-controls="primary-navigation"
+        className="h-9 w-9 md:hidden"
+      >
         <Menu className="h-5 w-5" />
       </Button>
 
       {/* Identity + Context Bar */}
-      <div className="hidden items-center gap-2 lg:flex">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border border-blue-500/10">
+      <div className="hidden min-w-0 items-center gap-3 lg:flex">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-indigo-300/15 bg-indigo-300/[0.07]">
           <Brain className="h-4 w-4 text-blue-400" />
         </div>
-        <span className="text-sm font-semibold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-          JARVIS Command Center
-        </span>
-        {backend.connected && (
-          <span className="text-[10px] font-medium text-emerald-400/60">● Connected</span>
-        )}
+        <div className="flex min-w-0 flex-col justify-center">
+          <span className="text-[12px] font-semibold tracking-[0.08em] text-slate-100">JARVIS</span>
+          <span className="max-w-[230px] truncate text-[10px] capitalize tracking-wide text-slate-500">{routeContext}</span>
+        </div>
       </div>
 
       {/* Context: active compute + model/provider */}
@@ -208,7 +214,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
         <div className="hidden items-center gap-3 text-[11px] text-muted-foreground/50 md:flex">
           <span className="flex items-center gap-1">
             <Activity className="h-3 w-3" />
-            CPU {Math.round(cpuPercent)}%
+            CPU {systemUsage ? `${Math.round(systemUsage.cpu_percent)}%` : 'CPU not reported'}
           </span>
           <Separator orientation="vertical" className="h-3 bg-white/5" />
           <span className="flex items-center gap-1">
@@ -249,15 +255,32 @@ export function Header({ onMenuToggle }: HeaderProps) {
 
       <div className="ml-auto flex min-w-0 shrink-0 items-center gap-1 sm:gap-2">
         {/* Connection State — real backend connectivity */}
-        <div className="flex items-center gap-1.5 rounded-full border border-white/5 bg-white/[0.02] px-3 py-1">
-          <span className={`inline-flex h-2 w-2 rounded-full ${backend.connected ? 'bg-emerald-500' : 'bg-red-500'}`} />
-          <span className="text-[10px] font-medium text-muted-foreground/50">
-            {backend.connected ? 'Connected' : 'Offline'}
+        <div className="flex items-center gap-1.5 rounded-full border border-white/5 bg-white/[0.02] px-2.5 py-1 sm:px-3">
+            <span aria-hidden="true" className={`inline-flex h-2 w-2 rounded-full ${
+              backend.connected ? 'bg-emerald-500' : backend.status === 'loading' || backend.status === 'idle' || backend.status === 'degraded' ? 'bg-amber-400' : 'bg-rose-400'
+            }`} />
+            <span className="sr-only">
+              Backend {backend.connected ? 'reachable' : backend.status === 'loading' || backend.status === 'idle' ? 'checking' : backend.status === 'degraded' ? 'degraded' : 'unavailable'}
+            </span>
+          <span className="hidden text-[10px] font-medium text-muted-foreground/60 sm:inline">
+            {backend.connected
+              ? 'Reachable'
+              : backend.status === 'idle' || backend.status === 'loading'
+                ? 'Checking'
+                : backend.status === 'degraded'
+                  ? 'Degraded'
+                  : 'Unavailable'}
           </span>
         </div>
 
         {/* Security Status */}
-        <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground/60 hover:text-foreground">
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Open security"
+          onClick={() => router.push('/dashboard/security')}
+          className="hidden h-9 w-9 text-muted-foreground/60 hover:text-foreground md:inline-flex"
+        >
           <Shield className="h-5 w-5" />
         </Button>
 
@@ -265,8 +288,9 @@ export function Header({ onMenuToggle }: HeaderProps) {
         <Button
           variant="ghost"
           size="icon"
+          aria-label="Open activity stream"
           className="h-9 w-9 text-muted-foreground/60 hover:text-foreground"
-          title="Activity stream (⌘+Shift+A)"
+          title="Recent activity (⌘+Shift+A)"
           onClick={() => {
             usePlatformStore.getState().setWorkspace({ panelState: { ...usePlatformStore.getState().workspace.panelState, activityPanel: { open: true } } });
           }}
@@ -277,7 +301,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
         {/* Notifications — from platform store + backend */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-9 w-9 relative text-muted-foreground/60 hover:text-foreground">
+            <Button variant="ghost" size="icon" aria-label={`Notifications${unread > 0 ? `, ${unread} unread` : ''}`} className="relative h-9 w-9 text-muted-foreground/60 hover:text-foreground">
               <Bell className="h-5 w-5" />
               {unread > 0 && (
                 <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 text-[10px] font-bold text-white">{unread}</span>
@@ -288,6 +312,8 @@ export function Header({ onMenuToggle }: HeaderProps) {
             <DropdownMenuLabel className="flex items-center justify-between">
               <span>Notifications ({unread} unread)</span>
               <button
+                type="button"
+                disabled={unread === 0}
                 className="flex items-center gap-1 text-[11px] text-muted-foreground/60 hover:text-foreground"
                 onClick={() => void markAllNotificationsRead()}
               >
@@ -295,8 +321,16 @@ export function Header({ onMenuToggle }: HeaderProps) {
               </button>
             </DropdownMenuLabel>
             <DropdownMenuSeparator className="bg-white/5" />
-            {mergedNotifs.length === 0 && (
-              <div className="px-3 py-4 text-xs text-muted-foreground/60">No notifications</div>
+            {notificationState === 'error' && (
+              <div role="status" className="px-3 py-3 text-xs text-amber-200/80">
+                Backend notifications could not be loaded.
+              </div>
+            )}
+            {mergedNotifs.length === 0 && notificationState === 'loading' && (
+              <div role="status" className="px-3 py-4 text-xs text-muted-foreground/60">Loading notifications…</div>
+            )}
+            {mergedNotifs.length === 0 && notificationState === 'ready' && (
+              <div className="px-3 py-4 text-xs text-muted-foreground/60">No notifications reported.</div>
             )}
             {mergedNotifs.map((n) => (
               <DropdownMenuItem
@@ -321,42 +355,25 @@ export function Header({ onMenuToggle }: HeaderProps) {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* Theme Toggle */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-9 w-9 text-muted-foreground/60 hover:text-foreground transition-all hover:scale-110"
-          onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-        >
-          <motion.div
-            initial={false}
-            animate={{ rotate: resolvedTheme === 'dark' ? 0 : 180 }}
-            transition={{ duration: 0.3 }}
-            suppressHydrationWarning
-          >
-            {resolvedTheme === 'dark' ? (
-              <Sun className="h-5 w-5 text-amber-400" />
-            ) : (
-              <Moon className="h-5 w-5 text-blue-400" />
-            )}
-          </motion.div>
-        </Button>
-
         <Separator orientation="vertical" className="h-6 bg-white/5" />
 
         {/* User Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-9 gap-2 px-2">
+            <Button
+              variant="ghost"
+              className="h-9 gap-2 px-2"
+              aria-label={`Account menu for ${user?.full_name || user?.username || user?.email || 'account'}`}
+            >
               <Avatar className="h-7 w-7 ring-2 ring-blue-500/20">
-                <AvatarImage src={user?.avatar_url || '/avatars/default.png'} alt={user?.full_name || 'User'} />
+                {user?.avatar_url && <AvatarImage src={user.avatar_url} alt={user.full_name || 'Account'} />}
                 <AvatarFallback className="bg-gradient-to-br from-blue-500 to-cyan-400 text-white text-xs font-bold">
-                  {user?.full_name?.charAt(0) || user?.email?.charAt(0) || 'A'}
+                  {user?.full_name?.charAt(0) || user?.email?.charAt(0) || 'J'}
                 </AvatarFallback>
               </Avatar>
               <div className="hidden text-left md:block">
-                <span className="block text-sm font-medium">{user?.full_name || user?.username || 'Admin'}</span>
-                <span className="block text-[10px] text-muted-foreground/50">{user?.email || 'admin@jarvis.local'}</span>
+                <span className="block text-sm font-medium">{user?.full_name || user?.username || user?.email || 'Account'}</span>
+                <span className="block text-[10px] text-muted-foreground/50">{user?.email || 'Signed-in account'}</span>
               </div>
               <ChevronDown className="ml-1 h-3 w-3 text-muted-foreground/40 hidden md:block" />
             </Button>
@@ -364,19 +381,16 @@ export function Header({ onMenuToggle }: HeaderProps) {
           <DropdownMenuContent align="end" className="w-56 bg-[hsl(222,47%,12%)] border-white/10">
             <DropdownMenuLabel>
               <div className="flex flex-col">
-                <span className="font-medium">{user?.full_name || user?.username || 'Admin'}</span>
-                <span className="text-xs text-muted-foreground/50">{user?.email || 'admin@jarvis.local'}</span>
+                <span className="font-medium">{user?.full_name || user?.username || user?.email || 'Account'}</span>
+                <span className="text-xs text-muted-foreground/50">{user?.email || 'Signed-in account'}</span>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator className="bg-white/5" />
-            <DropdownMenuItem>
-              <User className="mr-2 h-4 w-4" />Profile
-            </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => router.push('/dashboard/settings')}>
               <Settings className="mr-2 h-4 w-4" />Settings
             </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Globe className="mr-2 h-4 w-4" />API Docs
+            <DropdownMenuItem onSelect={() => router.push('/dashboard/capabilities')}>
+              <Globe className="mr-2 h-4 w-4" />Capabilities
             </DropdownMenuItem>
             <DropdownMenuSeparator className="bg-white/5" />
             <DropdownMenuItem

@@ -4,11 +4,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  MessageSquare, Brain, BarChart3, Settings, Cpu, Database, Globe,
-  Mail, Puzzle, Mic, Image as ImageIcon, Eye, Box, Network, Search,
-  Bell, Lock, Key, GitBranch, Target, Gauge,
-  FileText, Palette, Wrench, FlaskConical, Satellite,
-  Shield, ShieldCheck, Users, Layers, Crown, Terminal,
+  MessageSquare, Brain, Settings, Cpu, Globe,
+  Mail, Puzzle, Mic, Image as ImageIcon, Search,
+  Key, FlaskConical,
+  Shield, ShieldCheck, Layers, Crown, Terminal,
   Workflow, MonitorPlay, Code2, Library, Activity,
   ArrowUpCircle, Sparkles, BookOpen, X, Plus,
 } from 'lucide-react';
@@ -31,14 +30,13 @@ interface DashboardShellProps {
 export function DashboardShell({ children }: DashboardShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
+  const [isCompact, setIsCompact] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [browserPanelOpen, setBrowserPanelOpen] = useState(false);
   const router = useRouter();
-  const checkConnection = useChatStore((s) => s.checkConnection);
   const newSession = useChatStore((s) => s.newSession);
 
   // Subscribe to the unified platform store for shell-level data
-  const backend = usePlatformStore((s) => s.backend);
   const platformRefreshAll = usePlatformStore((s) => s.refreshAll);
   const platformRefreshSystem = usePlatformStore((s) => s.refreshSystem);
   const platformRefreshBackend = usePlatformStore((s) => s.refreshBackend);
@@ -46,31 +44,21 @@ export function DashboardShell({ children }: DashboardShellProps) {
   const activityPanelOpen = usePlatformStore((s) => s.workspace.panelState?.activityPanel?.open ?? false);
   const setWorkspace = usePlatformStore((s) => s.setWorkspace);
 
-  // Initial connection + backend health check
+  // The shell owns platform polling and event subscriptions for every dashboard route.
   useEffect(() => {
-    checkConnection();
-    const id = setInterval(checkConnection, 15000);
-    return () => clearInterval(id);
-  }, [checkConnection]);
-
-  // Initialize platform store on mount
-  useEffect(() => {
-    platformRefreshAll();
+    void platformRefreshAll();
+    const unsubscribe = subscribeToEvents();
     const interval = setInterval(() => {
       platformRefreshSystem();
       platformRefreshBackend();
     }, 30000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return () => {
+      clearInterval(interval);
+      unsubscribe();
+    };
+  }, [platformRefreshAll, platformRefreshBackend, platformRefreshSystem, subscribeToEvents]);
 
-  // Subscribe to real-time events
-  useEffect(() => {
-    return subscribeToEvents();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const SIDEBAR_WIDTH = 280;
+  const SIDEBAR_WIDTH = isCompact ? 76 : 272;
 
   const runCommand = useCallback((fn: () => void) => {
     setCommandOpen(false);
@@ -125,7 +113,9 @@ export function DashboardShell({ children }: DashboardShellProps) {
       // Escape → close panels / command palette
       if (e.key === 'Escape') {
         if (commandOpen) setCommandOpen(false);
+        if (browserPanelOpen) setBrowserPanelOpen(false);
         if (activityPanelOpen) setWorkspace({ panelState: { activityPanel: { open: false } } });
+        if (isMobile && sidebarOpen) setSidebarOpen(false);
         return;
       }
       // Cmd/Ctrl+1-9 → navigate to dashboard tabs
@@ -157,15 +147,17 @@ export function DashboardShell({ children }: DashboardShellProps) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [router, commandOpen, toggleBrowserPanel]);
+  }, [router, commandOpen, toggleBrowserPanel, isMobile, sidebarOpen, browserPanelOpen, activityPanelOpen, setWorkspace]);
 
-  // Mobile responsiveness
+  // Keep a compact icon rail at tablet widths and use a dismissible sheet on phones.
   useEffect(() => {
     const checkMobile = () => {
-      const mobile = window.innerWidth < 1024;
+      const mobile = window.innerWidth < 768;
+      const compact = window.innerWidth >= 768 && window.innerWidth < 1280;
       setIsMobile(mobile);
+      setIsCompact(compact);
       if (mobile) setSidebarOpen(false);
-      else setSidebarOpen(true);
+      else setSidebarOpen(!compact);
     };
     checkMobile();
     window.addEventListener('resize', checkMobile);
@@ -173,19 +165,21 @@ export function DashboardShell({ children }: DashboardShellProps) {
   }, []);
 
   return (
-    <div className="relative flex min-h-screen min-w-0 w-full max-w-full bg-[hsl(222,47%,6%)]">
+    <div className="relative flex min-h-screen min-w-0 w-full max-w-full bg-[#080d17] text-slate-100">
       <Sidebar
         isMobile={isMobile}
+        isCompact={isCompact}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
 
       <div
         className="flex min-w-0 flex-1 flex-col transition-all duration-300"
-        style={{ marginLeft: isMobile ? 0 : (sidebarOpen ? SIDEBAR_WIDTH : 0) }}
+        style={{ marginLeft: isMobile ? 0 : (isCompact ? SIDEBAR_WIDTH : sidebarOpen ? SIDEBAR_WIDTH : 0) }}
         suppressHydrationWarning
       >
         <Header
+          navOpen={sidebarOpen}
           onMenuToggle={() => setSidebarOpen((o) => !o)}
         />
 
@@ -323,18 +317,23 @@ export function DashboardShell({ children }: DashboardShellProps) {
       <AnimatePresence>
         {activityPanelOpen && (
           <motion.div
-            className="fixed top-16 bottom-4 right-4 z-40 flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-[hsl(222,47%,10%)]/90 backdrop-blur-xl w-80"
+            className="fixed right-4 top-16 bottom-4 z-40 flex w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-slate-700/80 bg-[#0b1220] sm:w-80"
             initial={{ x: 320, opacity: 0, scale: 0.97 }}
             animate={{ x: 0, opacity: 1, scale: 1 }}
             exit={{ x: 320, opacity: 0, scale: 0.97 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
           >
             <div className="flex items-center justify-between p-3 border-b border-white/5">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <Activity className="h-4 w-4 text-blue-400" />
-                Activity Stream
-              </h3>
+              <div>
+                <h3 className="flex items-center gap-2 text-sm font-semibold">
+                  <Activity className="h-4 w-4 text-indigo-300" />
+                  Recent activity
+                </h3>
+                <p className="mt-1 text-[10px] text-slate-500">Recorded workspace actions; live server events are not configured.</p>
+              </div>
               <button
+                type="button"
+                aria-label="Close recent activity"
                 onClick={() => setWorkspace({ panelState: { activityPanel: { open: false } } })}
                 className="p-1 rounded text-muted-foreground/50 hover:text-foreground transition-colors"
                 title="Close activity panel"
@@ -353,7 +352,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
       <AnimatePresence>
         {browserPanelOpen && (
           <motion.div
-            className="fixed top-16 bottom-4 right-4 z-40 flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-[hsl(222,47%,10%)]/95 backdrop-blur-xl w-1/3 min-w-[480px]"
+            className="fixed right-4 top-16 bottom-4 z-40 flex w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-slate-700/80 bg-[#0b1220] sm:w-1/3 sm:min-w-[480px]"
             initial={{ x: 480, opacity: 0, scale: 0.97 }}
             animate={{ x: 0, opacity: 1, scale: 1 }}
             exit={{ x: 480, opacity: 0, scale: 0.97 }}
@@ -365,6 +364,8 @@ export function DashboardShell({ children }: DashboardShellProps) {
                 JARVIS Browser
               </h3>
               <button
+                type="button"
+                aria-label="Close browser panel"
                 onClick={() => setBrowserPanelOpen(false)}
                 className="p-1 rounded text-muted-foreground/50 hover:text-foreground transition-colors"
                 title="Close browser panel"

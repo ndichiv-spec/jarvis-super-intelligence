@@ -27,6 +27,8 @@ from __future__ import annotations
 import json
 import os
 import threading
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -34,6 +36,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     Integer,
+    Index,
     MetaData,
     String,
     Table,
@@ -85,7 +88,32 @@ command_events = Table(
     Column("payload", Text, nullable=False),
 )
 
-LATEST_SCHEMA_REVISION = "002_durable_command_events"
+runtime_streams = Table(
+    "jarvis_runtime_streams",
+    metadata,
+    Column("owner_id", String(160), primary_key=True),
+    Column("session_id", String(160), primary_key=True),
+    Column("sequence", Integer, nullable=False, default=0),
+    Column("retention_floor", Integer, nullable=False, default=0),
+    Column("snapshot", Text, nullable=False),
+    Column("updated_at", String(40), nullable=False),
+)
+
+runtime_events = Table(
+    "jarvis_runtime_events",
+    metadata,
+    Column("owner_id", String(160), primary_key=True),
+    Column("session_id", String(160), primary_key=True),
+    Column("sequence", Integer, primary_key=True),
+    Column("event_id", String(128), nullable=False, unique=True),
+    Column("created_at", String(40), nullable=False),
+    Column("expires_at", String(40), nullable=True),
+    Column("retention", String(16), nullable=False),
+    Column("payload", Text, nullable=False),
+)
+Index("ix_jarvis_runtime_events_retention", runtime_events.c.retention, runtime_events.c.expires_at)
+
+LATEST_SCHEMA_REVISION = "003_durable_runtime_event_journal"
 
 # --------------------------------------------------------------------------- #
 # Engine lifecycle (process-wide singleton)
@@ -204,6 +232,8 @@ def reset_database() -> None:
     """
     ensure_schema()
     with get_engine().begin() as conn:
+        conn.execute(delete(runtime_events))
+        conn.execute(delete(runtime_streams))
         conn.execute(delete(command_events))
         conn.execute(delete(kv_store))
 
@@ -308,6 +338,286 @@ def load_command_events(command_id: str) -> list[dict[str, Any]]:
             .order_by(command_events.c.sequence)
         ).scalars()
         return [json.loads(payload) for payload in payloads]
+
+
+def append_runtime_event(
+    owner_id: str,
+    session_id: str,
+    event_id: str,
+    retention: str,
+    build_event: Callable[[int, dict[str, Any] | None], tuple[dict[str, Any], dict[str, Any]]],
+    *,
+    session_retention_days: int = 30,
+    audit_retention_days: int = 90,
+    max_session_events: int = 5000,
+) -> tuple[dict[str, Any], bool]:
+    """Atomically assign a session sequence, append an event, and save its snapshot."""
+    ensure_schema()
+    engine = get_engine()
+    now = datetime.now(timezone.utc)
+    now_text = now.isoformat()
+    empty_snapshot = json.dumps({
+        "sessionId": session_id,
+        "activeRequests": {},
+        "activeExecutions": {},
+        "activePresentations": {},
+        "assistantState": "idle",
+        "activeMedia": {},
+        "activeTasks": {},
+        "sequence": 0,
+    })
+
+    with _runtime_write_transaction(engine) as conn:
+        values = {
+            "owner_id": owner_id,
+            "session_id": session_id,
+            "sequence": 0,
+            "retention_floor": 0,
+            "snapshot": empty_snapshot,
+            "updated_at": now_text,
+        }
+        if engine.dialect.name == "postgresql":
+            conn.execute(
+                postgres_insert(runtime_streams)
+                .values(**values)
+                .on_conflict_do_nothing(
+                    index_elements=[runtime_streams.c.owner_id, runtime_streams.c.session_id]
+                )
+            )
+        elif engine.dialect.name == "sqlite":
+            conn.execute(
+                sqlite_insert(runtime_streams)
+                .values(**values)
+                .on_conflict_do_nothing(
+                    index_elements=[runtime_streams.c.owner_id, runtime_streams.c.session_id]
+                )
+            )
+        elif not conn.execute(
+            select(runtime_streams.c.sequence).where(
+                runtime_streams.c.owner_id == owner_id,
+                runtime_streams.c.session_id == session_id,
+            )
+        ).first():
+            conn.execute(insert(runtime_streams).values(**values))
+
+        stream = conn.execute(
+            select(
+                runtime_streams.c.sequence,
+                runtime_streams.c.retention_floor,
+                runtime_streams.c.snapshot,
+            )
+            .where(
+                runtime_streams.c.owner_id == owner_id,
+                runtime_streams.c.session_id == session_id,
+            )
+            .with_for_update()
+        ).one()
+        existing = conn.execute(
+            select(
+                runtime_events.c.owner_id,
+                runtime_events.c.session_id,
+                runtime_events.c.payload,
+            ).where(runtime_events.c.event_id == event_id)
+        ).first()
+        if existing is not None:
+            if existing.owner_id != owner_id or existing.session_id != session_id:
+                raise ValueError("Runtime event ID is already associated with another stream.")
+            return json.loads(existing.payload), False
+
+        sequence = int(stream.sequence) + 1
+        retention_floor = int(stream.retention_floor)
+        if retention == "ephemeral":
+            retention_floor = max(retention_floor, sequence)
+        current_snapshot = json.loads(stream.snapshot)
+        event_payload, next_snapshot = build_event(sequence, current_snapshot)
+        event_json = json.dumps(event_payload, ensure_ascii=False, default=str)
+        snapshot_json = json.dumps(next_snapshot, ensure_ascii=False, default=str)
+
+        conn.execute(
+            update(runtime_streams)
+            .where(
+                runtime_streams.c.owner_id == owner_id,
+                runtime_streams.c.session_id == session_id,
+            )
+            .values(
+                sequence=sequence,
+                retention_floor=retention_floor,
+                snapshot=snapshot_json,
+                updated_at=now_text,
+            )
+        )
+        if retention != "ephemeral":
+            expires_at = None
+            if retention == "session":
+                expires_at = (now + timedelta(days=session_retention_days)).isoformat()
+            elif retention == "audit":
+                expires_at = (now + timedelta(days=audit_retention_days)).isoformat()
+            conn.execute(insert(runtime_events).values(
+                owner_id=owner_id,
+                session_id=session_id,
+                sequence=sequence,
+                event_id=event_id,
+                created_at=now_text,
+                expires_at=expires_at,
+                retention=retention,
+                payload=event_json,
+            ))
+
+        expired_sequences = conn.execute(
+            select(runtime_events.c.sequence).where(
+                runtime_events.c.owner_id == owner_id,
+                runtime_events.c.session_id == session_id,
+                runtime_events.c.expires_at.is_not(None),
+                runtime_events.c.expires_at <= now_text,
+            )
+        ).scalars().all()
+        excess_sequences = conn.execute(
+            select(runtime_events.c.sequence)
+            .where(
+                runtime_events.c.owner_id == owner_id,
+                runtime_events.c.session_id == session_id,
+                runtime_events.c.retention == "session",
+            )
+            .order_by(runtime_events.c.sequence.desc())
+            .offset(max_session_events)
+        ).scalars().all()
+        removed_sequences = set(expired_sequences) | set(excess_sequences)
+        if removed_sequences:
+            retention_floor = max(retention_floor, max(removed_sequences))
+            conn.execute(
+                delete(runtime_events).where(
+                    runtime_events.c.owner_id == owner_id,
+                    runtime_events.c.session_id == session_id,
+                    runtime_events.c.sequence.in_(removed_sequences),
+                )
+            )
+            conn.execute(
+                update(runtime_streams)
+                .where(
+                    runtime_streams.c.owner_id == owner_id,
+                    runtime_streams.c.session_id == session_id,
+                )
+                .values(retention_floor=retention_floor)
+            )
+        return event_payload, True
+
+
+@contextmanager
+def _runtime_write_transaction(engine: Engine):
+    connection = engine.connect()
+    if engine.dialect.name == "sqlite":
+        connection.exec_driver_sql("BEGIN IMMEDIATE")
+        try:
+            yield connection
+            connection.commit()
+        except BaseException:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+        return
+    try:
+        with connection.begin():
+            yield connection
+    finally:
+        connection.close()
+
+
+def read_runtime_stream(
+    owner_id: str,
+    session_id: str,
+    *,
+    after: int = 0,
+    limit: int = 500,
+) -> dict[str, Any]:
+    """Read a consistent snapshot and an ordered page of owner-scoped events."""
+    ensure_schema()
+    connection = get_engine().connect()
+    with connection as conn:
+        with conn.begin():
+            stream = conn.execute(
+                select(
+                    runtime_streams.c.sequence,
+                    runtime_streams.c.retention_floor,
+                    runtime_streams.c.snapshot,
+                ).where(
+                    runtime_streams.c.owner_id == owner_id,
+                    runtime_streams.c.session_id == session_id,
+                ).with_for_update()
+            ).first()
+            if stream is None:
+                sequence = 0
+                retention_floor = 0
+                snapshot = {
+                    "sessionId": session_id,
+                    "activeRequests": {},
+                    "activeExecutions": {},
+                    "activePresentations": {},
+                    "assistantState": "idle",
+                    "activeMedia": {},
+                    "activeTasks": {},
+                    "sequence": 0,
+                }
+            else:
+                sequence = int(stream.sequence)
+                retention_floor = int(stream.retention_floor)
+                snapshot = json.loads(stream.snapshot)
+                expired_sequences = conn.execute(
+                    select(runtime_events.c.sequence).where(
+                        runtime_events.c.owner_id == owner_id,
+                        runtime_events.c.session_id == session_id,
+                        runtime_events.c.expires_at.is_not(None),
+                        runtime_events.c.expires_at <= datetime.now(timezone.utc).isoformat(),
+                    )
+                ).scalars().all()
+                if expired_sequences:
+                    retention_floor = max(retention_floor, max(expired_sequences))
+                    conn.execute(
+                        delete(runtime_events).where(
+                            runtime_events.c.owner_id == owner_id,
+                            runtime_events.c.session_id == session_id,
+                            runtime_events.c.sequence.in_(expired_sequences),
+                        )
+                    )
+                    conn.execute(
+                        update(runtime_streams)
+                        .where(
+                            runtime_streams.c.owner_id == owner_id,
+                            runtime_streams.c.session_id == session_id,
+                        )
+                        .values(retention_floor=retention_floor)
+                    )
+            rows = conn.execute(
+                select(runtime_events.c.payload)
+                .where(
+                    runtime_events.c.owner_id == owner_id,
+                    runtime_events.c.session_id == session_id,
+                    runtime_events.c.sequence > after,
+                    runtime_events.c.sequence <= sequence,
+                )
+                .order_by(runtime_events.c.sequence)
+                .limit(limit)
+            ).scalars().all()
+            oldest = conn.execute(
+                select(runtime_events.c.sequence)
+                .where(
+                    runtime_events.c.owner_id == owner_id,
+                    runtime_events.c.session_id == session_id,
+                )
+                .order_by(runtime_events.c.sequence)
+                .limit(1)
+            ).scalar_one_or_none()
+            events = [json.loads(payload) for payload in rows]
+            has_more = bool(events and events[-1]["sequence"] < sequence)
+            return {
+                "sequence": sequence,
+                "retention_floor": retention_floor,
+                "oldest_available_sequence": int(oldest) if oldest is not None else sequence + 1,
+                "snapshot": snapshot,
+                "events": events,
+                "has_more": has_more,
+                "resync_required": after < retention_floor,
+            }
 
 
 def remove_migration(revision: str) -> None:
@@ -447,7 +757,7 @@ def kv_update(store_name: str, key: str, transform: Callable[[Any], Any]) -> Any
     """Update one JSON record under a database row lock."""
     ensure_schema()
     engine = get_engine()
-    with engine.begin() as conn:
+    with _runtime_write_transaction(engine) as conn:
         row = conn.execute(
             select(kv_store.c.value)
             .where(kv_store.c.store_name == store_name, kv_store.c.key == key)

@@ -66,11 +66,12 @@ class Event:
         status: str = "started",
         payload: Optional[Dict[str, Any]] = None,
         metrics: Optional[Dict[str, Any]] = None,
+        event_id: Optional[str] = None,
     ) -> 'Event':
         """Create a new event with auto-generated IDs."""
         import uuid
         return cls(
-            event_id=f"evt-{uuid.uuid4().hex[:16]}",
+            event_id=event_id or f"evt-{uuid.uuid4().hex}",
             timestamp=datetime.now(timezone.utc).isoformat(),
             correlation_id=correlation_id,
             session_id=session_id,
@@ -203,6 +204,7 @@ class EventBus:
 
     def __init__(self, max_events: int = 50000):
         self._subscribers: Dict[str, List[Callable]] = defaultdict(list)
+        self._critical_subscribers: Dict[str, List[Callable]] = defaultdict(list)
         self._async_subscribers: Dict[str, List[Callable]] = defaultdict(list)
         self._events: List[Event] = []
         self._lock = threading.RLock()
@@ -216,6 +218,10 @@ class EventBus:
     def subscribe(self, event_type: str, callback: Callable, priority: int = 0):
         """Subscribe a sync callback. Use '*' for all events."""
         self._subscribers[event_type].append(callback)
+
+    def subscribe_critical(self, event_type: str, callback: Callable) -> None:
+        """Register a durable projection that must succeed before publish returns."""
+        self._critical_subscribers[event_type].append(callback)
 
     def subscribe_async(self, event_type: str, callback: Awaitable):
         """Subscribe an async callback. Use '*' for all events."""
@@ -247,18 +253,30 @@ class EventBus:
                 metrics=metrics,
             )
 
-        # Store event
-        with self._lock:
-            self._events.append(event)
-            if len(self._events) > self._max_events:
-                self._events = self._events[-self._max_events:]
+        # Runtime truth belongs to the canonical SQL journal, not the fabric's
+        # process-local replay buffer or optional legacy persistence hook.
+        runtime_event = (
+            isinstance(event.payload, dict)
+            and event.payload.get("runtime_protocol") == "1.0"
+        )
+        if not runtime_event:
+            with self._lock:
+                self._events.append(event)
+                if len(self._events) > self._max_events:
+                    self._events = self._events[-self._max_events:]
 
         # Persist to DB if configured
-        if self._db_persistence:
+        if self._db_persistence and not runtime_event:
             try:
                 self._db_persistence(event.to_dict())
             except Exception:
                 pass
+
+        critical_results = []
+        for cb in self._critical_subscribers.get('*', []):
+            critical_results.append(cb(event))
+        for cb in self._critical_subscribers.get(event_type, []):
+            critical_results.append(cb(event))
 
         # Notify sync subscribers
         for cb in self._subscribers.get('*', []):
@@ -271,6 +289,7 @@ class EventBus:
                 cb(event)
             except Exception:
                 pass
+        return critical_results
 
     async def emit_async(self, event_type: str, payload: Optional[Dict[str, Any]] = None,
                          source: str = "system", capability: str = "",

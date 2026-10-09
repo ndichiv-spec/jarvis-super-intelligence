@@ -250,6 +250,11 @@ STORES = {
     # Global Search infrastructure (spec §26-31)
     "search_history": list,          # recent + saved searches (spec §44)
     "browser_semantic_cache": dict,  # cached embedding vectors (spec §49)
+    # User-scoped JARVIS presentation runtime state
+    "presentation_preferences": dict,
+    "presentation_client_capabilities": dict,
+    "presentation_state": dict,
+    "presentation_history": dict,
 }
 
 
@@ -561,7 +566,7 @@ ROLE_PERMISSIONS: Dict[str, tuple[str, ...]] = {
         "jobs:read",
         "jobs:execute",
     ),
-    "user": ("chat:use", "memory:own", "files:own", "agents:own"),
+    "user": ("chat:use", "memory:own", "files:own", "agents:own", "location:read"),
     "service": ("runtime:service",),
 }
 

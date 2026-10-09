@@ -8,7 +8,7 @@ import uuid
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ..core import _require_auth, ai_service, get_store, now_iso
@@ -147,7 +147,11 @@ async def _probe_silverwing_chat(endpoint: str) -> bool:
 
 
 @router.post("/ai/process")
-async def ai_process(body: ProcessIn, user: Dict[str, Any] = Depends(_require_auth)):
+async def ai_process(
+    body: ProcessIn,
+    request: Request,
+    user: Dict[str, Any] = Depends(_require_auth),
+):
     """Provider-backed chat bridge (Silverwing-first).
 
     The web chat posts here. Route through ProviderGateway so the trained
@@ -162,6 +166,7 @@ async def ai_process(body: ProcessIn, user: Dict[str, Any] = Depends(_require_au
     if not text:
         raise HTTPException(status_code=400, detail="empty message")
     model = (body.model or "").strip() or None
+    request_id = getattr(request.state, "request_id", None) or str(uuid.uuid4())
     if model in ("auto", "ollama", "local-rule"):
         model = None  # Silverwing default (own trained runtime)
     # Detect a Phase 6 provider:model prefix (e.g. "nvidia:meta/llama-3.3-70b-instruct").
@@ -170,13 +175,18 @@ async def ai_process(body: ProcessIn, user: Dict[str, Any] = Depends(_require_au
     _bypass = bool(model and ":" in model and model.split(":", 1)[0] in ("openai", "nvidia", "google", "aws", "hf"))
     if body.verify or (body.mode or "").strip().lower() == "verify":
         from ..verify import verified_chat
+        from ..observability import request_id_var
 
+        token = request_id_var.set(request_id)
         try:
             result = await verified_chat(text, model=model)
         except ChatError as e:
+            e.request_id = request_id
             raise HTTPException(status_code=502, detail=str(e))
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=502, detail=f"AI backend failure: {e}")
+        finally:
+            request_id_var.reset(token)
         return {
             "response": result["content"],
             "model": result.get("model"),
@@ -184,6 +194,7 @@ async def ai_process(body: ProcessIn, user: Dict[str, Any] = Depends(_require_au
             "latency_ms": result.get("latency_ms"),
             "tokens_used": (result.get("usage") or {}).get("total_tokens"),
             "session_id": body.session_id,
+            "request_id": request_id,
             "sources": result.get("sources", []),
             "math": result.get("math", []),
             "verification": result.get("verification", "unverified"),
@@ -204,6 +215,7 @@ async def ai_process(body: ProcessIn, user: Dict[str, Any] = Depends(_require_au
             user_id, session_id, text,
             model=model,
             client_message_id=getattr(body, "client_message_id", None),
+            request_id=request_id,
         )
     except ChatError as e:
         raise HTTPException(status_code=502, detail=str(e))
@@ -217,6 +229,7 @@ async def ai_process(body: ProcessIn, user: Dict[str, Any] = Depends(_require_au
         "tokens_used": (result.get("usage") or {}).get("total_tokens") or 0,
         "session_id": session_id,
         "message_id": result.get("message_id"),
+        "request_id": result.get("request_id") or request_id,
         "status": result.get("status", "COMPLETED"),
     }
 

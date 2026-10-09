@@ -33,7 +33,11 @@ axios.interceptors.response.use(
   }
 );
 
-const API_URL = process.env.EXPO_PUBLIC_JARVIS_API_URL || 'http://localhost:8000';
+const CONFIGURED_API_URL = process.env.EXPO_PUBLIC_JARVIS_API_URL?.trim();
+if (!CONFIGURED_API_URL && !__DEV__) {
+  throw new Error('Set EXPO_PUBLIC_JARVIS_API_URL to the deployed JARVIS Core URL.');
+}
+const API_URL = CONFIGURED_API_URL || 'http://localhost:8000';
 const API_BASE = `${API_URL}/api/v1`;
 const CHAT_API = `${API_URL}/api`;
 

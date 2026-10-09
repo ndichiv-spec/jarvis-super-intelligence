@@ -185,6 +185,7 @@ class ImageGenerationCapability(Capability):
             payload={
                 'prompt_length': len(prompt),
                 'size': request.get('size', '1024x1024'),
+                'execution_id': context.execution_id,
             },
         )
 
@@ -202,21 +203,11 @@ class ImageGenerationCapability(Capability):
         result.latency_ms = (time.time() - start_time) * 1000.0
         result.correlation_id = correlation_id
 
-        # Emit completion
-        self._event_bus.emit(
-            event_type='image.generation.completed',
-            source='image.generate',
-            capability='image.generate',
-            correlation_id=correlation_id,
-            status='completed' if result.success else 'failed',
-            payload={'success': result.success, 'artifacts': len(result.artifacts)},
-            metrics={'latency_ms': result.latency_ms, 'artifact_count': len(result.artifacts)},
-        )
-
         # Store artifacts
+        artifact_ids = []
         if result.success and result.artifacts:
             for artifact in result.artifacts:
-                ArtifactRepository.store_artifact(
+                artifact_id = ArtifactRepository.store_artifact(
                     capability='image.generate',
                     artifact_type='image.generated',
                     file_path=artifact.get('file_path'),
@@ -233,6 +224,29 @@ class ImageGenerationCapability(Capability):
                         'provider': artifact.get('provider'),
                     },
                 )
+                if isinstance(artifact_id, str):
+                    artifact_ids.append(artifact_id)
+
+        self._event_bus.emit(
+            event_type=(
+                'image.generation.completed'
+                if result.success
+                else 'image.generation.failed'
+            ),
+            source='image.generate',
+            capability='image.generate',
+            correlation_id=correlation_id,
+            session_id=context.session_id,
+            user_id=context.user_id,
+            status='completed' if result.success else 'failed',
+            payload={
+                'success': result.success,
+                'artifact_count': len(result.artifacts),
+                'artifact_ids': artifact_ids,
+                'execution_id': context.execution_id,
+            },
+            metrics={'latency_ms': result.latency_ms, 'artifact_count': len(result.artifacts)},
+        )
 
         AuditLog.log(
             event_type='image.generation',

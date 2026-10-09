@@ -11,11 +11,13 @@ import type {
   ToolDispatchResult,
   ToolCall,
   ChatSettings,
+  ChatRequest,
 } from './types';
 import type { AgentTask } from '@/features/agents/types';
 import chatApi, { cancelStreamingMessage, newClientMessageId } from './api';
 import wsClient from '@/lib/websocket-client';
 import API_ENDPOINTS from '@/config/api';
+import { useJarvisRuntime } from '@/features/runtime/store';
 
 const DRAFT_STORAGE_KEY = 'jarvis-chat-drafts';
 
@@ -40,6 +42,77 @@ function normalizeMessageStatus(status: string | undefined): ChatMessage['status
     return status as ChatMessage['status'];
   }
   return 'COMPLETED';
+}
+
+export function isCurrentLocationRequest(content: string): boolean {
+  if (/\b(?:don't|do not|never|without)\s+(?:get|access|use|share)\s+(?:my\s+)?location\b/i.test(content)) {
+    return false;
+  }
+  return /\b(?:where am i|where are we|my current location|locate me|show my location)\b/i.test(content);
+}
+
+async function acquireCurrentLocation(): Promise<Pick<ChatRequest, 'location' | 'location_error'>> {
+  const setPermissionState = useJarvisRuntime.getState().setPermissionState;
+  const authorization = await chatApi.getLocationAuthorization();
+  if (!authorization.authorized) {
+    setPermissionState('geolocation', 'unknown');
+    return { location_error: 'permission_denied' };
+  }
+  setPermissionState('geolocation', 'requested');
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    setPermissionState('geolocation', 'unknown');
+    return { location_error: 'unsupported' };
+  }
+
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setPermissionState('geolocation', 'granted');
+        const { coords } = position;
+        resolve({
+          location: {
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            accuracy_meters: coords.accuracy,
+            ...(coords.altitude == null ? {} : { altitude_meters: coords.altitude }),
+            ...(coords.heading == null ? {} : { heading_degrees: coords.heading }),
+            ...(coords.speed == null ? {} : { speed_meters_per_second: coords.speed }),
+            captured_at: new Date(position.timestamp).toISOString(),
+          },
+        });
+      },
+      (error) => {
+        if (error.code === error.PERMISSION_DENIED) {
+          setPermissionState('geolocation', 'denied');
+          resolve({ location_error: 'permission_denied' });
+        } else {
+          setPermissionState('geolocation', 'unknown');
+          resolve({
+            location_error: error.code === error.TIMEOUT ? 'timeout' : 'position_unavailable',
+          });
+        }
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+    );
+  });
+}
+
+async function prepareLocationRequest(
+  content: string,
+  currentSessionId: string | null,
+): Promise<{
+  sessionId: string | null;
+  locationInput: Pick<ChatRequest, 'location' | 'location_error'>;
+}> {
+  const requestsLocation = isCurrentLocationRequest(content);
+  let sessionId = currentSessionId;
+  if (requestsLocation && !sessionId) {
+    const session = await chatApi.createSession();
+    sessionId = session.id;
+    useChatStore.setState({ currentSessionId: sessionId });
+  }
+  const locationInput = requestsLocation ? await acquireCurrentLocation() : {};
+  return { sessionId, locationInput };
 }
 
 function loadDraftMap(): Record<string, string> {
@@ -275,12 +348,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
 
     try {
+      const { sessionId, locationInput } = await prepareLocationRequest(
+        content.trim(),
+        get().currentSessionId,
+      );
       const response = await chatApi.sendMessage({
         message: content.trim(),
-        session_id: get().currentSessionId,
+        session_id: sessionId,
         client_message_id: clientMessageId,
         model: get().activeModel,
         browser_context: get().browserContext ?? undefined,
+        ...locationInput,
       });
 
       const assistantMessage: ChatMessage = {
@@ -294,6 +372,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         sources: response.sources,
         tool_calls: response.tool_calls,
         runtime_events: response.runtime_events,
+        presentation: response.presentation,
+        presentation_events: response.presentation_events,
         status: normalizeMessageStatus(response.status),
         error: response.error ?? undefined,
       };
@@ -362,14 +442,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
       error: null,
     }));
 
+    let sessionId = get().currentSessionId;
+    let locationInput: Pick<ChatRequest, 'location' | 'location_error'> = {};
+    try {
+      ({ sessionId, locationInput } = await prepareLocationRequest(
+        content.trim(),
+        sessionId,
+      ));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not prepare the location request.';
+      set((state) => ({
+        isStreaming: false,
+        streamingContent: '',
+        error: message,
+        messages: state.messages.map((msg) => (
+          msg.id === assistantId
+            ? { ...msg, status: 'FAILED', error: message }
+            : msg
+        )),
+      }));
+      return;
+    }
     await chatApi.sendStreamingMessage(
       {
         message: content.trim(),
-        session_id: get().currentSessionId,
+        session_id: sessionId,
         client_message_id: clientMessageId,
         stream: true,
         browser_context: get().browserContext ?? undefined,
         model: get().activeModel,
+        ...locationInput,
         temperature: get().chatSettings.temperature,
         top_p: get().chatSettings.top_p,
         max_tokens: get().chatSettings.max_tokens,
@@ -416,6 +518,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 : msg
             ),
           }));
+        } else if (chunk.type === 'presentation') {
+          set((state) => ({
+            messages: state.messages.map((msg) =>
+              msg.id === assistantId
+                ? {
+                    ...msg,
+                    presentation: chunk.presentation,
+                    presentation_events: chunk.presentation_events,
+                  }
+                : msg
+            ),
+          }));
         } else if (chunk.type === 'complete' || chunk.type === 'done') {
           set((state) => {
             const finalContent = chunk.content || state.streamingContent;
@@ -433,6 +547,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
                       provider: chunk.provider ?? msg.provider,
                       tool_calls: chunk.tool_calls,
                       runtime_events: msg.runtime_events,
+                      presentation: chunk.presentation ?? msg.presentation,
+                      presentation_events: chunk.presentation_events ?? msg.presentation_events,
                       status: normalizeMessageStatus(chunk.status),
                     }
                   : msg
@@ -555,6 +671,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         timestamp: (msg.timestamp as string) || new Date().toISOString(),
         model: msg.model as string | undefined,
         provider: msg.provider as string | undefined,
+        presentation: msg.presentation as ChatMessage['presentation'],
+        presentation_events: msg.presentation_events as ChatMessage['presentation_events'],
         client_message_id: msg.client_message_id as string | undefined,
         metadata: msg.metadata as ChatMessage['metadata'],
         status: normalizeMessageStatus(

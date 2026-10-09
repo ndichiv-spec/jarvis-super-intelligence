@@ -40,10 +40,20 @@ function toMessageTurnResult(data: Record<string, unknown>): MessageTurnResult {
     timestamp: data.timestamp as string | undefined,
     tool_calls: data.tool_calls as ToolCall[] | undefined,
     runtime_events: data.runtime_events as RuntimeActivityEvent[] | undefined,
+    presentation: data.presentation as MessageTurnResult['presentation'],
+    presentation_events: data.presentation_events as MessageTurnResult['presentation_events'],
   };
 }
 
 export const chatApi = {
+  createSession(): Promise<{ id: string }> {
+    return apiClient.post<{ id: string }>(API_ENDPOINTS.chat.sessions, {});
+  },
+
+  getLocationAuthorization(): Promise<{ authorized: boolean }> {
+    return apiClient.get<{ authorized: boolean }>(API_ENDPOINTS.presentation.locationAuthorization);
+  },
+
   sendMessage(request: ChatRequest): Promise<MessageTurnResult> {
     return apiClient
       .post<Record<string, unknown>>(API_ENDPOINTS.chat.send, {
@@ -52,6 +62,8 @@ export const chatApi = {
         model: request.model || 'auto',
         client_message_id: request.client_message_id || newClientMessageId(),
         browser_context: request.browser_context,
+        location: request.location,
+        location_error: request.location_error,
       })
       .then(toMessageTurnResult);
   },
@@ -80,6 +92,8 @@ export const chatApi = {
           model: request.model || 'auto',
           client_message_id: request.client_message_id || newClientMessageId(),
           browser_context: request.browser_context,
+          location: request.location,
+          location_error: request.location_error,
         }),
       });
 

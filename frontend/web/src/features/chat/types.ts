@@ -1,4 +1,5 @@
 import type { BrowserContextSummary } from '@/features/browser/types';
+import type { PresentationEnvelope, PresentationEvent } from '@/features/runtime/presentation-contract';
 
 export type { BrowserContextSummary };
 
@@ -11,6 +12,8 @@ export interface ChatMessage {
   provider?: string;
   tool_calls?: ToolCall[];
   runtime_events?: RuntimeActivityEvent[];
+  presentation?: PresentationEnvelope;
+  presentation_events?: PresentationEvent[];
   sources?: string[];
   confidence?: number;
   skill_used?: string;
@@ -73,6 +76,8 @@ export interface ChatResponse {
   timestamp?: string;
   tool_calls?: ToolCall[];
   runtime_events?: RuntimeActivityEvent[];
+  presentation?: PresentationEnvelope;
+  presentation_events?: PresentationEvent[];
   tool_results?: unknown[];
 }
 
@@ -104,6 +109,16 @@ export interface ChatRequest {
   model?: string;
   client_message_id?: string;
   browser_context?: BrowserContextSummary;
+  location?: {
+    latitude: number;
+    longitude: number;
+    accuracy_meters?: number;
+    altitude_meters?: number;
+    heading_degrees?: number;
+    speed_meters_per_second?: number;
+    captured_at: string;
+  };
+  location_error?: 'permission_denied' | 'unsupported' | 'position_unavailable' | 'timeout';
   temperature?: number;
   top_p?: number;
   max_tokens?: number;
@@ -163,6 +178,7 @@ export interface ChatStreamChunk {
     | 'chunk'
     | 'tool_call_delta'
     | 'activity'
+    | 'presentation'
     | 'reasoning'
     | 'done'
     | 'error'
@@ -194,6 +210,8 @@ export interface ChatStreamChunk {
   timestamp?: string;
   capability_id?: string;
   action?: string;
+  presentation?: PresentationEnvelope;
+  presentation_events?: PresentationEvent[];
 }
 
 export interface MessageTurnResult {
@@ -210,6 +228,8 @@ export interface MessageTurnResult {
   timestamp?: string;
   tool_calls?: ToolCall[];
   runtime_events?: RuntimeActivityEvent[];
+  presentation?: PresentationEnvelope;
+  presentation_events?: PresentationEvent[];
 }
 
 export const CHAT_MODELS = [

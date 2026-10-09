@@ -15,16 +15,14 @@ import {
   XCircle,
   AlertCircle,
   BarChart3,
-  Timer,
   Zap,
-  Settings,
-  MoreVertical,
 } from 'lucide-react';
 
 export default function AgentsApp() {
   const [tasks, setTasks] = useState<AgentTask[]>([]);
   const [stats, setStats] = useState<AgentStats | null>(null);
   const [executions, setExecutions] = useState<TaskExecution[]>([]);
+  const [dataUnavailable, setDataUnavailable] = useState({ tasks: false, stats: false, executions: false });
   const [isLoading, setIsLoading] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [activeTab, setActiveTab] = useState<'tasks' | 'executions' | 'stats'>('tasks');
@@ -33,8 +31,7 @@ export default function AgentsApp() {
   const [newTask, setNewTask] = useState({
     name: '',
     description: '',
-    schedule_type: 'once',
-    schedule_value: '',
+    schedule_type: 'manual',
     priority: 'normal',
     timeout: 300,
     max_retries: 3,
@@ -42,178 +39,67 @@ export default function AgentsApp() {
 
   const loadData = async () => {
     setIsLoading(true);
-    try {
-      const [tasksRes, statsRes, executionsRes] = await Promise.all([
-        jarvisAPI.getAgents(),
-        jarvisAPI.getAgentStats().catch(() => null),
-        jarvisAPI.getTaskExecutions().catch(() => ({ executions: [] })),
-      ]);
+    const [tasksRes, statsRes, executionsRes] = await Promise.allSettled([
+      jarvisAPI.getAgentTasks(),
+      jarvisAPI.getAgentStats(),
+      jarvisAPI.getTaskExecutions(),
+    ]);
 
-      setTasks(tasksRes.tasks || []);
-      if (statsRes) setStats(statsRes);
-      setExecutions(executionsRes.executions || []);
-    } catch (error) {
-      // Mock data
-      setTasks([
-        {
-          id: '1',
-          name: 'Data Sync',
-          description: 'Sync data across services',
-          schedule_type: 'daily',
-          schedule_value: '08:00',
-          priority: 'high',
-          enabled: true,
-          timeout: 300,
-          max_retries: 3,
-          last_run_at: new Date().toISOString(),
-          last_run_status: 'completed',
-          last_run_duration_ms: 4500,
-          created_at: new Date().toISOString(),
-        },
-        {
-          id: '2',
-          name: 'Health Check',
-          description: 'Monitor system health',
-          schedule_type: 'interval',
-          schedule_value: '30',
-          priority: 'normal',
-          enabled: true,
-          timeout: 60,
-          max_retries: 2,
-          last_run_at: new Date().toISOString(),
-          last_run_status: 'completed',
-          last_run_duration_ms: 1200,
-          created_at: new Date().toISOString(),
-        },
-        {
-          id: '3',
-          name: 'Report Generation',
-          description: 'Generate weekly reports',
-          schedule_type: 'weekly',
-          schedule_value: 'Monday',
-          priority: 'low',
-          enabled: false,
-          timeout: 600,
-          max_retries: 1,
-          last_run_at: new Date(Date.now() - 86400000).toISOString(),
-          last_run_status: 'failed',
-          last_run_duration_ms: 15000,
-          created_at: new Date().toISOString(),
-        },
-      ]);
-      setStats({
-        total_tasks: 15,
-        active_tasks: 8,
-        success_rate_percent: 94.5,
-        avg_execution_time_ms: 3200,
-      });
-      setExecutions([
-        {
-          id: 'e1',
-          task_name: 'Data Sync',
-          status: 'completed',
-          started_at: new Date().toISOString(),
-          completed_at: new Date().toISOString(),
-          duration_ms: 4500,
-          retries: 0,
-        },
-        {
-          id: 'e2',
-          task_name: 'Health Check',
-          status: 'completed',
-          started_at: new Date().toISOString(),
-          completed_at: new Date().toISOString(),
-          duration_ms: 1200,
-          retries: 0,
-        },
-        {
-          id: 'e3',
-          task_name: 'Report Generation',
-          status: 'failed',
-          started_at: new Date(Date.now() - 86400000).toISOString(),
-          completed_at: new Date(Date.now() - 86400000).toISOString(),
-          duration_ms: 15000,
-          retries: 1,
-          error: 'Timeout exceeded',
-        },
-      ]);
-    } finally {
-      setIsLoading(false);
-    }
+    setDataUnavailable({
+      tasks: tasksRes.status === 'rejected',
+      stats: statsRes.status === 'rejected',
+      executions: executionsRes.status === 'rejected',
+    });
+    setTasks(tasksRes.status === 'fulfilled' ? tasksRes.value.tasks ?? [] : []);
+    setStats(statsRes.status === 'fulfilled' ? statsRes.value : null);
+    setExecutions(executionsRes.status === 'fulfilled' ? executionsRes.value.executions ?? [] : []);
+    setIsLoading(false);
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
   }, []);
 
   const createTask = async () => {
-    if (!newTask.name) return;
+    if (!newTask.name.trim()) return;
 
-    try {
-      await jarvisAPI.registerCustomTask(newTask);
-      setShowCreateForm(false);
-      setNewTask({
-        name: '',
-        description: '',
-        schedule_type: 'once',
-        schedule_value: '',
-        priority: 'normal',
-        timeout: 300,
-        max_retries: 3,
-      });
-      loadData();
-    } catch {
-      // Optimistically add
-      const task: AgentTask = {
-        ...newTask,
-        id: Date.now().toString(),
-        enabled: true,
-        created_at: new Date().toISOString(),
-      };
-      setTasks((prev) => [...prev, task]);
-      setShowCreateForm(false);
-      setNewTask({
-        name: '',
-        description: '',
-        schedule_type: 'once',
-        schedule_value: '',
-        priority: 'normal',
-        timeout: 300,
-        max_retries: 3,
-      });
-    }
+    await jarvisAPI.registerCustomTask({
+      ...newTask,
+      schedule_type: 'manual',
+      schedule_value: null,
+    });
+    setShowCreateForm(false);
+    setNewTask({
+      name: '',
+      description: '',
+      schedule_type: 'manual',
+      priority: 'normal',
+      timeout: 300,
+      max_retries: 3,
+    });
+    await loadData();
   };
 
   const toggleTask = async (taskId: string, enabled: boolean) => {
-    try {
-      await jarvisAPI.toggleAgentTask(taskId, !enabled);
-    } catch {
-      // Optimistic update
-    }
+    await jarvisAPI.toggleAgentTask(taskId, !enabled);
     setTasks((prev) =>
       prev.map((t) => (t.id === taskId ? { ...t, enabled: !enabled } : t))
     );
   };
 
   const runTask = async (taskId: string) => {
-    try {
-      await jarvisAPI.runAgentTask(taskId);
-    } catch {
-      // Simulate run
-    }
+    await jarvisAPI.runAgentTask(taskId);
+    await loadData();
   };
 
   const deleteTask = async (taskId: string) => {
-    try {
-      await jarvisAPI.deleteAgentTask(taskId);
-    } catch {
-      // Optimistic remove
-    }
+    await jarvisAPI.deleteAgentTask(taskId);
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
   };
 
   const formatDuration = (ms?: number) => {
-    if (!ms) return '-';
+    if (ms === undefined) return 'Not reported';
     if (ms < 1000) return `${ms}ms`;
     return `${(ms / 1000).toFixed(1)}s`;
   };
@@ -281,7 +167,7 @@ export default function AgentsApp() {
         ].map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id as any)}
+            onClick={() => setActiveTab(tab.id as typeof activeTab)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors ${
               activeTab === tab.id
                 ? 'bg-primary/15 text-primary'
@@ -306,7 +192,12 @@ export default function AgentsApp() {
               exit={{ opacity: 0, y: -10 }}
               className="space-y-2"
             >
-              {tasks.map((task) => (
+              {dataUnavailable.tasks ? (
+                <div role="alert" className="rounded-lg border border-amber-300/20 bg-amber-300/[0.05] p-4 text-sm text-slate-300">
+                  <p>Task data is unavailable. The empty list is not a confirmed empty task inventory.</p>
+                  <button type="button" onClick={() => void loadData()} className="mt-2 text-indigo-200 underline underline-offset-4">Retry</button>
+                </div>
+              ) : tasks.map((task) => (
                 <motion.div
                   key={task.id}
                   className="glass rounded-xl p-4 border border-border/50 hover:border-primary/20 transition-all"
@@ -338,12 +229,16 @@ export default function AgentsApp() {
                         <div className="flex items-center gap-3 mt-2 text-[10px] text-foreground/30">
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />
-                            {task.schedule_type}: {task.schedule_value}
+                            {task.schedule_value
+                              ? `${task.schedule_type}: ${task.schedule_value}`
+                              : task.schedule_type === 'manual'
+                                ? 'Manual run'
+                                : 'Schedule not reported'}
                           </span>
                           {task.last_run_at && (
                             <span>Last run: {new Date(task.last_run_at).toLocaleTimeString()}</span>
                           )}
-                          {task.last_run_duration_ms && (
+                          {task.last_run_duration_ms !== undefined && (
                             <span>Duration: {formatDuration(task.last_run_duration_ms)}</span>
                           )}
                         </div>
@@ -381,7 +276,7 @@ export default function AgentsApp() {
                 </motion.div>
               ))}
 
-              {tasks.length === 0 && (
+              {!dataUnavailable.tasks && tasks.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-12 text-foreground/40">
                   <Bot className="w-12 h-12 mb-3" />
                   <span className="text-sm">No tasks yet</span>
@@ -405,7 +300,12 @@ export default function AgentsApp() {
               exit={{ opacity: 0, y: -10 }}
               className="space-y-2"
             >
-              {executions.map((exec) => (
+              {dataUnavailable.executions ? (
+                <div role="alert" className="rounded-lg border border-amber-300/20 bg-amber-300/[0.05] p-4 text-sm text-slate-300">
+                  Execution history is unavailable.
+                  <button type="button" onClick={() => void loadData()} className="ml-2 text-indigo-200 underline underline-offset-4">Retry</button>
+                </div>
+              ) : executions.map((exec) => (
                 <div
                   key={exec.id}
                   className="glass rounded-lg p-3 border border-border/50 flex items-center gap-3"
@@ -417,17 +317,8 @@ export default function AgentsApp() {
                       {new Date(exec.started_at).toLocaleString()}
                     </p>
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-foreground/50">
-                    <span className="flex items-center gap-1">
-                      <Timer className="w-3.5 h-3.5" />
-                      {formatDuration(exec.duration_ms)}
-                    </span>
-                    {exec.retries > 0 && (
-                      <span className="flex items-center gap-1 text-amber-400">
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        {exec.retries}
-                      </span>
-                    )}
+                  <div className="max-w-40 truncate text-right text-xs text-foreground/50">
+                    {[exec.provider, exec.model].filter(Boolean).join(' / ') || 'Provider not reported'}
                   </div>
                 </div>
               ))}
@@ -442,34 +333,33 @@ export default function AgentsApp() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
             >
-              {stats && (
+              {dataUnavailable.stats ? (
+                <p role="alert" className="text-sm text-amber-200/80">Agent statistics are unavailable.</p>
+              ) : stats ? (
                 <div className="grid grid-cols-2 gap-3">
                   <StatCard
                     icon={Bot}
-                    label="Total Tasks"
-                    value={stats.total_tasks.toString()}
+                    label="Registered Agents"
+                    value={stats.total.toString()}
                     color="text-blue-400"
                   />
                   <StatCard
                     icon={Zap}
-                    label="Active Tasks"
-                    value={stats.active_tasks.toString()}
+                    label="Active Agents"
+                    value={stats.active.toString()}
                     color="text-emerald-400"
                   />
                   <StatCard
                     icon={CheckCircle2}
-                    label="Success Rate"
-                    value={`${stats.success_rate_percent}%`}
+                    label="Idle Agents"
+                    value={stats.idle.toString()}
                     color="text-amber-400"
                   />
-                  <StatCard
-                    icon={Timer}
-                    label="Avg Execution"
-                    value={formatDuration(stats.avg_execution_time_ms)}
-                    color="text-purple-400"
-                  />
+                  {Object.entries(stats.by_role).map(([role, count]) => (
+                    <StatCard key={role} icon={Bot} label={role} value={count.toString()} color="text-purple-400" />
+                  ))}
                 </div>
-              )}
+              ) : <p className="text-sm text-foreground/60">Agent statistics were not reported.</p>}
             </motion.div>
           )}
         </AnimatePresence>
@@ -508,25 +398,9 @@ export default function AgentsApp() {
                 rows={2}
                 className="w-full px-3 py-2 bg-white/5 border border-border/50 rounded-lg text-sm text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all resize-none"
               />
-              <div className="grid grid-cols-2 gap-3">
-                <select
-                  value={newTask.schedule_type}
-                  onChange={(e) => setNewTask((p) => ({ ...p, schedule_type: e.target.value }))}
-                  className="h-9 px-3 bg-white/5 border border-border/50 rounded-lg text-sm text-foreground focus:outline-none focus:border-primary/50 transition-all"
-                >
-                  <option value="once">Once</option>
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="interval">Interval (min)</option>
-                </select>
-                <input
-                  type="text"
-                  placeholder="Schedule value"
-                  value={newTask.schedule_value}
-                  onChange={(e) => setNewTask((p) => ({ ...p, schedule_value: e.target.value }))}
-                  className="h-9 px-3 bg-white/5 border border-border/50 rounded-lg text-sm text-foreground placeholder:text-foreground/30 focus:outline-none focus:border-primary/50 transition-all"
-                />
-              </div>
+              <p className="rounded-lg border border-slate-700/70 bg-slate-900/45 px-3 py-2 text-xs text-slate-400">
+                Manual run only. Scheduled execution is not configured.
+              </p>
               <div className="grid grid-cols-2 gap-3">
                 <select
                   value={newTask.priority}

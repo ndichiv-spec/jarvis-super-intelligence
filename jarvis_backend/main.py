@@ -26,14 +26,16 @@ from jarvis_runtime import SILVERWING_BACKEND_ROOT
 
 from . import websocket
 from .core import DATA_DIR, ai_service, app, start_backend
+from .endpoint_gateway import router as endpoint_gateway_router
 from .observability import install_observability
-from .runtime_status import router as runtime_status_router, build_canonical_runtime_status
+from .presentation.router import router as presentation_router
 from .routers import (
     agents,
     ai,
     auth,
     automation,
     billing,
+    bio_growth,
     browser,
     challenges,
     codegen,
@@ -44,8 +46,8 @@ from .routers import (
     developer,
     experiments,
     extensions,
-    global_knowledge,
     geography,
+    global_knowledge,
     health,
     improvements,
     knowledge,
@@ -63,13 +65,15 @@ from .routers import (
     rbac,
     research,
     sandbox,
-    bio_growth,
     search,
     stark,
     system,
     verification,
     voice,
 )
+from .routers.runtime_events import router as runtime_events_router
+from .runtime_status import build_canonical_runtime_status
+from .runtime_status import router as runtime_status_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -135,6 +139,9 @@ def setup_routers() -> None:
         monitoring.router,
         system.router,
         platform_identity.router,
+        endpoint_gateway_router,
+        presentation_router,
+        runtime_events_router,
         knowledge.router,
         memory.router,
         multimodal.router,

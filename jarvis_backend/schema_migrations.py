@@ -83,12 +83,34 @@ def _downgrade_command_events(engine: Engine) -> None:
     db.command_events.drop(engine, checkfirst=True)
 
 
+def _upgrade_runtime_event_journal(engine: Engine) -> None:
+    db.runtime_streams.create(engine, checkfirst=True)
+    db.runtime_events.create(engine, checkfirst=True)
+
+
+def _downgrade_runtime_event_journal(engine: Engine) -> None:
+    if "jarvis_runtime_events" not in inspect(engine).get_table_names():
+        return
+    with engine.begin() as connection:
+        if connection.execute(select(db.runtime_events.c.event_id).limit(1)).first():
+            raise RuntimeError(
+                "Cannot downgrade 003_durable_runtime_event_journal while runtime history exists."
+            )
+    db.runtime_events.drop(engine, checkfirst=True)
+    db.runtime_streams.drop(engine, checkfirst=True)
+
+
 MIGRATIONS = (
     Migration("001_initial_kv_store", _upgrade_initial_store),
     Migration(
         "002_durable_command_events",
         _upgrade_command_events,
         _downgrade_command_events,
+    ),
+    Migration(
+        "003_durable_runtime_event_journal",
+        _upgrade_runtime_event_journal,
+        _downgrade_runtime_event_journal,
     ),
 )
 

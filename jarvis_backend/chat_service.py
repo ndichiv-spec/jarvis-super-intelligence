@@ -40,6 +40,45 @@ from .gateway import ProviderGateway, provider_gateway
 
 logger = logging.getLogger("jarvis_backend.chat")
 
+
+def _emit_runtime_event(
+    event_type: Any,
+    user_id: str,
+    session_id: str,
+    request_id: str,
+    **fields: Any,
+) -> None:
+    from .runtime_events import emit_runtime_event
+
+    emit_runtime_event(
+        event_type=event_type,
+        user_id=user_id,
+        session_id=session_id,
+        source=fields.pop("source"),
+        request_id=request_id,
+        **fields,
+    )
+
+
+async def _iterate_with_request_id(
+    stream: AsyncIterator[dict[str, Any]],
+    request_id: str,
+) -> AsyncIterator[dict[str, Any]]:
+    """Make the canonical chat request ID visible while a provider advances."""
+    from .observability import request_id_var
+
+    iterator = stream.__aiter__()
+    while True:
+        token = request_id_var.set(request_id)
+        try:
+            event = await iterator.__anext__()
+        except StopAsyncIteration:
+            return
+        finally:
+            request_id_var.reset(token)
+        yield event
+
+
 # Global caches for infrastructure services (initialized lazily)
 _usage_accountant = None
 _audit_service = None
@@ -111,23 +150,23 @@ def _new_message(msg_id: str, role: str, content: str, *, status: str = COMPLETE
     }
 
 
-def _error_card(exc: Exception) -> dict[str, Any]:
+def _error_card(exc: Exception, request_id: str | None = None) -> dict[str, Any]:
     """Build the error metadata stored on a FAILED assistant message."""
     if isinstance(exc, ChatError):
         category = exc.category.value
         message = exc.safe_message
         retryable = exc.retryable
-        request_id = exc.request_id
+        error_request_id = request_id or exc.request_id
     else:
         err = normalize_exception(exc)
         category = err.category.value
         message = err.safe_message
         retryable = err.retryable
-        request_id = err.request_id
+        error_request_id = request_id or err.request_id
     return {
         "category": category,
         "message": message,
-        "request_id": request_id,
+        "request_id": error_request_id,
         "retryable": retryable,
     }
 
@@ -136,7 +175,47 @@ def _error_card(exc: Exception) -> dict[str, Any]:
 # Session store helpers (same JSON store used by the legacy chat routes)
 # --------------------------------------------------------------------------- #
 def _sessions() -> dict[str, Any]:
-    return get_store("chat_sessions").load()
+    return get_store("chat_sessions").reload()
+
+
+def _save_session(session: dict[str, Any]) -> None:
+    session_id = session.get("id")
+    if not isinstance(session_id, str) or not session_id:
+        raise ValueError("Cannot persist a conversation without its server-side session ID.")
+    store = get_store("chat_sessions")
+
+    def merge(current: dict[str, Any]) -> dict[str, Any]:
+        if current.get("user_id") != session.get("user_id"):
+            raise ChatError(
+                ErrorCategory.AUTHORIZATION_ERROR,
+                "You are not authorized to update this session.",
+                status_code=403,
+            )
+        messages_by_id = {
+            str(message.get("id")): dict(message)
+            for message in current.get("messages", [])
+            if isinstance(message, dict) and message.get("id")
+        }
+        for message in session.get("messages", []):
+            if isinstance(message, dict) and message.get("id"):
+                message_id = str(message["id"])
+                messages_by_id[message_id] = {
+                    **messages_by_id.get(message_id, {}),
+                    **message,
+                }
+        messages = list(messages_by_id.values())
+        messages.sort(key=lambda item: str(item.get("timestamp") or ""))
+        updated = {**current, **session, "messages": messages}
+        updated["user_id"] = current["user_id"]
+        return updated
+
+    stored = store.update_key(session_id, merge)
+    if stored is None:
+        raise ChatError(
+            ErrorCategory.INVALID_REQUEST,
+            "Session not found.",
+            status_code=404,
+        )
 
 
 def _require_session(sessions: dict[str, Any], session_id: str, user_id: str) -> dict[str, Any]:
@@ -146,7 +225,7 @@ def _require_session(sessions: dict[str, Any], session_id: str, user_id: str) ->
             ErrorCategory.INVALID_REQUEST, "Session not found.",
             status_code=404,
         )
-    if session.get("user_id") and session.get("user_id") != user_id:
+    if session.get("user_id") != user_id:
         # Authenticated but not the owner: an explicit authorization failure
         # (403) rather than exposing another user's session content.  The
         # session payload itself is never returned.
@@ -171,24 +250,56 @@ class ChatService:
         # a live provider.
         self.gateway = gateway or provider_gateway
 
+    @staticmethod
+    def _plan_presentation(
+        user_id: str,
+        session_id: str,
+        request: str,
+        assistant_message: dict[str, Any],
+        *,
+        data_reference: str | None = None,
+    ) -> dict[str, Any] | None:
+        try:
+            from .presentation.planner import presentation_planner
+
+            return presentation_planner.plan(
+                user_id,
+                session_id,
+                request,
+                str(assistant_message.get("content") or ""),
+                request_id=str(assistant_message.get("request_id") or uuid.uuid4()),
+                status=str(assistant_message.get("status") or FAILED),
+                runtime_events=assistant_message.get("runtime_events") or [],
+                tool_calls=assistant_message.get("tool_calls") or [],
+                location_data_reference=bool(data_reference),
+            )
+        except Exception:
+            logger.exception("presentation intelligence failed for chat request")
+            return None
+
     # -- session CRUD ------------------------------------------------------- #
     def create_session(self, user_id: str, session_id: str | None = None,
                        title: str = "New conversation") -> dict[str, Any]:
         sid = session_id or str(uuid.uuid4())
         sessions = _sessions()
-        if sid not in sessions:
-            sessions[sid] = {
-                "id": sid,
-                "user_id": user_id,
-                "title": (title or "New conversation")[:80],
-                "created_at": now_iso(),
-                "updated_at": now_iso(),
-                "archived": False,
-                "metadata": {},
-                "messages": [],
-            }
-        get_store("chat_sessions").save()
-        return sessions[sid]
+        existing = sessions.get(sid)
+        if existing is not None:
+            return _require_session(sessions, sid, user_id)
+        session = {
+            "id": sid,
+            "user_id": user_id,
+            "title": (title or "New conversation")[:80],
+            "created_at": now_iso(),
+            "updated_at": now_iso(),
+            "archived": False,
+            "metadata": {},
+            "messages": [],
+        }
+        from .db import kv_insert_if_absent
+
+        if kv_insert_if_absent("chat_sessions", sid, session):
+            return session
+        return _require_session(_sessions(), sid, user_id)
 
     def list_sessions(self, user_id: str, *, limit: int = 100, offset: int = 0,
                       q: str | None = None, search_messages: bool = False) -> dict[str, Any]:
@@ -241,7 +352,7 @@ class ChatService:
         session = _require_session(sessions, session_id, user_id)
         session["title"] = (title or "New conversation")[:80]
         session["updated_at"] = now_iso()
-        get_store("chat_sessions").save()
+        _save_session(session)
         return self._summary(session)
 
     def set_archived(self, user_id: str, session_id: str, archived: bool) -> dict[str, Any]:
@@ -249,14 +360,16 @@ class ChatService:
         session = _require_session(sessions, session_id, user_id)
         session["archived"] = bool(archived)
         session["updated_at"] = now_iso()
-        get_store("chat_sessions").save()
+        _save_session(session)
         return self._summary(session)
 
     def delete_session(self, user_id: str, session_id: str) -> None:
         sessions = _sessions()
         _require_session(sessions, session_id, user_id)
         sessions.pop(session_id, None)
-        get_store("chat_sessions").save()
+        from .db import kv_delete
+
+        kv_delete("chat_sessions", session_id)
 
     def export_session(self, user_id: str, session_id: str, fmt: str = "json") -> dict[str, Any]:
         session = self.get_session(user_id, session_id)
@@ -316,8 +429,11 @@ class ChatService:
             "error": reply.get("error"),
             "tool_calls": reply.get("tool_calls") or [],
             "runtime_events": reply.get("runtime_events") or [],
+            "presentation": reply.get("presentation"),
+            "presentation_events": reply.get("presentation_events") or [],
             "resumed": True,
             "message_id": reply.get("id"),
+            "request_id": reply.get("request_id"),
         }
 
     def load_history(self, user_id: str, session_id: str, *, limit: int = 200,
@@ -357,7 +473,7 @@ class ChatService:
         assistant_message["metadata"] = {"artifacts": images}
         session.setdefault("messages", []).extend([user_message, assistant_message])
         session["updated_at"] = now_iso()
-        get_store("chat_sessions").save()
+        _save_session(session)
         return [user_message, assistant_message]
 
     def _summary(self, session: dict[str, Any]) -> dict[str, Any]:
@@ -559,7 +675,9 @@ class ChatService:
         # Generate a request_id if not provided (for exactly-once recording)
         if request_id is None:
             request_id = str(uuid.uuid4())
-        
+        from .runtime_events import RuntimeEventSource, RuntimeEventType, RuntimeState
+
+        execution_id = f"exec-{uuid.uuid4()}"
         retries = self.max_retries
         attempt = 0
 
@@ -571,13 +689,29 @@ class ChatService:
 
         while True:
             started = time.monotonic()
+            _emit_runtime_event(
+                RuntimeEventType.MODEL_STARTED,
+                user_id,
+                session_id,
+                request_id,
+                source=RuntimeEventSource.MODEL_RUNTIME,
+                execution_id=execution_id,
+                state=RuntimeState.THINKING,
+                data={"attempt": attempt + 1},
+            )
             try:
-                result = await self.gateway.chat(
-                    self._history(user_id, session_id),
-                    model=model,
-                    system=system_prompt,
-                    timeout=self.gateway.timeout,
-                )
+                from .observability import request_id_var
+
+                request_token = request_id_var.set(request_id)
+                try:
+                    result = await self.gateway.chat(
+                        self._history(user_id, session_id),
+                        model=model,
+                        system=system_prompt,
+                        timeout=self.gateway.timeout,
+                    )
+                finally:
+                    request_id_var.reset(request_token)
             except ChatError as exc:
                 error = exc
                 # Record audit event for failure (only on final attempt)
@@ -638,7 +772,33 @@ class ChatService:
                     self._record_audit_success(user_id, request_id, session_id, 
                                                 provider, model, latency_ms,
                                                 input_tokens, output_tokens)
-                    
+
+                    _emit_runtime_event(
+                        RuntimeEventType.MODEL_COMPLETED,
+                        user_id,
+                        session_id,
+                        request_id,
+                        source=RuntimeEventSource.MODEL_RUNTIME,
+                        execution_id=execution_id,
+                        state=RuntimeState.THINKING,
+                        data={
+                            "provider": provider,
+                            "model": result.get("model") or model,
+                            "latencyMs": latency_ms,
+                        },
+                    )
+                    if provider:
+                        _emit_runtime_event(
+                            RuntimeEventType.PROVIDER_COMPLETED,
+                            user_id,
+                            session_id,
+                            request_id,
+                            source=RuntimeEventSource.PROVIDER_GATEWAY,
+                            execution_id=execution_id,
+                            state=RuntimeState.THINKING,
+                            data={"provider": provider},
+                        )
+
                     return {
                         "message": text,
                         "model": result.get("model") or model
@@ -655,6 +815,26 @@ class ChatService:
 
             # Retry only transient categories; fatal ones propagate immediately.
             if not error.retryable or attempt >= retries:
+                _emit_runtime_event(
+                    RuntimeEventType.MODEL_FAILED,
+                    user_id,
+                    session_id,
+                    request_id,
+                    source=RuntimeEventSource.MODEL_RUNTIME,
+                    execution_id=execution_id,
+                    state=RuntimeState.FAILED,
+                    data={"category": error.category.value},
+                )
+                _emit_runtime_event(
+                    RuntimeEventType.PROVIDER_FAILED,
+                    user_id,
+                    session_id,
+                    request_id,
+                    source=RuntimeEventSource.PROVIDER_GATEWAY,
+                    execution_id=execution_id,
+                    state=RuntimeState.FAILED,
+                    data={"category": error.category.value},
+                )
                 raise error
             attempt += 1
             delay = (2 ** attempt) * 0.25 + (0.25 * (time.monotonic() % 1))
@@ -775,7 +955,24 @@ class ChatService:
 
     @staticmethod
     def _discover_conversation_action(prompt: str) -> dict[str, Any] | None:
-        """Select only an explicitly requested, read-only web search action."""
+        """Select only an explicitly requested, read-only conversation action."""
+        if re.search(
+            r"\b(?:don't|do not|never|without)\s+(?:get|access|use|share)\s+(?:my\s+)?location\b",
+            prompt,
+            re.I,
+        ):
+            return None
+        if re.search(
+            r"\b(?:where am i|where are we|my current location|locate me|show my location)\b",
+            prompt,
+            re.I,
+        ):
+            return {
+                "tool": "location",
+                "action": "current",
+                "capability_id": "location.current",
+                "arguments": {"accuracyPreference": "high"},
+            }
         if re.search(r"\b(?:don't|do not|never|without)\s+(?:search|look up)", prompt, re.I):
             return None
         match = re.search(
@@ -801,18 +998,50 @@ class ChatService:
         }
 
     async def _execute_conversation_action(
-        self, prompt: str, user_id: str, session_id: str, request_id: str,
+        self,
+        prompt: str,
+        user_id: str,
+        session_id: str,
+        request_id: str,
+        *,
+        location: dict[str, Any] | None = None,
+        location_error: str | None = None,
+        principal: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         """Execute a selected action through the registered capability orchestrator."""
         selection = self._discover_conversation_action(prompt)
         if not selection:
             return None
+        if selection["capability_id"] == "location.current":
+            return await self._execute_location_action(
+                selection,
+                user_id,
+                session_id,
+                request_id,
+                location=location,
+                location_error=location_error,
+                principal=principal,
+            )
 
         from .capability import CapabilityEvent, ExecutionContext, get_orchestrator
 
         orchestrator = get_orchestrator()
         event_bus = orchestrator.registry.event_bus
         events: list[dict[str, Any]] = []
+        execution_id = f"exec-{uuid.uuid4()}"
+        from .runtime_events import RuntimeEventSource, RuntimeEventType, RuntimeState
+
+        _emit_runtime_event(
+            RuntimeEventType.CAPABILITY_SELECTED,
+            user_id,
+            session_id,
+            request_id,
+            source=RuntimeEventSource.CAPABILITY_RUNTIME,
+            capability_id=selection["capability_id"],
+            execution_id=execution_id,
+            state=RuntimeState.PLANNING,
+            data={"action": selection["action"]},
+        )
 
         async def record(event_type: str, status: str, message: str) -> None:
             event = CapabilityEvent(
@@ -837,6 +1066,17 @@ class ChatService:
             })
 
         if orchestrator.registry.get("tool") is None:
+            _emit_runtime_event(
+                RuntimeEventType.CAPABILITY_FAILED,
+                user_id,
+                session_id,
+                request_id,
+                source=RuntimeEventSource.CAPABILITY_RUNTIME,
+                capability_id=selection["capability_id"],
+                execution_id=execution_id,
+                state=RuntimeState.FAILED,
+                data={"action": selection["action"], "reason": "capability_unavailable"},
+            )
             await record(
                 "capability_unavailable",
                 "unavailable",
@@ -844,6 +1084,7 @@ class ChatService:
             )
             return {
                 "selection": selection,
+                "execution_id": execution_id,
                 "success": False,
                 "error": "The web search capability is unavailable because its tool runtime is not registered.",
                 "events": events,
@@ -858,6 +1099,7 @@ class ChatService:
             user_id=user_id,
             session_id=session_id,
             correlation_id=request_id,
+            execution_id=execution_id,
             conversation_id=session_id,
             permissions=["tool.browser"],
         )
@@ -878,6 +1120,7 @@ class ChatService:
         )
         return {
             "selection": selection,
+            "execution_id": execution_id,
             "success": success,
             "data": result.data if success else None,
             "error": result.error,
@@ -885,6 +1128,322 @@ class ChatService:
             "latency_ms": result.latency_ms,
             "events": events,
         }
+
+    async def _execute_location_action(
+            self,
+            selection: dict[str, Any],
+            user_id: str,
+            session_id: str,
+            request_id: str,
+            *,
+            location: dict[str, Any] | None,
+            location_error: str | None,
+            principal: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+            """Run location through the capability boundary without retaining coordinates."""
+            from .capability import CapabilityEvent, ExecutionContext, get_orchestrator
+            from .core import has_permission
+            from .runtime_events import (
+                EventRetention,
+                EventSensitivity,
+                RuntimeEventSource,
+                RuntimeEventType,
+                RuntimeState,
+            )
+
+            execution_id = f"exec-{uuid.uuid4()}"
+            events: list[dict[str, Any]] = []
+
+            _emit_runtime_event(
+                RuntimeEventType.CAPABILITY_SELECTED,
+                user_id,
+                session_id,
+                request_id,
+                source=RuntimeEventSource.CAPABILITY_RUNTIME,
+                capability_id="location.current",
+                execution_id=execution_id,
+                state=RuntimeState.PLANNING,
+                data={"action": "current"},
+            )
+
+            def emit_location_event(
+                event_type: RuntimeEventType,
+                state: RuntimeState,
+                *,
+                reason: str | None = None,
+            ) -> None:
+                _emit_runtime_event(
+                    event_type,
+                    user_id,
+                    session_id,
+                    request_id,
+                    source=RuntimeEventSource.CAPABILITY_RUNTIME,
+                    capability_id="location.current",
+                    execution_id=execution_id,
+                    state=state,
+                    data={"reason": reason} if reason else {},
+                    retention=EventRetention.SESSION,
+                    sensitivity=EventSensitivity.SENSITIVE,
+                )
+
+            def record(status: str, message: str) -> None:
+                events.append({
+                    "event_id": f"evt-{uuid.uuid4().hex}",
+                    "event_type": "capability_action_started" if status == "running" else (
+                        "capability_action_completed" if status == "completed" else "capability_failed"
+                    ),
+                    "timestamp": now_iso(),
+                    "capability_id": "location.current",
+                    "action": "current",
+                    "status": status,
+                    "message": message,
+                })
+
+            if principal is None or not has_permission(principal, "location:read"):
+                emit_location_event(
+                    RuntimeEventType.LOCATION_DENIED,
+                    RuntimeState.FAILED,
+                    reason="permission_denied",
+                )
+                _emit_runtime_event(
+                    RuntimeEventType.CAPABILITY_FAILED,
+                    user_id,
+                    session_id,
+                    request_id,
+                    source=RuntimeEventSource.CAPABILITY_RUNTIME,
+                    capability_id="location.current",
+                    execution_id=execution_id,
+                    state=RuntimeState.FAILED,
+                    data={"errorType": "PERMISSION_DENIED"},
+                    sensitivity=EventSensitivity.SENSITIVE,
+                )
+                record("failed", "Location access is not authorized for this account.")
+                return {
+                    "selection": selection,
+                    "execution_id": execution_id,
+                    "success": False,
+                    "error_type": "PERMISSION_DENIED",
+                    "message": "This account is not authorized to access device location.",
+                    "events": events,
+                }
+
+            if location_error:
+                _emit_runtime_event(
+                    RuntimeEventType.CAPABILITY_STARTED,
+                    user_id,
+                    session_id,
+                    request_id,
+                    source=RuntimeEventSource.CAPABILITY_RUNTIME,
+                    capability_id="location.current",
+                    execution_id=execution_id,
+                    state=RuntimeState.OBSERVING,
+                    sensitivity=EventSensitivity.SENSITIVE,
+                )
+                emit_location_event(
+                    RuntimeEventType.LOCATION_REQUESTED,
+                    RuntimeState.OBSERVING,
+                )
+                emit_location_event(
+                    RuntimeEventType.LOCATION_DENIED,
+                    RuntimeState.FAILED,
+                    reason=location_error,
+                )
+                _emit_runtime_event(
+                    RuntimeEventType.CAPABILITY_FAILED,
+                    user_id,
+                    session_id,
+                    request_id,
+                    source=RuntimeEventSource.CAPABILITY_RUNTIME,
+                    capability_id="location.current",
+                    execution_id=execution_id,
+                    state=RuntimeState.FAILED,
+                    data={"errorType": location_error.upper()},
+                    sensitivity=EventSensitivity.SENSITIVE,
+                )
+                messages = {
+                    "permission_denied": "Location permission was denied. Allow location access in your browser settings and ask again.",
+                    "unsupported": "This browser does not provide location services. No location was received.",
+                    "position_unavailable": "Your device could not determine a location. No map marker was created.",
+                    "timeout": "The browser location request timed out. No map marker was created.",
+                }
+                message = messages.get(
+                    location_error,
+                    "Your browser could not provide a location. No map marker was created.",
+                )
+                record("failed", message)
+                return {
+                    "selection": selection,
+                    "execution_id": execution_id,
+                    "success": False,
+                    "error_type": location_error.upper(),
+                    "message": message,
+                    "events": events,
+                }
+
+            if location is None:
+                emit_location_event(
+                    RuntimeEventType.LOCATION_DENIED,
+                    RuntimeState.FAILED,
+                    reason="position_unavailable",
+                )
+                _emit_runtime_event(
+                    RuntimeEventType.CAPABILITY_FAILED,
+                    user_id,
+                    session_id,
+                    request_id,
+                    source=RuntimeEventSource.CAPABILITY_RUNTIME,
+                    capability_id="location.current",
+                    execution_id=execution_id,
+                    state=RuntimeState.FAILED,
+                    data={"errorType": "LOCATION_UNAVAILABLE"},
+                    sensitivity=EventSensitivity.SENSITIVE,
+                )
+                message = "Your browser did not provide a location. No map marker was created."
+                record("failed", message)
+                return {
+                    "selection": selection,
+                    "execution_id": execution_id,
+                    "success": False,
+                    "error_type": "LOCATION_UNAVAILABLE",
+                    "message": message,
+                    "events": events,
+                }
+
+            orchestrator = get_orchestrator()
+            if orchestrator.registry.get("location.current") is None:
+                _emit_runtime_event(
+                    RuntimeEventType.CAPABILITY_FAILED,
+                    user_id,
+                    session_id,
+                    request_id,
+                    source=RuntimeEventSource.CAPABILITY_RUNTIME,
+                    capability_id="location.current",
+                    execution_id=execution_id,
+                    state=RuntimeState.FAILED,
+                    data={"errorType": "CAPABILITY_UNAVAILABLE"},
+                    sensitivity=EventSensitivity.SENSITIVE,
+                )
+                return {
+                    "selection": selection,
+                    "execution_id": execution_id,
+                    "success": False,
+                    "error_type": "CAPABILITY_UNAVAILABLE",
+                    "message": "The location capability is not available in this runtime.",
+                    "events": events,
+                }
+
+            record("running", "JARVIS is validating the authorized browser location.")
+            emit_location_event(
+                RuntimeEventType.LOCATION_REQUESTED,
+                RuntimeState.OBSERVING,
+            )
+            _emit_runtime_event(
+                RuntimeEventType.CAPABILITY_STARTED,
+                user_id,
+                session_id,
+                request_id,
+                source=RuntimeEventSource.CAPABILITY_RUNTIME,
+                capability_id="location.current",
+                execution_id=execution_id,
+                state=RuntimeState.OBSERVING,
+                sensitivity=EventSensitivity.SENSITIVE,
+            )
+            context = ExecutionContext(
+                user_id=user_id,
+                session_id=session_id,
+                correlation_id=request_id,
+                execution_id=execution_id,
+                conversation_id=session_id,
+                permissions=["location:read"],
+            )
+            result = await orchestrator.execute_capability(
+                "location.current",
+                {**location, "accuracy_preference": selection["arguments"]["accuracyPreference"]},
+                context,
+            )
+            if not result.success:
+                error_type = result.error_type or "CAPABILITY_FAILED"
+                if error_type in {"PERMISSION_DENIED", "UNAUTHORIZED"}:
+                    emit_location_event(
+                        RuntimeEventType.LOCATION_DENIED,
+                        RuntimeState.FAILED,
+                        reason=error_type.lower(),
+                    )
+                _emit_runtime_event(
+                    RuntimeEventType.CAPABILITY_FAILED,
+                    user_id,
+                    session_id,
+                    request_id,
+                    source=RuntimeEventSource.CAPABILITY_RUNTIME,
+                    capability_id="location.current",
+                    execution_id=execution_id,
+                    state=RuntimeState.FAILED,
+                    data={"errorType": error_type},
+                    sensitivity=EventSensitivity.SENSITIVE,
+                )
+                message = (
+                    "The location result was too old to show as current. Please ask again."
+                    if error_type == "STALE_LOCATION"
+                    else "The browser returned an invalid location result. No map marker was created."
+                    if error_type == "INVALID_LOCATION"
+                    else "Location is unavailable right now. No map marker was created."
+                )
+                record("failed", message)
+                return {
+                    "selection": selection,
+                    "execution_id": execution_id,
+                    "success": False,
+                    "error_type": error_type,
+                    "message": message,
+                    "events": events,
+                }
+
+            emit_location_event(
+                RuntimeEventType.LOCATION_RECEIVED,
+                RuntimeState.EXPLAINING,
+            )
+            _emit_runtime_event(
+                RuntimeEventType.CAPABILITY_COMPLETED,
+                user_id,
+                session_id,
+                request_id,
+                source=RuntimeEventSource.CAPABILITY_RUNTIME,
+                capability_id="location.current",
+                execution_id=execution_id,
+                state=RuntimeState.COMPLETED,
+                sensitivity=EventSensitivity.SENSITIVE,
+            )
+            from .presentation.location_data import ephemeral_location_data
+
+            reference_id = ephemeral_location_data.create(
+                user_id,
+                session_id,
+                request_id,
+                execution_id,
+                result.data,
+            )
+            accuracy = result.data.get("accuracyMeters")
+            message = (
+                f"Your device reports a current position with an estimated accuracy of about ±{round(accuracy)} m. "
+                "I’ve centered the map on that approximate location."
+                if isinstance(accuracy, (int, float))
+                else "Your device reports a current position. Its accuracy estimate was not provided, so the map marker is approximate."
+            )
+            record("completed", "The authorized location capability returned a fresh browser position.")
+            return {
+                "selection": selection,
+                "execution_id": execution_id,
+                "success": True,
+                "data": {
+                    "source": "browser_geolocation",
+                    "accuracyMeters": accuracy,
+                    "timestamp": result.data["timestamp"],
+                    "freshness": result.data["freshness"],
+                },
+                "location_reference": reference_id,
+                "message": message,
+                "events": events,
+            }
 
     @staticmethod
     def _capability_context(runtime_action: dict[str, Any] | None) -> str | None:
@@ -902,7 +1461,11 @@ class ChatService:
     # -- non-streaming send -------------------------------------------------- #
     async def send_message(self, user_id: str, session_id: str, content: str,
                            *, model: str | None = None,
-                           client_message_id: str | None = None) -> dict[str, Any]:
+                           client_message_id: str | None = None,
+                           request_id: str | None = None,
+                           principal: dict[str, Any] | None = None,
+                           location: dict[str, Any] | None = None,
+                           location_error: str | None = None) -> dict[str, Any]:
         session = self.get_session(user_id, session_id)
         messages: list[dict[str, Any]] = session.setdefault("messages", [])
 
@@ -924,8 +1487,11 @@ class ChatService:
                         "error": reply.get("error"),
                         "tool_calls": reply.get("tool_calls") or [],
                         "runtime_events": reply.get("runtime_events") or [],
+                        "presentation": reply.get("presentation"),
+                        "presentation_events": reply.get("presentation_events") or [],
                         "resumed": True,
                         "message_id": reply.get("id"),
+                        "request_id": reply.get("request_id"),
                     }
 
         user_msg_id = str(uuid.uuid4())
@@ -936,22 +1502,74 @@ class ChatService:
         ))
         session["title"] = self._derive_title(session.get("title"), content)
         session["updated_at"] = now_iso()
-        get_store("chat_sessions").save()
+        _save_session(session)
 
         assistant_id = str(uuid.uuid4())
         assistant_msg = _new_message(
             assistant_id, "assistant", "", status=QUEUED, model=model,
             client_message_id=client_message_id,
         )
-        request_id = str(uuid.uuid4())
+        request_id = request_id or str(uuid.uuid4())
         assistant_msg["request_id"] = request_id
         messages.append(assistant_msg)
-        get_store("chat_sessions").save()
+        _save_session(session)
+        from .runtime_events import RuntimeEventSource, RuntimeEventType, RuntimeState
 
+        _emit_runtime_event(
+            RuntimeEventType.REQUEST_CREATED,
+            user_id,
+            session_id,
+            request_id,
+            source=RuntimeEventSource.CHAT,
+            message_id=assistant_id,
+            state=RuntimeState.WAITING,
+            data={"clientMessageId": client_message_id},
+        )
+        _emit_runtime_event(
+            RuntimeEventType.REQUEST_ACCEPTED,
+            user_id,
+            session_id,
+            request_id,
+            source=RuntimeEventSource.CHAT,
+            message_id=assistant_id,
+            state=RuntimeState.WAITING,
+        )
+        _emit_runtime_event(
+            RuntimeEventType.PLANNING_STARTED,
+            user_id,
+            session_id,
+            request_id,
+            source=RuntimeEventSource.CHAT,
+            message_id=assistant_id,
+            state=RuntimeState.PLANNING,
+        )
+        _emit_runtime_event(
+            RuntimeEventType.MESSAGE_STARTED,
+            user_id,
+            session_id,
+            request_id,
+            source=RuntimeEventSource.CHAT,
+            message_id=assistant_id,
+            state=RuntimeState.WAITING,
+        )
+
+        runtime_action: dict[str, Any] | None = None
         try:
-            runtime_action = await self._execute_conversation_action(
-                content, user_id, session_id, request_id,
-            )
+            location_request = self._discover_conversation_action(content)
+            if location_request and location_request["capability_id"] == "location.current":
+                runtime_action = await self._execute_conversation_action(
+                    content,
+                    user_id,
+                    session_id,
+                    request_id,
+                    location=location,
+                    location_error=location_error,
+                    principal=principal,
+                )
+            else:
+                runtime_action = await self._execute_conversation_action(
+                    content, user_id, session_id, request_id,
+                )
             if runtime_action:
                 assistant_msg["runtime_events"] = runtime_action.get("events", [])
                 selection = runtime_action["selection"]
@@ -965,11 +1583,18 @@ class ChatService:
                     },
                     "status": "completed" if runtime_action.get("success") else "failed",
                 }]
-                get_store("chat_sessions").save()
-            result = await self._generate(
-                content, model, user_id, session_id, request_id,
-                self._capability_context(runtime_action),
+                _save_session(session)
+            is_location_action = bool(
+                runtime_action
+                and runtime_action["selection"]["capability_id"] == "location.current"
             )
+            if is_location_action:
+                result = {"message": runtime_action["message"]}
+            else:
+                result = await self._generate(
+                    content, model, user_id, session_id, request_id,
+                    self._capability_context(runtime_action),
+                )
             assistant_msg.update({
                 "content": result["message"],
                 "status": COMPLETED,
@@ -983,15 +1608,95 @@ class ChatService:
                 "tool_calls": assistant_msg.get("tool_calls") or result.get("tool_calls") or [],
             })
         except ChatError as exc:
+            exc.request_id = request_id
             assistant_msg["status"] = FAILED
-            assistant_msg["error"] = _error_card(exc)
+            assistant_msg["error"] = _error_card(exc, request_id)
         except Exception as exc:
-            err = normalize_exception(exc)
+            err = normalize_exception(exc, request_id=request_id)
             assistant_msg["status"] = FAILED
-            assistant_msg["error"] = _error_card(err)
+            assistant_msg["error"] = _error_card(err, request_id)
 
+        presentation = self._plan_presentation(
+            user_id,
+            session_id,
+            content,
+            assistant_msg,
+            data_reference=(
+                runtime_action.get("location_reference")
+                if runtime_action and runtime_action.get("success")
+                else None
+            ),
+        )
+        if presentation:
+            assistant_msg["presentation"] = presentation.get("envelope")
+            assistant_msg["presentation_events"] = presentation.get("events", [])
+            intent = (presentation.get("envelope") or {}).get("intent") or {}
+            presentation_id = intent.get("id")
+            if presentation_id and runtime_action and runtime_action.get("location_reference"):
+                from .presentation.location_data import ephemeral_location_data
+
+                ephemeral_location_data.attach_presentation(
+                    runtime_action["location_reference"],
+                    presentation_id,
+                )
+            presentation_type = (
+                RuntimeEventType.PRESENTATION_CREATED
+                if (intent.get("environment") or {}).get("type") == "geospatial"
+                else RuntimeEventType.PRESENTATION_UPDATED
+            )
+            _emit_runtime_event(
+                presentation_type,
+                user_id,
+                session_id,
+                request_id,
+                source=RuntimeEventSource.PRESENTATION_RUNTIME,
+                message_id=assistant_id,
+                presentation_id=presentation_id,
+                presentation=presentation.get("envelope"),
+                state=(
+                    RuntimeState.FAILED
+                    if assistant_msg.get("status") == FAILED
+                    else RuntimeState.EXPLAINING
+                    if (intent.get("environment") or {}).get("type") == "geospatial"
+                    else RuntimeState.COMPLETED
+                ),
+                data={
+                    "environment": (intent.get("environment") or {}).get("type"),
+                    "mode": intent.get("mode"),
+                },
+            )
+        terminal_type = (
+            RuntimeEventType.REQUEST_COMPLETED
+            if assistant_msg.get("status") == COMPLETED
+            else RuntimeEventType.REQUEST_FAILED
+        )
+        terminal_state = (
+            RuntimeState.COMPLETED
+            if assistant_msg.get("status") == COMPLETED
+            else RuntimeState.FAILED
+        )
+        _emit_runtime_event(
+            RuntimeEventType.MESSAGE_COMPLETED,
+            user_id,
+            session_id,
+            request_id,
+            source=RuntimeEventSource.CHAT,
+            message_id=assistant_id,
+            state=terminal_state,
+            data={"status": assistant_msg.get("status")},
+        )
+        _emit_runtime_event(
+            terminal_type,
+            user_id,
+            session_id,
+            request_id,
+            source=RuntimeEventSource.CHAT,
+            message_id=assistant_id,
+            state=terminal_state,
+            data={"status": assistant_msg.get("status")},
+        )
         session["updated_at"] = now_iso()
-        get_store("chat_sessions").save()
+        _save_session(session)
 
         return {
             "session_id": session_id,
@@ -1008,15 +1713,51 @@ class ChatService:
             "error": assistant_msg.get("error"),
             "tool_calls": assistant_msg.get("tool_calls") or [],
             "runtime_events": assistant_msg.get("runtime_events") or [],
+            "presentation": assistant_msg.get("presentation"),
+            "presentation_events": assistant_msg.get("presentation_events") or [],
             "resumed": False,
             "message_id": assistant_id,
+            "request_id": request_id,
         }
 
     # -- streaming send ------------------------------------------------------ #
     async def stream_message(self, user_id: str, session_id: str, content: str,
                              *, model: str | None = None,
-                             client_message_id: str | None = None
+                             client_message_id: str | None = None,
+                             request_id: str | None = None,
+                             principal: dict[str, Any] | None = None,
+                             location: dict[str, Any] | None = None,
+                             location_error: str | None = None
                              ) -> AsyncIterator[dict[str, Any]]:
+        location_action = self._discover_conversation_action(content)
+        if location_action and location_action["capability_id"] == "location.current":
+            result = await self.send_message(
+                user_id,
+                session_id,
+                content,
+                model=model,
+                client_message_id=client_message_id,
+                request_id=request_id,
+                principal=principal,
+                location=location,
+                location_error=location_error,
+            )
+            yield {
+                "type": "complete",
+                "session_id": session_id,
+                "content": result.get("message") or "",
+                "status": result.get("status"),
+                "error": result.get("error"),
+                "tool_calls": result.get("tool_calls") or [],
+                "runtime_events": result.get("runtime_events") or [],
+                "presentation": result.get("presentation"),
+                "presentation_events": result.get("presentation_events") or [],
+                "request_id": result.get("request_id"),
+                "message_id": result.get("message_id"),
+                "resumed": result.get("resumed", False),
+            }
+            return
+
         session = self.get_session(user_id, session_id)
         messages: list[dict[str, Any]] = session.setdefault("messages", [])
         existing_assistant: dict[str, Any] | None = None
@@ -1037,6 +1778,8 @@ class ChatService:
                             "error": reply.get("error"),
                             "tool_calls": reply.get("tool_calls") or [],
                             "runtime_events": reply.get("runtime_events") or [],
+                            "presentation": reply.get("presentation"),
+                            "presentation_events": reply.get("presentation_events") or [],
                             "resumed": True,
                             "message_id": reply.get("id"),
                         }
@@ -1100,18 +1843,58 @@ class ChatService:
             "state": "running",
             "updated_at": time.time(),
         }
-        get_store("chat_sessions").save()
+        _save_session(session)
 
-        request_id_for_audit = str(uuid.uuid4())
+        request_id_for_audit = (
+            assistant_msg.get("request_id")
+            or request_id
+            or str(uuid.uuid4())
+        )
         assistant_msg["request_id"] = request_id_for_audit
-        get_store("chat_sessions").save()
+        _save_session(session)
+        from .runtime_events import (
+            EventRetention,
+            EventSensitivity,
+            RuntimeEventSource,
+            RuntimeEventType,
+            RuntimeState,
+        )
+
+        _emit_runtime_event(
+            RuntimeEventType.REQUEST_CREATED,
+            user_id,
+            session_id,
+            request_id_for_audit,
+            source=RuntimeEventSource.CHAT,
+            message_id=assistant_id,
+            state=RuntimeState.WAITING,
+            data={"clientMessageId": client_message_id},
+        )
+        _emit_runtime_event(
+            RuntimeEventType.REQUEST_ACCEPTED,
+            user_id,
+            session_id,
+            request_id_for_audit,
+            source=RuntimeEventSource.CHAT,
+            message_id=assistant_id,
+            state=RuntimeState.WAITING,
+        )
+        _emit_runtime_event(
+            RuntimeEventType.MESSAGE_STARTED,
+            user_id,
+            session_id,
+            request_id_for_audit,
+            source=RuntimeEventSource.CHAT,
+            message_id=assistant_id,
+            state=RuntimeState.THINKING,
+        )
 
         def persist_checkpoint(state: str) -> None:
             checkpoint = assistant_msg["checkpoint"]
             checkpoint["sequence"] += 1
             checkpoint["state"] = state
             checkpoint["updated_at"] = time.time()
-            get_store("chat_sessions").save()
+            _save_session(session)
 
         try:
             yield {
@@ -1150,7 +1933,7 @@ class ChatService:
                         "message_id": assistant_id,
                     }
                 assistant_msg["tool_calls"] = runtime_tool_calls
-                get_store("chat_sessions").save()
+                _save_session(session)
 
             # Project-intelligence hook for the live SSE path.  Real tool
             # activity is emitted as it happens; ordinary chat emits nothing.
@@ -1178,15 +1961,31 @@ class ChatService:
             # streamed=False rather than fabricated deltas.
             gateway = self.gateway
             can_stream = hasattr(gateway, "stream_chat")
+            stream_execution_id = f"exec-{uuid.uuid4()}"
+            if can_stream:
+                _emit_runtime_event(
+                    RuntimeEventType.MODEL_STARTED,
+                    user_id,
+                    session_id,
+                    request_id_for_audit,
+                    source=RuntimeEventSource.MODEL_RUNTIME,
+                    execution_id=stream_execution_id,
+                    state=RuntimeState.THINKING,
+                )
 
             try:
                 if can_stream:
                     # Model-emitted tool-call proposals are not runtime
                     # executions; only capability results are shown as actions.
-                    async for event in gateway.stream_chat(
-                        model=model, user_id=user_id,
-                        session_id=session_id, system=streaming_system,
-                        messages=self._history(user_id, session_id),
+                    async for event in _iterate_with_request_id(
+                        gateway.stream_chat(
+                            model=model,
+                            user_id=user_id,
+                            session_id=session_id,
+                            system=streaming_system,
+                            messages=self._history(user_id, session_id),
+                        ),
+                        request_id_for_audit,
                     ):
                         kind = event.get("type")
                         if kind == "reasoning":
@@ -1205,6 +2004,19 @@ class ChatService:
                             assistant_msg["content"] = "".join(content_parts)
                             assistant_msg["status"] = STREAMING
                             persist_checkpoint("streaming")
+                            _emit_runtime_event(
+                                RuntimeEventType.MESSAGE_DELTA,
+                                user_id,
+                                session_id,
+                                request_id_for_audit,
+                                source=RuntimeEventSource.MODEL_RUNTIME,
+                                execution_id=stream_execution_id,
+                                message_id=assistant_id,
+                                state=RuntimeState.THINKING,
+                                data={"content": event.get("text") or ""},
+                                retention=EventRetention.EPHEMERAL,
+                                sensitivity=EventSensitivity.PRIVATE,
+                            )
                             yield {
                                 "type": "chunk",
                                 "content": event.get("text") or "",
@@ -1229,6 +2041,30 @@ class ChatService:
 
             if terminal is not None:
                 full_text = terminal.get("content") or "".join(content_parts)
+                _emit_runtime_event(
+                    RuntimeEventType.MODEL_COMPLETED,
+                    user_id,
+                    session_id,
+                    request_id_for_audit,
+                    source=RuntimeEventSource.MODEL_RUNTIME,
+                    execution_id=stream_execution_id,
+                    state=RuntimeState.THINKING,
+                    data={
+                        "provider": terminal.get("provider"),
+                        "model": terminal.get("model"),
+                    },
+                )
+                if terminal.get("provider"):
+                    _emit_runtime_event(
+                        RuntimeEventType.PROVIDER_COMPLETED,
+                        user_id,
+                        session_id,
+                        request_id_for_audit,
+                        source=RuntimeEventSource.PROVIDER_GATEWAY,
+                        execution_id=stream_execution_id,
+                        state=RuntimeState.THINKING,
+                        data={"provider": terminal.get("provider")},
+                    )
                 result = {
                     "message": full_text,
                     "model": terminal.get("model"),
@@ -1243,7 +2079,25 @@ class ChatService:
                 # No provider in the fabric could stream. Fall back to the
                 # buffered path so non-streaming providers still work; this is
                 # reported honestly as streamed=False rather than faked.
-                result = await self._generate(content, model, user_id, session_id)
+                if can_stream:
+                    _emit_runtime_event(
+                        RuntimeEventType.MODEL_FAILED,
+                        user_id,
+                        session_id,
+                        request_id_for_audit,
+                        source=RuntimeEventSource.MODEL_RUNTIME,
+                        execution_id=stream_execution_id,
+                        state=RuntimeState.FAILED,
+                        data={"reason": "stream_unavailable"},
+                    )
+                result = await self._generate(
+                    content,
+                    model,
+                    user_id,
+                    session_id,
+                    request_id_for_audit,
+                    self._capability_context(runtime_action),
+                )
                 full_text = result["message"]
                 result["streamed"] = False
                 if full_text:
@@ -1268,9 +2122,41 @@ class ChatService:
                 "latency_ms": result.get("latency_ms"),
                 "tool_calls": runtime_tool_calls,
             })
+            presentation = self._plan_presentation(
+                user_id,
+                session_id,
+                content,
+                assistant_msg,
+            )
+            if presentation:
+                assistant_msg["presentation"] = presentation.get("envelope")
+                assistant_msg["presentation_events"] = presentation.get("events", [])
+                intent = (presentation.get("envelope") or {}).get("intent") or {}
+                _emit_runtime_event(
+                    RuntimeEventType.PRESENTATION_UPDATED,
+                    user_id,
+                    session_id,
+                    request_id_for_audit,
+                    source=RuntimeEventSource.PRESENTATION_RUNTIME,
+                    message_id=assistant_id,
+                    presentation_id=intent.get("id"),
+                    presentation=presentation.get("envelope"),
+                    state=RuntimeState.COMPLETED,
+                    data={
+                        "environment": (intent.get("environment") or {}).get("type"),
+                        "mode": intent.get("mode"),
+                    },
+                )
+                yield {
+                    "type": "presentation",
+                    "presentation": assistant_msg["presentation"],
+                    "presentation_events": assistant_msg["presentation_events"],
+                    "message_id": assistant_id,
+                    "request_id": request_id_for_audit,
+                }
             persist_checkpoint("completed")
             session["updated_at"] = now_iso()
-            get_store("chat_sessions").save()
+            _save_session(session)
 
             input_tokens = _usage_tokens(result.get("usage") or {},
                                         "prompt_tokens", "input_tokens")
@@ -1288,6 +2174,26 @@ class ChatService:
                 result.get("provider"), result.get("model"),
                 int(result.get("latency_ms") or 0), input_tokens, output_tokens,
             )
+            _emit_runtime_event(
+                RuntimeEventType.MESSAGE_COMPLETED,
+                user_id,
+                session_id,
+                request_id_for_audit,
+                source=RuntimeEventSource.CHAT,
+                message_id=assistant_id,
+                state=RuntimeState.COMPLETED,
+                data={"status": COMPLETED},
+            )
+            _emit_runtime_event(
+                RuntimeEventType.REQUEST_COMPLETED,
+                user_id,
+                session_id,
+                request_id_for_audit,
+                source=RuntimeEventSource.CHAT,
+                message_id=assistant_id,
+                state=RuntimeState.COMPLETED,
+                data={"status": COMPLETED},
+            )
 
             yield {
                 "type": "complete",
@@ -1302,41 +2208,95 @@ class ChatService:
                 "latency_ms": result.get("latency_ms"),
                 "tool_calls": result.get("tool_calls") or [],
                 "runtime_events": assistant_msg.get("runtime_events") or [],
+                "presentation": assistant_msg.get("presentation"),
+                "presentation_events": assistant_msg.get("presentation_events") or [],
                 "request_id": request_id_for_audit,
             }
         except (asyncio.CancelledError, GeneratorExit):
+            _emit_runtime_event(
+                RuntimeEventType.REQUEST_CANCELLED,
+                user_id,
+                session_id,
+                request_id_for_audit,
+                source=RuntimeEventSource.CHAT,
+                message_id=assistant_id,
+                state=RuntimeState.CANCELLED,
+            )
             assistant_msg["status"] = "STREAM_INTERRUPTED"
             persist_checkpoint("interrupted")
             session["updated_at"] = now_iso()
-            get_store("chat_sessions").save()
+            _save_session(session)
             raise
         except ChatError as exc:
+            exc.request_id = request_id_for_audit
             assistant_msg["status"] = FAILED
-            assistant_msg["error"] = _error_card(exc)
+            assistant_msg["error"] = _error_card(exc, request_id_for_audit)
+            _emit_runtime_event(
+                RuntimeEventType.REQUEST_FAILED,
+                user_id,
+                session_id,
+                request_id_for_audit,
+                source=RuntimeEventSource.CHAT,
+                message_id=assistant_id,
+                state=RuntimeState.FAILED,
+                data={"category": exc.category.value},
+            )
+            presentation = self._plan_presentation(user_id, session_id, content, assistant_msg)
+            if presentation:
+                assistant_msg["presentation"] = presentation.get("envelope")
+                assistant_msg["presentation_events"] = presentation.get("events", [])
+                yield {
+                    "type": "presentation",
+                    "presentation": assistant_msg["presentation"],
+                    "presentation_events": assistant_msg["presentation_events"],
+                    "message_id": assistant_id,
+                    "request_id": request_id_for_audit,
+                }
             persist_checkpoint("failed")
             session["updated_at"] = now_iso()
-            get_store("chat_sessions").save()
+            _save_session(session)
             yield {
                 "type": "error",
                 "category": exc.category.value,
                 "message": exc.safe_message,
-                "request_id": exc.request_id,
+                "request_id": request_id_for_audit,
                 "retryable": exc.retryable,
                 "status": FAILED,
                 "message_id": assistant_id,
             }
         except Exception as exc:
-            err = normalize_exception(exc)
+            err = normalize_exception(exc, request_id=request_id_for_audit)
             assistant_msg["status"] = FAILED
-            assistant_msg["error"] = _error_card(err)
+            assistant_msg["error"] = _error_card(err, request_id_for_audit)
+            _emit_runtime_event(
+                RuntimeEventType.REQUEST_FAILED,
+                user_id,
+                session_id,
+                request_id_for_audit,
+                source=RuntimeEventSource.CHAT,
+                message_id=assistant_id,
+                state=RuntimeState.FAILED,
+                data={"category": err.category.value},
+            )
+            presentation = self._plan_presentation(user_id, session_id, content, assistant_msg)
+            if presentation:
+                assistant_msg["presentation"] = presentation.get("envelope")
+                assistant_msg["presentation_events"] = presentation.get("events", [])
+                yield {
+                    "type": "presentation",
+                    "presentation": assistant_msg["presentation"],
+                    "presentation_events": assistant_msg["presentation_events"],
+                    "message_id": assistant_id,
+                    "request_id": request_id_for_audit,
+                }
             persist_checkpoint("failed")
             session["updated_at"] = now_iso()
-            get_store("chat_sessions").save()
+            _save_session(session)
             yield {
                 "type": "error",
                 "category": err.category.value,
                 "message": err.safe_message,
-                "request_id": err.request_id,
+                "request_id": request_id_for_audit,
                 "retryable": err.retryable,
                 "status": FAILED,
                 "message_id": assistant_id,
@@ -1353,7 +2313,7 @@ class ChatService:
         # Truncate everything after the user message, then let the caller re-run.
         del messages[idx + 1:]
         session["updated_at"] = now_iso()
-        get_store("chat_sessions").save()
+        _save_session(session)
         return {
             "session_id": session_id,
             "message": target.get("content"),
@@ -1374,7 +2334,7 @@ class ChatService:
             feedback["comment"] = comment
         feedback["updated_at"] = now_iso()
         session["updated_at"] = now_iso()
-        get_store("chat_sessions").save()
+        _save_session(session)
         return {"success": True, "rating": rating}
 
     def edit_message(self, user_id: str, session_id: str, message_id: str,
@@ -1420,7 +2380,7 @@ class ChatService:
         del messages[target_idx + 1:]
         
         session["updated_at"] = now_iso()
-        get_store("chat_sessions").save()
+        _save_session(session)
         
         # Return the state needed to regenerate/resend
         return {
@@ -1486,7 +2446,7 @@ class ChatService:
             client_message_id=cm_id,
         )
         messages.append(assistant_msg)
-        get_store("chat_sessions").save()
+        _save_session(session)
 
         # 4. Generate a fresh assistant response from the edited prompt.
         try:
@@ -1512,7 +2472,7 @@ class ChatService:
             assistant_msg["error"] = _error_card(err)
 
         session["updated_at"] = now_iso()
-        get_store("chat_sessions").save()
+        _save_session(session)
 
         return {
             "session_id": session_id,

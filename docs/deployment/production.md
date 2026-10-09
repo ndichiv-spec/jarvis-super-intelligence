@@ -84,10 +84,20 @@ migration job and are recorded in the `jarvis_schema_migrations` ledger. `python
 registry; `--check` fails unless every expected table and revision is present.
 Revision `001_initial_kv_store` establishes/adopts the existing key/value
 schema; `002_durable_command_events` adds an ordered event table and backfills
-the existing command event snapshots. The latter can be downgraded only while
-that event table is empty. The baseline is intentionally irreversible. There
-is no automatic schema-diff generation; add explicit reviewed migrations and
-back up before changes.
+the existing command event snapshots. Revision
+`003_durable_runtime_event_journal` adds the owner/session-scoped canonical
+runtime stream, monotonic sequences, snapshots, replay payloads, and retention
+metadata. Session and audit records expire according to
+`JARVIS_RUNTIME_SESSION_RETENTION_DAYS` (30 by default) and
+`JARVIS_RUNTIME_AUDIT_RETENTION_DAYS` (90 by default); the newest 5,000
+session-retained events per session are kept. Expired or trimmed history
+advances a retention floor and clients must fetch a fresh snapshot rather than
+attempting to reconstruct missing events. Durable records have no automatic
+expiry. Revision 003 can be downgraded only while its runtime journal is empty;
+revision 002 can be downgraded only while its command-event table is empty.
+The baseline is intentionally irreversible. There is no automatic
+schema-diff generation; add explicit reviewed migrations and back up before
+changes.
 
 The scheduled and pre-deployment backup job validates each PostgreSQL archive
 by restoring it into an isolated, network-disabled PostgreSQL 16 container,
@@ -130,6 +140,29 @@ cached replace-all writes are not safe for horizontal replicas.
 Deploy one API instance until that persistence layer is redesigned. Redis is
 split into a cache and a durable-configured Celery broker, but Celery task
 results are not the authoritative execution history.
+
+The runtime journal is separate from the generic key/value store: each
+canonical event and the corresponding snapshot/sequence update are committed
+in one SQL transaction. API workers sharing the same PostgreSQL database read
+the same journal, and SSE workers poll that shared store rather than relying
+on process-local queues. The event bus and runtime service retain only
+non-authoritative in-process buffers/caches. This does not make the generic
+`jarvis_kv` collections safe for multiple API replicas; the supported
+production topology remains one API instance until those call sites are
+reworked.
+
+The minimum independent Core deployment boundary is the FastAPI runtime plus
+its persistent PostgreSQL database, authentication/signing secrets, and
+server-side provider credentials, fronted by the existing public TLS gateway.
+Browser endpoints consume the authenticated snapshot/resume/SSE API and do
+not own conversations or runtime truth. The endpoint registry still uses
+`jarvis_kv`, so endpoint writes inherit the single-API deployment limitation.
+Health/readiness, existing logs/metrics/traces, and the existing gateway
+provide health checks and observability; no new cloud service is required.
+Provider access and secret rotation remain operator-managed server
+configuration. Do not interpret shared event-journal support as proof that
+every workflow, generic store, or task subsystem is safe for horizontal
+scaling.
 
 Provider keys are loaded from Docker secret files into the backend process
 environment at startup because existing provider integrations read

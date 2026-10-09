@@ -2,19 +2,20 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format, subDays, parseISO } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 import { toast } from 'sonner';
 import {
   Users, Shield, FileText, Settings, Search, Plus, Edit, Trash2,
-  Lock, MoreHorizontal, ChevronDown, ChevronLeft, ChevronRight,
-  Download, RefreshCw, X, Check, AlertTriangle, Eye, EyeOff,
-  Calendar, Filter, UserPlus, Key, Activity, Globe, Cpu, Database,
+  Lock, ChevronDown, ChevronLeft, ChevronRight,
+  Download, RefreshCw, Check, AlertTriangle, Eye, EyeOff,
+  Filter, UserPlus, Key, Globe, Cpu, Database,
   Wrench, Monitor, BarChart3
 } from 'lucide-react';
 import { jarvisAPI, User as UserType, Role, AuditLogEntry, Permission, TenantSettings } from '@/lib/api';
+import { useAuthStore } from '@/stores/authStore';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Table, TableHeader, TableBody, TableFooter, TableHead, TableRow, TableCell } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription, DialogClose } from '@/components/ui/dialog';
+import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -27,6 +28,53 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Label } from '@/components/ui/label';
 
 // --- Utility types ---
+const getErrorMessage = (error: unknown, fallback = 'Unknown error'): string => {
+  if (error instanceof Error) {
+    const status = getErrorStatus(error);
+    if (status === 401) return `Session expired: ${error.message}`;
+    if (status === 403) return `Permission denied: ${error.message}`;
+    if (status && status >= 500) return `Server error (${status}): ${error.message}`;
+    return error.message;
+  }
+  if (typeof error === 'string' && error.trim()) return error;
+  return fallback;
+};
+
+const getErrorStatus = (error: unknown): number | undefined =>
+  error && typeof error === 'object' && 'status' in error
+    ? Number((error as { status?: unknown }).status)
+    : undefined;
+
+function RequestFailure({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  const status = getErrorStatus(error);
+  const heading = status === 401
+    ? 'Session expired'
+    : status === 403
+      ? 'Permission denied'
+      : status && status >= 500
+        ? `Server error (${status})`
+        : 'Unable to load this data';
+  const description = status === 401
+    ? 'Sign in again to access this resource.'
+    : status === 403
+      ? 'Your account does not have the required permission. Ask the tenant owner for access.'
+      : getErrorMessage(error, 'The service is unavailable. Retry to check again.');
+
+  return (
+    <Card role="alert" className="border-destructive/40">
+      <CardContent className="flex flex-col items-start gap-3 py-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="font-medium">{heading}</p>
+          <p className="text-sm text-muted-foreground">{description}</p>
+        </div>
+        <Button variant="outline" onClick={onRetry} className="shrink-0">
+          <RefreshCw className="mr-2 h-4 w-4" /> Retry
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 type PermissionResource = 'chat' | 'agents' | 'system' | 'knowledge' | 'monitoring' | 'tools' | 'users' | 'tenants' | 'roles';
 
 const PERMISSION_GROUPS: Record<PermissionResource, { icon: React.ReactNode; label: string }> = {
@@ -50,14 +98,16 @@ const ACTION_COLORS: Record<string, string> = {
 
 const STATUS_COLORS: Record<string, string> = {
   active: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400',
-  inactive: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400',
+  pending_authorization: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
   suspended: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+  disabled: 'bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300',
 };
 
 // --- Users Tab ---
-function UsersTab() {
+function UsersTab({ canManage }: { canManage: boolean }) {
   const [users, setUsers] = useState<UserType[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
@@ -70,7 +120,7 @@ function UsersTab() {
   const [allRoles, setAllRoles] = useState<string[]>([]);
   const [showPassword, setShowPassword] = useState(false);
 
-  const [addForm, setAddForm] = useState({ email: '', username: '', password: '', full_name: '', roles: [] as string[] });
+  const [addForm, setAddForm] = useState({ email: '', username: '', password: '', full_name: '' });
   const [editForm, setEditForm] = useState({ roles: [] as string[], status: 'active' as UserType['status'] });
 
   const fetchUsers = useCallback(async () => {
@@ -79,8 +129,9 @@ function UsersTab() {
       const data = await jarvisAPI.rbac.getUsers(page, perPage, search || undefined);
       setUsers(data.users);
       setTotal(data.total);
-    } catch (err: any) {
-      toast.error('Failed to load users: ' + (err.message || 'Unknown error'));
+      setLoadError(null);
+    } catch (err: unknown) {
+      setLoadError(err);
       setUsers([]);
       setTotal(0);
     } finally {
@@ -97,24 +148,44 @@ function UsersTab() {
     }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchRoles(); }, [fetchRoles]);
 
   const totalPages = Math.ceil(total / perPage);
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addForm.email.trim());
 
   const handleAddUser = async () => {
-    if (!addForm.email || !addForm.username || !addForm.password) {
-      toast.error('Email, username, and password are required');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addForm.email.trim())) {
+      toast.error('Enter a valid email address');
+      return;
+    }
+    if (addForm.username.trim().length < 2 || addForm.username.length > 64) {
+      toast.error('Username must be between 2 and 64 characters');
+      return;
+    }
+    if (addForm.password.length < 12 || addForm.password.length > 256) {
+      toast.error('Password must be between 12 and 256 characters');
+      return;
+    }
+    if (addForm.full_name.length > 120) {
+      toast.error('Full name must be 120 characters or fewer');
       return;
     }
     try {
-      await jarvisAPI.rbac.createUser(addForm);
-      toast.success('User created successfully');
+      await jarvisAPI.rbac.createUser({
+        email: addForm.email.trim(),
+        username: addForm.username.trim(),
+        password: addForm.password,
+        ...(addForm.full_name.trim() ? { full_name: addForm.full_name.trim() } : {}),
+      });
+      toast.success('Invitation created. The account is pending email verification and owner authorization.');
       setShowAddDialog(false);
-      setAddForm({ email: '', username: '', password: '', full_name: '', roles: [] });
-      fetchUsers();
-    } catch (err: any) {
-      toast.error('Failed to create user: ' + (err.message || 'Unknown error'));
+      setAddForm({ email: '', username: '', password: '', full_name: '' });
+      await fetchUsers();
+    } catch (err: unknown) {
+      toast.error('Failed to create user: ' + getErrorMessage(err));
     }
   };
 
@@ -126,8 +197,8 @@ function UsersTab() {
       setShowEditDialog(false);
       setSelectedUser(null);
       fetchUsers();
-    } catch (err: any) {
-      toast.error('Failed to update user: ' + (err.message || 'Unknown error'));
+    } catch (err: unknown) {
+      toast.error('Failed to update user: ' + getErrorMessage(err));
     }
   };
 
@@ -139,8 +210,8 @@ function UsersTab() {
       setShowDeleteDialog(false);
       setSelectedUser(null);
       fetchUsers();
-    } catch (err: any) {
-      toast.error('Failed to delete user: ' + (err.message || 'Unknown error'));
+    } catch (err: unknown) {
+      toast.error('Failed to delete user: ' + getErrorMessage(err));
     }
   };
 
@@ -157,6 +228,11 @@ function UsersTab() {
 
   return (
     <div className="space-y-4">
+      {!canManage && (
+        <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+          Read-only view. Creating, editing, and deleting users is restricted to the configured tenant owner.
+        </p>
+      )}
       <div className="flex items-center justify-between">
         <div className="relative w-72">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -168,10 +244,10 @@ function UsersTab() {
             onKeyDown={(e) => e.key === 'Enter' && fetchUsers()}
           />
         </div>
-        <Button onClick={() => setShowAddDialog(true)}>
+        {canManage && <Button onClick={() => setShowAddDialog(true)}>
           <UserPlus className="mr-2 h-4 w-4" />
           Add User
-        </Button>
+        </Button>}
       </div>
 
       {loading ? (
@@ -179,6 +255,8 @@ function UsersTab() {
           <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
           <span className="ml-2 text-muted-foreground">Loading users...</span>
         </div>
+      ) : loadError ? (
+        <RequestFailure error={loadError} onRetry={() => void fetchUsers()} />
       ) : users.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
@@ -190,7 +268,9 @@ function UsersTab() {
           </CardContent>
         </Card>
       ) : (
-        <Card>
+        <>
+        <div className="hidden md:block">
+        <Card className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -199,6 +279,7 @@ function UsersTab() {
                 <TableHead>Email</TableHead>
                 <TableHead>Roles</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Verified</TableHead>
                 <TableHead>Last Login</TableHead>
                 <TableHead className="w-24">Actions</TableHead>
               </TableRow>
@@ -227,10 +308,12 @@ function UsersTab() {
                       <TableCell>
                         <Badge className={STATUS_COLORS[user.status] || ''}>{user.status}</Badge>
                       </TableCell>
+                      <TableCell>{user.email_verified ? 'Verified' : 'Unverified'}</TableCell>
                       <TableCell>
-                        {user.last_login_at ? format(parseISO(user.last_login_at), 'MMM d, yyyy HH:mm') : 'Never'}
+                        {user.last_login_at && isValid(parseISO(user.last_login_at)) ? format(parseISO(user.last_login_at), 'MMM d, yyyy HH:mm') : 'Never'}
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
+                        {canManage && (
                         <div className="flex gap-1">
                           <TooltipProvider>
                             <Tooltip><TooltipTrigger asChild>
@@ -247,11 +330,12 @@ function UsersTab() {
                             </TooltipTrigger><TooltipContent>Delete user</TooltipContent></Tooltip>
                           </TooltipProvider>
                         </div>
+                        )}
                       </TableCell>
                     </TableRow>
                     {expandedUser === user.id && (
                       <TableRow>
-                        <TableCell colSpan={7} className="bg-muted/30">
+                        <TableCell colSpan={8} className="bg-muted/30">
                           <div className="p-4 space-y-2 text-sm">
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                               <div><span className="text-muted-foreground">Username:</span> <span className="font-medium">{user.username}</span></div>
@@ -259,8 +343,8 @@ function UsersTab() {
                               <div><span className="text-muted-foreground">Full Name:</span> <span className="font-medium">{user.full_name || 'N/A'}</span></div>
                               <div><span className="text-muted-foreground">Status:</span> <Badge className={STATUS_COLORS[user.status]}>{user.status}</Badge></div>
                               <div><span className="text-muted-foreground">User ID:</span> <code className="text-xs">{user.id}</code></div>
-                              <div><span className="text-muted-foreground">Created:</span> {user.created_at ? format(parseISO(user.created_at), 'PPP') : 'N/A'}</div>
-                              <div><span className="text-muted-foreground">Last Login:</span> {user.last_login_at ? format(parseISO(user.last_login_at), 'PPP HH:mm') : 'Never'}</div>
+                              <div><span className="text-muted-foreground">Created:</span> {user.created_at && isValid(parseISO(user.created_at)) ? format(parseISO(user.created_at), 'PPP') : 'N/A'}</div>
+                              <div><span className="text-muted-foreground">Last Login:</span> {user.last_login_at && isValid(parseISO(user.last_login_at)) ? format(parseISO(user.last_login_at), 'PPP HH:mm') : 'Never'}</div>
                               <div><span className="text-muted-foreground">Roles:</span> {user.roles.length > 0 ? user.roles.join(', ') : 'None'}</div>
                             </div>
                           </div>
@@ -295,6 +379,41 @@ function UsersTab() {
             </div>
           </div>
         </Card>
+        </div>
+        <div className="grid gap-3 md:hidden">
+          {users.map((user) => (
+            <Card key={user.id}>
+              <CardContent className="space-y-3 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{user.full_name || user.username}</p>
+                    <p className="break-all text-sm text-muted-foreground">{user.email}</p>
+                  </div>
+                  <Badge className={STATUS_COLORS[user.status] || ''}>{user.status.replaceAll('_', ' ')}</Badge>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {user.roles.map((role) => <Badge key={role} variant="secondary">{role}</Badge>)}
+                  <Badge variant="outline">{user.email_verified ? 'Verified' : 'Unverified'}</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Last login: {user.last_login_at && isValid(parseISO(user.last_login_at)) ? format(parseISO(user.last_login_at), 'MMM d, yyyy HH:mm') : 'Never'}
+                </p>
+                {canManage && <div className="flex gap-2 border-t pt-3">
+                  <Button variant="outline" size="sm" onClick={() => openEdit(user)}><Edit className="mr-1 h-3.5 w-3.5" /> Edit</Button>
+                  <Button variant="outline" size="sm" className="text-destructive" onClick={() => openDelete(user)}><Trash2 className="mr-1 h-3.5 w-3.5" /> Delete</Button>
+                </div>}
+              </CardContent>
+            </Card>
+          ))}
+          {users.length > 0 && <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Page {page} of {totalPages || 1}</span>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}><ChevronLeft className="h-4 w-4" /></Button>
+              <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)}><ChevronRight className="h-4 w-4" /></Button>
+            </div>
+          </div>}
+        </div>
+        </>
       )}
 
       {/* Add User Dialog */}
@@ -302,51 +421,34 @@ function UsersTab() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Add New User</DialogTitle>
-            <DialogDescription>Create a new user account with role assignments.</DialogDescription>
+            <DialogDescription>New accounts receive the default user role and remain pending until email verification and owner authorization.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="add-email">Email *</Label>
                 <Input id="add-email" type="email" value={addForm.email} onChange={(e) => setAddForm(f => ({ ...f, email: e.target.value }))} placeholder="user@example.com" />
+                {addForm.email && !emailValid && <p className="text-xs text-destructive">Enter a valid email address.</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="add-username">Username *</Label>
-                <Input id="add-username" value={addForm.username} onChange={(e) => setAddForm(f => ({ ...f, username: e.target.value }))} placeholder="johndoe" />
+                <Input id="add-username" value={addForm.username} onChange={(e) => setAddForm(f => ({ ...f, username: e.target.value }))} placeholder="johndoe" minLength={2} maxLength={64} />
+                {addForm.username && addForm.username.trim().length < 2 && <p className="text-xs text-destructive">Username must contain at least 2 characters.</p>}
               </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="add-password">Password *</Label>
               <div className="relative">
-                <Input id="add-password" type={showPassword ? 'text' : 'password'} value={addForm.password} onChange={(e) => setAddForm(f => ({ ...f, password: e.target.value }))} placeholder="Secure password" />
+                <Input id="add-password" type={showPassword ? 'text' : 'password'} value={addForm.password} onChange={(e) => setAddForm(f => ({ ...f, password: e.target.value }))} placeholder="At least 12 characters" minLength={12} maxLength={256} />
                 <Button variant="ghost" size="icon" className="absolute right-0 top-0 h-10 w-10" onClick={() => setShowPassword(!showPassword)}>
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
+              {addForm.password && addForm.password.length < 12 && <p className="text-xs text-destructive">Use at least 12 characters.</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="add-fullname">Full Name</Label>
-              <Input id="add-fullname" value={addForm.full_name} onChange={(e) => setAddForm(f => ({ ...f, full_name: e.target.value }))} placeholder="John Doe" />
-            </div>
-            <div className="space-y-2">
-              <Label>Roles</Label>
-              <div className="flex flex-wrap gap-2">
-                {allRoles.map((role) => (
-                  <Badge
-                    key={role}
-                    variant={addForm.roles.includes(role) ? 'default' : 'outline'}
-                    className="cursor-pointer"
-                    onClick={() => setAddForm(f => ({
-                      ...f,
-                      roles: f.roles.includes(role) ? f.roles.filter(r => r !== role) : [...f.roles, role]
-                    }))}
-                  >
-                    {addForm.roles.includes(role) && <Check className="mr-1 h-3 w-3" />}
-                    {role}
-                  </Badge>
-                ))}
-                {allRoles.length === 0 && <span className="text-muted-foreground text-sm">No roles available</span>}
-              </div>
+              <Input id="add-fullname" value={addForm.full_name} onChange={(e) => setAddForm(f => ({ ...f, full_name: e.target.value }))} placeholder="John Doe" maxLength={120} />
             </div>
           </div>
           <DialogFooter>
@@ -390,8 +492,9 @@ function UsersTab() {
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="pending_authorization">Pending authorization</SelectItem>
                     <SelectItem value="suspended">Suspended</SelectItem>
+                    <SelectItem value="disabled">Disabled</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -427,14 +530,16 @@ function UsersTab() {
 }
 
 // --- Roles Tab ---
-function RolesTab() {
+function RolesTab({ canManage }: { canManage: boolean }) {
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditorDialog, setShowEditorDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [permissionError, setPermissionError] = useState<unknown>(null);
   const [createForm, setCreateForm] = useState({ name: '', description: '', permissions: [] as string[] });
   const [editForm, setEditForm] = useState({ name: '', description: '', permissions: [] as string[] });
 
@@ -443,8 +548,10 @@ function RolesTab() {
     try {
       const data = await jarvisAPI.rbac.getRoles();
       setRoles(data.roles);
-    } catch (err: any) {
-      toast.error('Failed to load roles: ' + (err.message || 'Unknown error'));
+      setLoadError(null);
+    } catch (err: unknown) {
+      setLoadError(err);
+      setRoles([]);
     } finally {
       setLoading(false);
     }
@@ -454,18 +561,14 @@ function RolesTab() {
     try {
       const data = await jarvisAPI.rbac.getPermissions();
       setPermissions(data.permissions);
-    } catch {
-      // Non-critical, generate from groups
-      const generated: Permission[] = [];
-      Object.keys(PERMISSION_GROUPS).forEach(resource => {
-        ['read', 'write', 'delete', 'admin'].forEach(action => {
-          generated.push({ id: `${resource}:${action}`, resource, action, description: `${action} ${resource}` });
-        });
-      });
-      setPermissions(generated);
+      setPermissionError(null);
+    } catch (error: unknown) {
+      setPermissionError(error);
+      setPermissions([]);
     }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchRoles(); fetchPermissions(); }, [fetchRoles, fetchPermissions]);
 
   const handleCreateRole = async () => {
@@ -479,8 +582,8 @@ function RolesTab() {
       setShowCreateDialog(false);
       setCreateForm({ name: '', description: '', permissions: [] });
       fetchRoles();
-    } catch (err: any) {
-      toast.error('Failed to create role: ' + (err.message || 'Unknown error'));
+    } catch (err: unknown) {
+      toast.error('Failed to create role: ' + getErrorMessage(err));
     }
   };
 
@@ -492,8 +595,8 @@ function RolesTab() {
       setShowEditorDialog(false);
       setSelectedRole(null);
       fetchRoles();
-    } catch (err: any) {
-      toast.error('Failed to update role: ' + (err.message || 'Unknown error'));
+    } catch (err: unknown) {
+      toast.error('Failed to update role: ' + getErrorMessage(err));
     }
   };
 
@@ -510,8 +613,8 @@ function RolesTab() {
       setShowDeleteDialog(false);
       setSelectedRole(null);
       fetchRoles();
-    } catch (err: any) {
-      toast.error('Failed to delete role: ' + (err.message || 'Unknown error'));
+    } catch (err: unknown) {
+      toast.error('Failed to delete role: ' + getErrorMessage(err));
     }
   };
 
@@ -539,12 +642,13 @@ function RolesTab() {
 
   return (
     <div className="space-y-4">
+      {!canManage && <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">Read-only view. Role mutations are restricted to the configured tenant owner.</p>}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Role Management</h2>
-        <Button onClick={() => setShowCreateDialog(true)}>
+        {canManage && <Button onClick={() => setShowCreateDialog(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Create Role
-        </Button>
+        </Button>}
       </div>
 
       {loading ? (
@@ -552,6 +656,8 @@ function RolesTab() {
           <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
           <span className="ml-2 text-muted-foreground">Loading roles...</span>
         </div>
+      ) : loadError ? (
+        <RequestFailure error={loadError} onRetry={() => void fetchRoles()} />
       ) : roles.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
@@ -570,7 +676,7 @@ function RolesTab() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95 }}
               >
-                <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => openEditor(role)}>
+                <Card className={canManage ? 'cursor-pointer hover:shadow-md transition-shadow' : ''} onClick={() => canManage && openEditor(role)}>
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-2">
@@ -594,10 +700,10 @@ function RolesTab() {
                     </div>
                   </CardContent>
                   <CardFooter className="pt-0 gap-2">
-                    <Button variant="outline" size="sm" className="flex-1" onClick={(e) => { e.stopPropagation(); openEditor(role); }}>
+                    {canManage && <Button variant="outline" size="sm" className="flex-1" onClick={(e) => { e.stopPropagation(); openEditor(role); }}>
                       <Edit className="mr-1 h-3 w-3" /> Edit
-                    </Button>
-                    {!role.is_system && (
+                    </Button>}
+                    {canManage && !role.is_system && (
                       <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={(e) => {
                         e.stopPropagation();
                         setSelectedRole(role);
@@ -665,6 +771,8 @@ function RolesTab() {
               </div>
               <div className="space-y-3">
                 <Label>Permissions</Label>
+                {permissionError !== null && <RequestFailure error={permissionError} onRetry={() => void fetchPermissions()} />}
+                {permissionError === null && permissions.length === 0 && <p className="text-sm text-muted-foreground">No permissions were returned by the permission catalog.</p>}
                 {Object.entries(PERMISSION_GROUPS).map(([resource, config]) => {
                   const resourcePerms = groupedPermissions[resource] || [];
                   if (resourcePerms.length === 0) return null;
@@ -732,45 +840,34 @@ function RolesTab() {
 function AuditLogTab() {
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [page, setPage] = useState(1);
   const [perPage] = useState(25);
   const [total, setTotal] = useState(0);
-  const [dateFrom, setDateFrom] = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
-  const [dateTo, setDateTo] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [userId, setUserId] = useState('');
   const [action, setAction] = useState('');
   const [resourceType, setResourceType] = useState('');
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
-  const [users, setUsers] = useState<UserType[]>([]);
-
-  const RESOURCE_TYPES = ['users', 'roles', 'permissions', 'settings', 'knowledge', 'agents', 'system', 'audit_logs'];
-  const ACTIONS = ['create', 'update', 'delete', 'login', 'logout', 'assign_role', 'remove_role', 'update_settings'];
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await jarvisAPI.rbac.getAuditLogs({ date_from: dateFrom, date_to: dateTo, user_id: userId || undefined, action: action || undefined, resource_type: resourceType || undefined, page, per_page: perPage });
+      const data = await jarvisAPI.rbac.getAuditLogs({ user_id: userId.trim() || undefined, action: action.trim() || undefined, resource_type: resourceType.trim() || undefined, page, per_page: perPage });
       setLogs(data.logs);
       setTotal(data.total);
-    } catch (err: any) {
-      toast.error('Failed to load audit logs: ' + (err.message || 'Unknown error'));
+      setLoadError(null);
+    } catch (err: unknown) {
+      setLoadError(err);
       setLogs([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo, userId, action, resourceType, page, perPage]);
+  }, [userId, action, resourceType, page, perPage]);
 
-  const fetchUsers = useCallback(async () => {
-    try {
-      const data = await jarvisAPI.rbac.getUsers(1, 100);
-      setUsers(data.users);
-    } catch {
-      // Non-critical
-    }
-  }, []);
-
-  useEffect(() => { fetchLogs(); fetchUsers(); }, [fetchLogs]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
   useEffect(() => {
     if (!autoRefresh) return;
@@ -782,16 +879,16 @@ function AuditLogTab() {
 
   const handleExport = async () => {
     try {
-      const blob = await jarvisAPI.rbac.exportAuditLogs({ date_from: dateFrom, date_to: dateTo, user_id: userId || undefined, action: action || undefined, resource_type: resourceType || undefined });
+      const blob = await jarvisAPI.rbac.exportAuditLogs();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `audit-logs-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+      a.download = `audit-logs-all-${format(new Date(), 'yyyy-MM-dd')}.csv`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success('Audit logs exported successfully');
-    } catch (err: any) {
-      toast.error('Failed to export: ' + (err.message || 'Unknown error'));
+      toast.success('All audit logs exported. The server export does not apply page filters.');
+    } catch (err: unknown) {
+      toast.error('Failed to export: ' + getErrorMessage(err));
     }
   };
 
@@ -815,9 +912,9 @@ function AuditLogTab() {
               Auto-refresh
             </Label>
           </div>
-          <Button variant="outline" size="sm" onClick={handleExport}>
+          <Button variant="outline" size="sm" onClick={handleExport} title="Exports all server audit records, not the current filtered page">
             <Download className="mr-1 h-4 w-4" />
-            Export CSV
+            Export all CSV
           </Button>
         </div>
       </div>
@@ -830,55 +927,22 @@ function AuditLogTab() {
           </div>
         </CardHeader>
         <CardContent className="pt-0">
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          <p className="mb-3 text-xs text-muted-foreground">Filters apply to this paginated list. “Export all CSV” downloads all audit records because the server export endpoint does not accept filters.</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-1">
-              <Label className="text-xs">Date From</Label>
-              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Date To</Label>
-              <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">User</Label>
-              <Select value={userId} onValueChange={setUserId}>
-                <SelectTrigger><SelectValue placeholder="All users" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">All users</SelectItem>
-                  {users.map(u => (
-                    <SelectItem key={u.id} value={u.id}>{u.full_name || u.username}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-xs">Actor ID</Label>
+              <Input value={userId} onChange={(e) => { setPage(1); setUserId(e.target.value); }} placeholder="Exact actor ID" />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Action</Label>
-              <Select value={action} onValueChange={setAction}>
-                <SelectTrigger><SelectValue placeholder="All actions" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">All actions</SelectItem>
-                  {ACTIONS.map(a => (
-                    <SelectItem key={a} value={a}>{a}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Input value={action} onChange={(e) => { setPage(1); setAction(e.target.value); }} placeholder="Exact action value" />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Resource Type</Label>
-              <Select value={resourceType} onValueChange={setResourceType}>
-                <SelectTrigger><SelectValue placeholder="All types" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">All types</SelectItem>
-                  {RESOURCE_TYPES.map(r => (
-                    <SelectItem key={r} value={r}>{r}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-xs">Resource type</Label>
+              <Input value={resourceType} onChange={(e) => { setPage(1); setResourceType(e.target.value); }} placeholder="Exact resource type" />
             </div>
             <div className="flex items-end">
-              <Button variant="outline" size="sm" className="w-full" onClick={fetchLogs}>
-                Apply Filters
-              </Button>
+              <Button variant="outline" size="sm" className="w-full" onClick={() => void fetchLogs()}>Apply filters</Button>
             </div>
           </div>
         </CardContent>
@@ -889,6 +953,8 @@ function AuditLogTab() {
           <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
           <span className="ml-2 text-muted-foreground">Loading logs...</span>
         </div>
+      ) : loadError ? (
+        <RequestFailure error={loadError} onRetry={() => void fetchLogs()} />
       ) : logs.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
@@ -904,43 +970,39 @@ function AuditLogTab() {
               <TableRow>
                 <TableHead className="w-8"></TableHead>
                 <TableHead>Timestamp</TableHead>
-                <TableHead>User</TableHead>
+                <TableHead>Actor ID</TableHead>
                 <TableHead>Action</TableHead>
                 <TableHead>Resource</TableHead>
-                <TableHead>IP Address</TableHead>
+                <TableHead>Resource ID</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               <AnimatePresence>
                 {logs.map((log) => (
                   <React.Fragment key={log.id}>
-                    <TableRow
-                      className="cursor-pointer"
-                      onClick={() => setExpandedLog(expandedLog === log.id ? null : log.id)}
-                    >
+                    <TableRow>
                       <TableCell>
-                        <ChevronDown className={`h-4 w-4 transition-transform ${expandedLog === log.id ? 'rotate-180' : ''}`} />
+                        <Button variant="ghost" size="icon" aria-label={`${expandedLog === log.id ? 'Collapse' : 'Expand'} audit record`} onClick={() => setExpandedLog(expandedLog === log.id ? null : log.id)}>
+                          <ChevronDown className={`h-4 w-4 transition-transform ${expandedLog === log.id ? 'rotate-180' : ''}`} />
+                        </Button>
                       </TableCell>
                       <TableCell className="text-sm font-mono">
-                        {format(parseISO(log.created_at), 'MMM d, yyyy HH:mm:ss')}
+                        {isValid(parseISO(log.timestamp)) ? format(parseISO(log.timestamp), 'MMM d, yyyy HH:mm:ss') : 'Timestamp unavailable'}
                       </TableCell>
-                      <TableCell className="text-sm">
-                        {log.user_name || log.user_email || log.user_id}
-                      </TableCell>
+                      <TableCell className="text-sm font-mono">{log.actor_id || 'Unknown actor'}</TableCell>
                       <TableCell>
                         <Badge className={getActionBadgeClass(log.action)}>{log.action}</Badge>
                       </TableCell>
                       <TableCell className="text-sm">{log.resource_type}</TableCell>
-                      <TableCell className="text-sm font-mono text-muted-foreground">{log.ip_address || '-'}</TableCell>
+                      <TableCell className="text-sm font-mono text-muted-foreground">{log.resource_id || '—'}</TableCell>
                     </TableRow>
-                    {expandedLog === log.id && log.details && (
+                    {expandedLog === log.id && (
                       <TableRow>
                         <TableCell colSpan={6} className="bg-muted/30">
                           <div className="p-4">
-                            <h4 className="text-sm font-medium mb-2">Details</h4>
-                            <pre className="text-xs bg-background rounded-md p-3 overflow-auto max-h-40 border">
-                              {JSON.stringify(log.details, null, 2)}
-                            </pre>
+                            <h4 className="text-sm font-medium mb-2">Record identifiers</h4>
+                            <p className="break-all font-mono text-xs">Event ID: {log.id}</p>
+                            <p className="break-all font-mono text-xs">Resource ID: {log.resource_id || 'Not reported'}</p>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -971,14 +1033,15 @@ function AuditLogTab() {
 }
 
 // --- Settings Tab ---
-function SettingsTab() {
+function SettingsTab({ canManage }: { canManage: boolean }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [tenant, setTenant] = useState<TenantSettings | null>(null);
-  const [maxUsers, setMaxUsers] = useState(100);
-  const [maxStorage, setMaxStorage] = useState(10240);
-  const [maxApiCalls, setMaxApiCalls] = useState(10000);
-  const [settingsJson, setSettingsJson] = useState('{}');
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [maxUsers, setMaxUsers] = useState<number | null>(null);
+  const [maxStorage, setMaxStorage] = useState<number | null>(null);
+  const [maxApiCalls, setMaxApiCalls] = useState<number | null>(null);
+  const [settingsJson, setSettingsJson] = useState<string | null>(null);
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const [jsonError, setJsonError] = useState<string | null>(null);
 
@@ -987,47 +1050,40 @@ function SettingsTab() {
     try {
       const response = await jarvisAPI.rbac.getTenantSettings();
       setTenant(response);
-      setMaxUsers(response.max_users || 100);
-      setMaxStorage(response.max_storage_mb || 10240);
-      setMaxApiCalls(response.max_api_calls_per_day || 10000);
-      setSettingsJson(JSON.stringify(response.settings || {}, null, 2));
-    } catch {
-      // Fallback mock data
-      const mockTenant: TenantSettings = {
-        id: 'tenant-001',
-        name: 'JARVIS Enterprise',
-        slug: 'jarvis-enterprise',
-        plan: 'enterprise',
-        status: 'active',
-        created_at: new Date().toISOString(),
-        max_users: 100,
-        max_storage_mb: 10240,
-        max_api_calls_per_day: 10000,
-        settings: {},
-      };
-      setTenant(mockTenant);
-      setSettingsJson('{}');
+      setMaxUsers(response.max_users ?? null);
+      setMaxStorage(response.max_storage_mb ?? null);
+      setMaxApiCalls(response.max_api_calls_per_day ?? null);
+      setSettingsJson(response.settings === undefined ? null : JSON.stringify(response.settings, null, 2));
+      setLoadError(null);
+    } catch (error: unknown) {
+      setTenant(null);
+      setMaxUsers(null);
+      setMaxStorage(null);
+      setMaxApiCalls(null);
+      setSettingsJson(null);
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
 
   const handleSaveSettings = async () => {
     setSaving(true);
     try {
-      await jarvisAPI.rbac.updateTenantSettings({
-        max_users: maxUsers,
-        max_storage_mb: maxStorage,
-        max_api_calls_per_day: maxApiCalls,
-        settings: JSON.parse(settingsJson),
-      });
+      const payload: Partial<Pick<TenantSettings, 'max_users' | 'max_storage_mb' | 'max_api_calls_per_day' | 'settings'>> = {};
+      if (maxUsers !== null) payload.max_users = maxUsers;
+      if (maxStorage !== null) payload.max_storage_mb = maxStorage;
+      if (maxApiCalls !== null) payload.max_api_calls_per_day = maxApiCalls;
+      if (settingsJson !== null) payload.settings = JSON.parse(settingsJson);
+      await jarvisAPI.rbac.updateTenantSettings(payload);
       toast.success('Settings saved successfully');
       setShowSaveConfirm(false);
-      fetchSettings();
-    } catch (err: any) {
-      toast.error('Failed to save settings: ' + (err.message || 'Unknown error'));
+      await fetchSettings();
+    } catch (err: unknown) {
+      toast.error('Failed to save settings: ' + getErrorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -1038,8 +1094,8 @@ function SettingsTab() {
     try {
       JSON.parse(value);
       setJsonError(null);
-    } catch (e: any) {
-      setJsonError(e.message);
+    } catch (e: unknown) {
+      setJsonError(getErrorMessage(e));
     }
   };
 
@@ -1052,10 +1108,42 @@ function SettingsTab() {
     );
   }
 
+  if (loadError) {
+    return <RequestFailure error={loadError} onRetry={() => void fetchSettings()} />;
+  }
+
+  if (!tenant || Object.keys(tenant).length === 0) {
+    return (
+      <Card>
+        <CardContent className="space-y-3 py-8">
+          <p className="font-medium">No tenant settings were returned</p>
+          <p className="text-sm text-muted-foreground">This is an empty server response, not a default tenant configuration. Settings cannot be edited until the server reports supported fields.</p>
+          <Button variant="outline" onClick={() => void fetchSettings()}><RefreshCw className="mr-2 h-4 w-4" /> Retry</Button>
+        </CardContent>
+      </Card>
+    );
+  }
+  const hasSupportedSettings = Boolean(
+    tenant.name || tenant.slug || tenant.plan || tenant.status || tenant.created_at || tenant.id
+    || tenant.max_users !== undefined || tenant.max_storage_mb !== undefined
+    || tenant.max_api_calls_per_day !== undefined || tenant.settings !== undefined
+  );
+  if (!hasSupportedSettings) {
+    return (
+      <Card>
+        <CardContent className="space-y-3 py-8">
+          <p className="font-medium">No supported tenant settings were reported</p>
+          <p className="text-sm text-muted-foreground">The response did not contain tenant identity, quota, or advanced settings fields, so no editable values are shown.</p>
+          <Button variant="outline" onClick={() => void fetchSettings()}><RefreshCw className="mr-2 h-4 w-4" /> Retry</Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Tenant Info Card */}
-      {tenant && (
+      {[tenant.name, tenant.slug, tenant.plan, tenant.status, tenant.created_at, tenant.id].some(Boolean) && (
         <Card>
           <CardHeader>
             <div className="flex items-center gap-3">
@@ -1063,36 +1151,36 @@ function SettingsTab() {
                 <Globe className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <CardTitle>{tenant.name}</CardTitle>
-                <CardDescription>{tenant.slug}</CardDescription>
+                {tenant.name && <CardTitle>{tenant.name}</CardTitle>}
+                {tenant.slug && <CardDescription>{tenant.slug}</CardDescription>}
               </div>
             </div>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="space-y-1">
+              {tenant.plan && <div className="space-y-1">
                 <span className="text-sm text-muted-foreground">Plan</span>
                 <Badge variant="default" className="capitalize">{tenant.plan}</Badge>
-              </div>
-              <div className="space-y-1">
+              </div>}
+              {tenant.status && <div className="space-y-1">
                 <span className="text-sm text-muted-foreground">Status</span>
                 <Badge className={tenant.status === 'active' ? 'bg-emerald-100 text-emerald-800' : ''}>{tenant.status}</Badge>
-              </div>
-              <div className="space-y-1">
+              </div>}
+              {tenant.created_at && isValid(parseISO(tenant.created_at)) && <div className="space-y-1">
                 <span className="text-sm text-muted-foreground">Created</span>
                 <p className="text-sm font-medium">{format(parseISO(tenant.created_at), 'PPP')}</p>
-              </div>
-              <div className="space-y-1">
+              </div>}
+              {tenant.id && <div className="space-y-1">
                 <span className="text-sm text-muted-foreground">Tenant ID</span>
                 <p className="text-sm font-mono">{tenant.id}</p>
-              </div>
+              </div>}
             </div>
           </CardContent>
         </Card>
       )}
 
       {/* Quota Management */}
-      <Card>
+      {[maxUsers, maxStorage, maxApiCalls].some((value) => value !== null) && <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <BarChart3 className="h-4 w-4" />
@@ -1101,35 +1189,41 @@ function SettingsTab() {
           <CardDescription>Configure resource limits for this tenant</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="space-y-3">
+          {!canManage && <p className="text-sm text-muted-foreground">Read-only view. Saving tenant settings is restricted to the configured tenant owner.</p>}
+          {maxUsers !== null && <div className="space-y-3">
             <div className="flex items-center justify-between">
               <Label htmlFor="max-users">Maximum Users</Label>
               <span className="text-sm font-medium">{maxUsers.toLocaleString()}</span>
             </div>
-            <Slider id="max-users" value={[maxUsers]} min={10} max={10000} step={10} onValueChange={([v]) => setMaxUsers(v)} />
+            <Slider id="max-users" value={[maxUsers]} min={10} max={10000} step={10} disabled={!canManage} onValueChange={([v]) => setMaxUsers(v)} />
             <p className="text-xs text-muted-foreground">Maximum number of user accounts allowed</p>
-          </div>
-          <div className="space-y-3">
+          </div>}
+          {maxStorage !== null && <div className="space-y-3">
             <div className="flex items-center justify-between">
               <Label htmlFor="max-storage">Maximum Storage (MB)</Label>
               <span className="text-sm font-medium">{(maxStorage / 1024).toFixed(1)} GB</span>
             </div>
-            <Slider id="max-storage" value={[maxStorage]} min={100} max={102400} step={100} onValueChange={([v]) => setMaxStorage(v)} />
+            <Slider id="max-storage" value={[maxStorage]} min={100} max={102400} step={100} disabled={!canManage} onValueChange={([v]) => setMaxStorage(v)} />
             <p className="text-xs text-muted-foreground">Total storage allocated for documents and files</p>
-          </div>
-          <div className="space-y-3">
+          </div>}
+          {maxApiCalls !== null && <div className="space-y-3">
             <div className="flex items-center justify-between">
               <Label htmlFor="max-api">Max API Calls / Day</Label>
               <span className="text-sm font-medium">{maxApiCalls.toLocaleString()}</span>
             </div>
-            <Slider id="max-api" value={[maxApiCalls]} min={100} max={1000000} step={100} onValueChange={([v]) => setMaxApiCalls(v)} />
+            <Slider id="max-api" value={[maxApiCalls]} min={100} max={1000000} step={100} disabled={!canManage} onValueChange={([v]) => setMaxApiCalls(v)} />
             <p className="text-xs text-muted-foreground">Daily API request limit for this tenant</p>
-          </div>
+          </div>}
         </CardContent>
-      </Card>
+        {canManage && <CardFooter className="border-t px-6 py-4">
+          <Button onClick={() => setShowSaveConfirm(true)} disabled={saving || !!jsonError}>
+            Save tenant limits
+          </Button>
+        </CardFooter>}
+      </Card>}
 
       {/* Advanced Settings JSON Editor */}
-      <Card>
+      {settingsJson !== null && <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <Settings className="h-4 w-4" />
@@ -1138,12 +1232,13 @@ function SettingsTab() {
           <CardDescription>Edit tenant settings as JSON</CardDescription>
         </CardHeader>
         <CardContent>
+          {!canManage && <p className="mb-3 text-sm text-muted-foreground">Read-only view. Saving tenant settings is restricted to the configured tenant owner.</p>}
           <div className="space-y-2">
             <Textarea
               value={settingsJson}
               onChange={(e) => handleJsonChange(e.target.value)}
               className="font-mono text-sm min-h-[200px] bg-background"
-              placeholder='{"feature_flags": {"new_ui": true}}'
+              disabled={!canManage}
             />
             {jsonError && (
               <p className="text-sm text-destructive flex items-center gap-1">
@@ -1154,12 +1249,12 @@ function SettingsTab() {
           </div>
         </CardContent>
         <CardFooter className="border-t px-6 py-4">
-          <Button onClick={() => setShowSaveConfirm(true)} disabled={!!jsonError || saving}>
+          {canManage && <Button onClick={() => setShowSaveConfirm(true)} disabled={!!jsonError || saving}>
             {saving ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : null}
             Save Settings
-          </Button>
+          </Button>}
         </CardFooter>
-      </Card>
+      </Card>}
 
       {/* Save Confirmation Dialog */}
       <Dialog open={showSaveConfirm} onOpenChange={setShowSaveConfirm}>
@@ -1174,13 +1269,13 @@ function SettingsTab() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 text-sm py-2">
-            <div className="flex justify-between"><span className="text-muted-foreground">Max Users:</span> <span className="font-medium">{maxUsers.toLocaleString()}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Max Storage:</span> <span className="font-medium">{(maxStorage / 1024).toFixed(1)} GB</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Max API Calls/Day:</span> <span className="font-medium">{maxApiCalls.toLocaleString()}</span></div>
+            {maxUsers !== null && <div className="flex justify-between"><span className="text-muted-foreground">Max Users:</span> <span className="font-medium">{maxUsers.toLocaleString()}</span></div>}
+            {maxStorage !== null && <div className="flex justify-between"><span className="text-muted-foreground">Max Storage:</span> <span className="font-medium">{(maxStorage / 1024).toFixed(1)} GB</span></div>}
+            {maxApiCalls !== null && <div className="flex justify-between"><span className="text-muted-foreground">Max API Calls/Day:</span> <span className="font-medium">{maxApiCalls.toLocaleString()}</span></div>}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowSaveConfirm(false)}>Cancel</Button>
-            <Button onClick={handleSaveSettings} disabled={saving}>
+            <Button onClick={handleSaveSettings} disabled={saving || !canManage}>
               {saving && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
               Confirm Save
             </Button>
@@ -1194,6 +1289,35 @@ function SettingsTab() {
 // --- Main Admin Page ---
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState('users');
+  const identityId = useAuthStore((state) => state.user?.id);
+  const identityEmail = useAuthStore((state) => state.user?.email);
+  const [ownerCheck, setOwnerCheck] = useState<{ identityId: string | null; canManage: boolean; error: unknown }>({
+    identityId: null,
+    canManage: false,
+    error: null,
+  });
+  const canManage = Boolean(identityId && ownerCheck.identityId === identityId && ownerCheck.canManage);
+  const ownerCheckError = identityId && ownerCheck.identityId === identityId ? ownerCheck.error : null;
+
+  const checkOwnerAccess = useCallback(async () => {
+    if (!identityId || !identityEmail) {
+      setOwnerCheck({ identityId: identityId ?? null, canManage: false, error: new Error('Authenticated identity details are unavailable.') });
+      return;
+    }
+    try {
+      const result = await jarvisAPI.rbac.getUsers(1, 1, identityEmail);
+      const currentUser = result.users.find((user) => user.id === identityId);
+      setOwnerCheck({ identityId, canManage: Boolean(currentUser?.roles.includes('owner')), error: null });
+    } catch (error: unknown) {
+      setOwnerCheck({ identityId, canManage: false, error });
+    }
+  }, [identityEmail, identityId]);
+
+  useEffect(() => {
+    // The authenticated identity payload omits roles; read the server's user record before showing owner-only actions.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void checkOwnerAccess();
+  }, [checkOwnerAccess]);
 
   return (
     <div className="space-y-6">
@@ -1203,8 +1327,14 @@ export default function AdminPage() {
         transition={{ duration: 0.3 }}
       >
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Admin Panel</h1>
-          <p className="text-muted-foreground mt-1">Manage users, roles, audit logs, and system settings</p>
+          <h1 className="text-2xl font-bold tracking-tight">Identity & governance</h1>
+          <p className="text-muted-foreground mt-1">Users, roles, audit records, and tenant configuration</p>
+          {!canManage && (
+            <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+              <p>Read access is checked by each server endpoint. Mutation controls are shown only after the server confirms the configured owner role.</p>
+              {ownerCheckError !== null && <p role="status">Owner role could not be verified: {getErrorMessage(ownerCheckError)} <Button variant="link" className="h-auto p-0" onClick={() => void checkOwnerAccess()}>Retry check</Button></p>}
+            </div>
+          )}
         </div>
       </motion.div>
 
@@ -1212,19 +1342,19 @@ export default function AdminPage() {
         <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-flex">
           <TabsTrigger value="users" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
-            <span className="hidden sm:inline">Users</span>
+            <span>Users</span>
           </TabsTrigger>
           <TabsTrigger value="roles" className="flex items-center gap-2">
             <Shield className="h-4 w-4" />
-            <span className="hidden sm:inline">Roles</span>
+            <span>Roles</span>
           </TabsTrigger>
           <TabsTrigger value="audit" className="flex items-center gap-2">
             <FileText className="h-4 w-4" />
-            <span className="hidden sm:inline">Audit Log</span>
+            <span>Audit Log</span>
           </TabsTrigger>
           <TabsTrigger value="settings" className="flex items-center gap-2">
             <Settings className="h-4 w-4" />
-            <span className="hidden sm:inline">Settings</span>
+            <span>Settings</span>
           </TabsTrigger>
         </TabsList>
 
@@ -1237,16 +1367,16 @@ export default function AdminPage() {
             transition={{ duration: 0.2 }}
           >
             <TabsContent value="users" className="mt-0">
-              <UsersTab />
+              <UsersTab canManage={canManage} />
             </TabsContent>
             <TabsContent value="roles" className="mt-0">
-              <RolesTab />
+              <RolesTab canManage={canManage} />
             </TabsContent>
             <TabsContent value="audit" className="mt-0">
               <AuditLogTab />
             </TabsContent>
             <TabsContent value="settings" className="mt-0">
-              <SettingsTab />
+              <SettingsTab canManage={canManage} />
             </TabsContent>
           </motion.div>
         </AnimatePresence>

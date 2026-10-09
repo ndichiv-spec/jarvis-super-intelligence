@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Mic, MicOff, Square, Paperclip } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { useJarvisRuntime } from '@/features/runtime/store';
 
 interface SpeechRecognitionResultLike {
   readonly isFinal: boolean;
@@ -55,6 +56,7 @@ export function ChatInput({
   const [input, setInput] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const setVoiceState = useJarvisRuntime((state) => state.setVoiceState);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
@@ -75,6 +77,9 @@ export function ChatInput({
   useEffect(() => () => {
     recognitionRef.current?.abort();
     recognitionRef.current = null;
+    if (useJarvisRuntime.getState().voiceState === 'listening') {
+      useJarvisRuntime.getState().setVoiceState('idle');
+    }
   }, []);
 
   const toggleVoiceInput = useCallback(() => {
@@ -90,6 +95,7 @@ export function ChatInput({
     const SpeechRecognition = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       setVoiceError('Voice input is not supported by this browser. You can still type your message.');
+      setVoiceState('unavailable');
       return;
     }
 
@@ -109,23 +115,31 @@ export function ChatInput({
     };
     recognition.onerror = (event) => {
       setIsListening(false);
+      setVoiceState('error');
       setVoiceError(
         event.error === 'not-allowed'
           ? 'Microphone permission was denied.'
           : `Browser voice recognition failed (${event.error}).`,
       );
     };
-    recognition.onend = () => setIsListening(false);
+    recognition.onend = () => {
+      setIsListening(false);
+      if (useJarvisRuntime.getState().voiceState === 'listening') {
+        useJarvisRuntime.getState().setVoiceState('idle');
+      }
+    };
     recognitionRef.current = recognition;
 
     try {
       recognition.start();
       setIsListening(true);
+      setVoiceState('listening');
     } catch (error) {
       recognitionRef.current = null;
+      setVoiceState('error');
       setVoiceError(error instanceof Error ? error.message : 'Unable to start browser voice recognition.');
     }
-  }, [input, isListening]);
+  }, [input, isListening, setVoiceState]);
 
   const handleSubmit = useCallback(() => {
     const trimmed = input.trim();
@@ -133,13 +147,14 @@ export function ChatInput({
     if (isListening) {
       recognitionRef.current?.stop();
       setIsListening(false);
+      setVoiceState('processing');
     }
     onSend(trimmed);
     setInput('');
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [input, disabled, isListening, isStreaming, onSend]);
+  }, [input, disabled, isListening, isStreaming, onSend, setVoiceState]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -159,14 +174,15 @@ export function ChatInput({
   };
 
   return (
-    <div className="space-y-1 rounded-2xl border border-white/10 bg-white/[0.03] p-2 transition-all focus-within:border-blue-500/40 focus-within:bg-white/[0.05]">
+    <div className="space-y-1 rounded-xl border border-white/[0.1] bg-[#0c131f] p-2 transition-colors focus-within:border-indigo-300/30 focus-within:bg-[#0e1623]">
       <div className="flex items-end gap-2">
       {onFileAttach && (
         <>
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9 shrink-0 rounded-xl text-muted-foreground/50 hover:text-foreground"
+            aria-label="Attach a file"
+            className="h-10 w-10 shrink-0 rounded-lg text-slate-500 hover:bg-white/[0.05] hover:text-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-300"
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled}
           >
@@ -189,14 +205,16 @@ export function ChatInput({
         placeholder={placeholder}
         disabled={disabled}
         rows={1}
-        className="min-h-[36px] flex-1 resize-none border-0 bg-transparent px-1 py-1.5 text-sm text-foreground placeholder:text-muted-foreground/40 focus-visible:ring-0 focus-visible:ring-offset-0"
+        className="min-h-10 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-sm leading-5 text-slate-100 placeholder:text-slate-500 focus-visible:ring-0 focus-visible:ring-offset-0"
       />
 
       {isStreaming ? (
         <Button
           variant="ghost"
           size="icon"
-          className="h-9 w-9 shrink-0 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300"
+          aria-label="Stop response"
+          title="Stop response"
+          className="h-10 w-10 shrink-0 rounded-lg bg-rose-400/10 text-rose-200 hover:bg-rose-400/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-rose-200"
           onClick={onStopStreaming}
         >
           <Square className="h-4 w-4" />
@@ -207,19 +225,19 @@ export function ChatInput({
             type="button"
             variant="ghost"
             size="icon"
-            className={`h-9 w-9 shrink-0 rounded-xl ${isListening ? 'text-red-400 hover:text-red-300' : 'text-muted-foreground/50 hover:text-foreground'}`}
+            className={`h-10 w-10 shrink-0 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-300 ${isListening ? 'text-rose-200 hover:bg-rose-400/10 hover:text-rose-100' : 'text-slate-500 hover:bg-white/[0.05] hover:text-slate-100'}`}
             onClick={toggleVoiceInput}
             disabled={disabled}
             aria-label={isListening ? 'Stop voice input' : 'Start voice input'}
             aria-pressed={isListening}
-            title="Use browser speech recognition"
+            title="Use browser speech recognition (not JARVIS transcription)"
           >
             {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
           </Button>
 
           <Button
             size="icon"
-            className="h-9 w-9 shrink-0 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:from-blue-600 hover:to-cyan-600 disabled:opacity-40"
+            className="h-10 w-10 shrink-0 rounded-lg bg-indigo-400 text-[#0a0e16] hover:bg-indigo-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-200 disabled:bg-white/10 disabled:text-slate-500"
             onClick={handleSubmit}
             disabled={!input.trim() || disabled}
             aria-label="Send message"

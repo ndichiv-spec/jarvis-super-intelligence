@@ -4,10 +4,10 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { NeuralThemeProvider } from "@/lib/neural-theme-engine";
 import { Toaster } from "@/components/ui/sonner";
-import { ConnectionBanner } from "@/components/connection-banner";
 import { AutonomousDashboardProvider } from "@/components/autonomous-dashboard-provider";
 import { MotionProvider } from "@/components/motion-provider";
 import { CopilotLauncher } from "@/components/copilot/copilot-launcher";
+import { RuntimeBridge } from "@/features/runtime/runtime-bridge";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -24,7 +24,6 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <ConnectionBanner />
         <AutonomousDashboardProvider>
           <ThemeProvider
             attribute="class"
@@ -35,6 +34,7 @@ export default function RootLayout({
             <NeuralThemeProvider>
               <MotionProvider>
                 {children}
+                <RuntimeBridge />
                 <CopilotLauncher />
                 <Toaster richColors position="top-right" />
               </MotionProvider>

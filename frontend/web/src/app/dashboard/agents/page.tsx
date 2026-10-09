@@ -18,8 +18,6 @@ import {
   Power,
   PowerOff,
   Activity,
-  Percent,
-  Timer,
   ListTodo,
   Users,
   Network,
@@ -27,14 +25,14 @@ import {
   Zap,
   RefreshCw,
 } from "lucide-react";
-import { format, formatDistanceToNow } from "date-fns";
+import { format, formatDistanceToNow, isValid, parseISO } from "date-fns";
 import { toast } from "sonner";
 
 import {
   jarvisAPI,
   type AgentTask,
   type TaskExecution,
-  type AgentStats,
+  type Agent,
   type SchedulerStatus,
   type ServiceTailoringStatus,
 } from "@/lib/api";
@@ -45,7 +43,6 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Progress } from "@/components/ui/progress";
 import {
   Dialog,
   DialogContent,
@@ -73,7 +70,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type SortField = "task_name" | "started_at" | "duration_ms" | "retries";
+type SortField = "task_name" | "started_at";
 type SortDirection = "asc" | "desc";
 
 interface TaskFormData {
@@ -104,27 +101,10 @@ interface CollabTask {
   result?: string;
 }
 
-interface CollabMetrics {
-  total_tasks: number;
-  completed: number;
-  agents_utilization: number;
-}
-
-const COLLAB_PATTERNS = [
-  { value: "sequential", label: "Sequential" },
-  { value: "parallel", label: "Parallel" },
-  { value: "competitive", label: "Competitive" },
-  { value: "hierarchical", label: "Hierarchical" },
-];
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const SCHEDULE_TYPES = [
-  { value: "interval", label: "Interval" },
-  { value: "cron", label: "Cron" },
-  { value: "once", label: "Once" },
-  { value: "event-driven", label: "Event-Driven" },
-];
+const SCHEDULE_TYPES = [{ value: "manual", label: "Manual" }];
 
 const PRIORITY_OPTIONS = [
   { value: "critical", label: "Critical" },
@@ -136,7 +116,7 @@ const PRIORITY_OPTIONS = [
 const INITIAL_FORM: TaskFormData = {
   name: "",
   description: "",
-  schedule_type: "interval",
+  schedule_type: "manual",
   schedule_value: "",
   priority: "normal",
   timeout: 300,
@@ -144,6 +124,43 @@ const INITIAL_FORM: TaskFormData = {
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function getErrorMessage(error: unknown, fallback = 'Unknown error'): string {
+  if (error instanceof Error) {
+    const status = getErrorStatus(error);
+    if (status === 401) return `Session expired: ${error.message}`;
+    if (status === 403) return `Permission denied: ${error.message}`;
+    if (status && status >= 500) return `Server error (${status}): ${error.message}`;
+    return error.message;
+  }
+  if (typeof error === 'string' && error.trim()) return error;
+  if (error && typeof error === 'object' && 'message' in error && typeof (error as { message?: unknown }).message === 'string') {
+    return (error as { message: string }).message;
+  }
+  return fallback;
+}
+
+function getErrorStatus(error: unknown): number | undefined {
+  return error && typeof error === 'object' && 'status' in error
+    ? Number((error as { status?: unknown }).status)
+    : undefined;
+}
+
+function AgentRequestFailure({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  const status = getErrorStatus(error);
+  const title = status === 401 ? 'Session expired' : status === 403 ? 'Permission denied' : status && status >= 500 ? `Server error (${status})` : 'Data unavailable';
+  const description = status === 401
+    ? 'Sign in again to load this data.'
+    : status === 403
+      ? 'Your account is not permitted to read this resource.'
+      : getErrorMessage(error, 'The service could not be reached.');
+  return (
+    <div role="alert" className="flex flex-col gap-3 rounded-md border border-destructive/40 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div><p className="font-medium">{title}</p><p className="text-sm text-muted-foreground">{description}</p></div>
+      <Button variant="outline" size="sm" onClick={onRetry} className="shrink-0"><RefreshCw className="mr-2 h-4 w-4" />Retry</Button>
+    </div>
+  );
+}
 
 function getPriorityColors(priority: string) {
   switch (priority) {
@@ -205,24 +222,19 @@ function getStatusBadge(status: string) {
   }
 }
 
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  const seconds = ms / 1000;
-  if (seconds < 60) return `${seconds.toFixed(1)}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainingSec = Math.floor(seconds % 60);
-  return `${minutes}m ${remainingSec}s`;
-}
-
-function formatScheduleDisplay(type: string, value: string): string {
+function formatScheduleDisplay(type: string, value?: string | null): string {
+  if (!value && type === 'manual') return 'Manual run';
+  if (!value) return 'No schedule configured';
   switch (type) {
-    case "interval":
+    case 'manual':
+      return 'Manual run';
+    case 'interval':
       return `Every ${value}`;
-    case "cron":
+    case 'cron':
       return `Cron: ${value}`;
-    case "once":
+    case 'once':
       return `Once: ${value}`;
-    case "event-driven":
+    case 'event-driven':
       return `On: ${value}`;
     default:
       return value;
@@ -236,13 +248,11 @@ function StatCard({
   value,
   icon: Icon,
   description,
-  progressValue,
 }: {
   title: string;
   value: string | number;
   icon: React.ElementType;
   description?: string;
-  progressValue?: number;
 }) {
   return (
     <motion.div
@@ -261,9 +271,6 @@ function StatCard({
           <div className="text-2xl font-bold">{value}</div>
           {description && (
             <p className="text-xs text-muted-foreground mt-1">{description}</p>
-          )}
-          {progressValue !== undefined && (
-            <Progress value={progressValue} className="mt-2 h-1" />
           )}
         </CardContent>
       </Card>
@@ -286,14 +293,15 @@ function TaskCard({
 }) {
   const [isRunning, setIsRunning] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const handleRun = async () => {
     setIsRunning(true);
     try {
       await onRun(task.id!);
       toast.success(`Task "${task.name}" triggered`);
-    } catch (error: any) {
-      toast.error(`Failed to run task: ${error.message}`);
+    } catch (error: unknown) {
+      toast.error(`Failed to run task: ${getErrorMessage(error)}`);
     } finally {
       setIsRunning(false);
     }
@@ -303,9 +311,10 @@ function TaskCard({
     setIsDeleting(true);
     try {
       await onDelete(task.id!);
+      setConfirmDelete(false);
       toast.success(`Task "${task.name}" deleted`);
-    } catch (error: any) {
-      toast.error(`Failed to delete task: ${error.message}`);
+    } catch (error: unknown) {
+      toast.error(`Failed to delete task: ${getErrorMessage(error)}`);
     } finally {
       setIsDeleting(false);
     }
@@ -354,6 +363,13 @@ function TaskCard({
           </div>
         </CardHeader>
         <CardContent className="pt-0 space-y-3">
+          {task.description && <p className="line-clamp-3 text-sm text-muted-foreground">{task.description}</p>}
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>Status: {task.status || (task.enabled ? 'enabled' : 'disabled')}</span>
+            {task.created_at && isValid(parseISO(task.created_at)) && (
+              <span>Created {formatDistanceToNow(parseISO(task.created_at), { addSuffix: true })}</span>
+            )}
+          </div>
           {/* Schedule display */}
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Clock className="h-3.5 w-3.5" />
@@ -363,7 +379,7 @@ function TaskCard({
           </div>
 
           {/* Last execution */}
-          {task.last_run_at ? (
+          {task.last_run_at && isValid(new Date(task.last_run_at)) ? (
             <div className="flex items-center gap-1.5 text-xs">
               <span className="text-muted-foreground">Last run:</span>
               <span className="text-foreground font-medium">
@@ -408,7 +424,8 @@ function TaskCard({
               variant="ghost"
               size="icon"
               className="h-8 w-8 text-muted-foreground hover:text-destructive"
-              onClick={handleDelete}
+              onClick={() => setConfirmDelete(true)}
+              aria-label={`Delete ${task.name}`}
               disabled={isDeleting}
             >
               {isDeleting ? (
@@ -420,11 +437,39 @@ function TaskCard({
           </div>
         </CardContent>
       </Card>
+      <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete task?</DialogTitle>
+            <DialogDescription>This permanently removes “{task.name}”. This action cannot be undone.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDelete(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Delete task
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 }
 
 // ─── Execution History Table ─────────────────────────────────────────────────
+
+function SortIcon({
+  field,
+  sortField,
+  sortDirection,
+}: {
+  field: SortField;
+  sortField: SortField;
+  sortDirection: SortDirection;
+}) {
+  if (sortField !== field) return <ArrowUpDown className="h-3.5 w-3.5 ml-1 inline" />;
+  if (sortDirection === "asc") return <ArrowUp className="h-3.5 w-3.5 ml-1 inline" />;
+  return <ArrowDown className="h-3.5 w-3.5 ml-1 inline" />;
+}
 
 function ExecutionHistoryTable({
   executions,
@@ -453,22 +498,10 @@ function ExecutionHistoryTable({
         case "started_at":
           comparison = new Date(a.started_at).getTime() - new Date(b.started_at).getTime();
           break;
-        case "duration_ms":
-          comparison = a.duration_ms - b.duration_ms;
-          break;
-        case "retries":
-          comparison = a.retries - b.retries;
-          break;
       }
       return sortDirection === "asc" ? comparison : -comparison;
     });
   }, [executions, sortField, sortDirection]);
-
-  const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) return <ArrowUpDown className="h-3.5 w-3.5 ml-1 inline" />;
-    if (sortDirection === "asc") return <ArrowUp className="h-3.5 w-3.5 ml-1 inline" />;
-    return <ArrowDown className="h-3.5 w-3.5 ml-1 inline" />;
-  };
 
   if (executions.length === 0) {
     return (
@@ -498,7 +531,7 @@ function ExecutionHistoryTable({
                 onClick={() => handleSort("task_name")}
               >
                 Task Name
-                <SortIcon field="task_name" />
+                <SortIcon field="task_name" sortField={sortField} sortDirection={sortDirection} />
               </TableHead>
               <TableHead>Status</TableHead>
               <TableHead
@@ -506,22 +539,10 @@ function ExecutionHistoryTable({
                 onClick={() => handleSort("started_at")}
               >
                 Started At
-                <SortIcon field="started_at" />
+                <SortIcon field="started_at" sortField={sortField} sortDirection={sortDirection} />
               </TableHead>
-              <TableHead
-                className="cursor-pointer select-none hover:text-foreground"
-                onClick={() => handleSort("duration_ms")}
-              >
-                Duration
-                <SortIcon field="duration_ms" />
-              </TableHead>
-              <TableHead
-                className="cursor-pointer select-none hover:text-foreground"
-                onClick={() => handleSort("retries")}
-              >
-                Retries
-                <SortIcon field="retries" />
-              </TableHead>
+              <TableHead>Completed</TableHead>
+              <TableHead>Provider / model</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -543,19 +564,13 @@ function ExecutionHistoryTable({
                     </Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {format(new Date(exec.started_at), "MMM d, h:mm:ss a")}
+                    {isValid(new Date(exec.started_at)) ? format(new Date(exec.started_at), "MMM d, h:mm:ss a") : "Timestamp unavailable"}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {formatDuration(exec.duration_ms)}
+                    {exec.completed_at && isValid(new Date(exec.completed_at)) ? format(new Date(exec.completed_at), "MMM d, h:mm:ss a") : "—"}
                   </TableCell>
-                  <TableCell>
-                    {exec.retries > 0 ? (
-                      <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-400 border-amber-500/30">
-                        {exec.retries}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">0</span>
-                    )}
+                  <TableCell className="text-muted-foreground">
+                    {[exec.provider, exec.model].filter(Boolean).join(" / ") || "Not reported"}
                   </TableCell>
                 </TableRow>
               );
@@ -591,7 +606,7 @@ function CreateTaskDialog({
       newErrors.name = "Task name must be at least 3 characters";
     }
 
-    if (!form.schedule_value.trim()) {
+    if (form.schedule_type !== 'manual' && !form.schedule_value.trim()) {
       newErrors.schedule_value = "Schedule value is required";
     }
 
@@ -622,8 +637,8 @@ function CreateTaskDialog({
       setErrors({});
       onOpenChange(false);
       toast.success(`Task "${form.name}" created successfully`);
-    } catch (error: any) {
-      toast.error(`Failed to create task: ${error.message}`);
+    } catch (error: unknown) {
+      toast.error(`Failed to create task: ${getErrorMessage(error)}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -708,20 +723,15 @@ function CreateTaskDialog({
             </div>
             <div className="space-y-2">
               <Label htmlFor="schedule-value">
-                Schedule Value <span className="text-red-400">*</span>
+                Schedule Value {form.schedule_type !== 'manual' && <span className="text-red-400">*</span>}
               </Label>
               <Input
                 id="schedule-value"
-                placeholder={
-                  form.schedule_type === "interval"
-                    ? "5 minutes"
-                    : form.schedule_type === "cron"
-                    ? "0 */6 * * *"
-                    : "2024-12-31 00:00"
-                }
+                placeholder={form.schedule_type === 'manual' ? 'Manual runs only; no recurrence configured' : 'Schedule value'}
                 value={form.schedule_value}
                 onChange={(e) => updateField("schedule_value", e.target.value)}
                 className={errors.schedule_value ? "border-red-500" : ""}
+                disabled={form.schedule_type === 'manual'}
               />
               {errors.schedule_value && (
                 <p className="text-xs text-red-400 flex items-center gap-1">
@@ -960,45 +970,43 @@ function AgentGraph({ agents }: { agents: CollabAgent[] }) {
 function AgentCollaboration({
   collabAgents,
   collabTasks,
-  collabMetrics,
+  collabAgentError,
+  collabTaskError,
   onExecute,
-  onSelfOrganize,
   onRefresh,
   loading,
 }: {
   collabAgents: CollabAgent[];
   collabTasks: CollabTask[];
-  collabMetrics: CollabMetrics | null;
+  collabAgentError: unknown;
+  collabTaskError: unknown;
   onExecute: (taskId: string) => void;
-  onSelfOrganize: (description: string) => void;
   onRefresh: () => void;
   loading: boolean;
 }) {
   const [activeCollabTab, setActiveCollabTab] = useState("agents");
-  const [selfOrganizeDesc, setSelfOrganizeDesc] = useState("");
 
   return (
     <>
       {/* Collaboration Stats */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard
-          title="Collab Tasks"
-          value={collabMetrics?.total_tasks || collabTasks.length}
+          title="Collaboration tasks"
+          value={collabTaskError ? "Unavailable" : collabTasks.length}
           icon={ListTodo}
-          description="Total collaboration tasks"
+          description="Tasks returned for this account"
         />
         <StatCard
           title="Completed"
-          value={collabMetrics?.completed || 0}
+          value={collabTaskError ? "Unavailable" : collabTasks.filter((task) => task.status === "completed").length}
           icon={CheckCircle2}
-          description="Completed tasks"
+          description="Completed tasks in the returned list"
         />
         <StatCard
-          title="Agent Utilization"
-          value={`${(collabMetrics?.agents_utilization ?? 0).toFixed(0)}%`}
+          title="Agents"
+          value={collabAgentError ? "Unavailable" : collabAgents.length}
           icon={Users}
-          description="Resource utilization"
-          progressValue={collabMetrics?.agents_utilization ?? 0}
+          description="Registered collaboration agents"
         />
       </div>
 
@@ -1038,7 +1046,9 @@ function AgentCollaboration({
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {collabAgents.length === 0 ? (
+                {collabAgentError ? (
+                  <AgentRequestFailure error={collabAgentError} onRetry={onRefresh} />
+                ) : collabAgents.length === 0 ? (
                   <div className="text-center py-8">
                     <Users className="h-10 w-10 text-muted-foreground/30 mx-auto mb-2" />
                     <p className="text-sm text-muted-foreground">
@@ -1097,23 +1107,18 @@ function AgentCollaboration({
 
         {/* Collaboration Tasks Tab */}
         <TabsContent value="tasks" className="space-y-4">
-          {collabTasks.length === 0 ? (
+          {collabTaskError ? (
+            <AgentRequestFailure error={collabTaskError} onRetry={onRefresh} />
+          ) : collabTasks.length === 0 ? (
             <Card className="bg-card/50 border-border backdrop-blur-sm">
               <CardContent className="flex flex-col items-center justify-center py-12 text-center">
                 <Share2 className="h-12 w-12 text-muted-foreground/30 mb-3" />
                 <h3 className="text-lg font-medium mb-1">
                   No collaboration tasks
                 </h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Create a collaboration task to get multi-agent workflows started.
+                <p className="text-sm text-muted-foreground">
+                  No collaboration tasks were returned for this account.
                 </p>
-                <Button
-                  onClick={() => setActiveCollabTab("self-organize")}
-                  className="gap-1.5"
-                >
-                  <Plus className="h-4 w-4" />
-                  Create Task
-                </Button>
               </CardContent>
             </Card>
           ) : (
@@ -1184,11 +1189,10 @@ function AgentCollaboration({
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Zap className="h-5 w-5 text-amber-400" />
-                Self-Organize Task
+                Automatic planning
               </CardTitle>
               <CardDescription>
-                Let JARVIS automatically assign agents to a task based on
-                the task description and collaboration patterns.
+                The backend reports automatic planning is not configured. No task can be submitted here.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1198,18 +1202,19 @@ function AgentCollaboration({
                 </Label>
                 <Textarea
                   id="self-organize-desc"
-                  value={selfOrganizeDesc}
-                  onChange={(e) => setSelfOrganizeDesc(e.target.value)}
-                  placeholder="e.g., 'Analyze Q3 financial data and generate a summary report'"
+                  value=""
+                  disabled
+                  placeholder="Unavailable while automatic planning is not configured"
                   rows={3}
                 />
               </div>
+              {(
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+                  Automatic planning is not configured in this backend. This action is disabled because the endpoint returns “not configured”.
+                </div>
+              )}
               <Button
-                onClick={() => {
-                  onSelfOrganize(selfOrganizeDesc);
-                  setSelfOrganizeDesc("");
-                }}
-                disabled={!selfOrganizeDesc.trim()}
+                disabled
                 className="gap-2"
               >
                 <Zap className="h-4 w-4" />
@@ -1227,97 +1232,93 @@ function AgentCollaboration({
 
 export default function AgentsPage() {
   const [tasks, setTasks] = useState<AgentTask[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [executions, setExecutions] = useState<TaskExecution[]>([]);
-  const [stats, setStats] = useState<AgentStats>({
-    total_tasks: 0,
-    active_tasks: 0,
-    success_rate_percent: 0,
-    avg_execution_time_ms: 0,
-  });
-  const [schedulerStatus, setSchedulerStatus] = useState<SchedulerStatus>({
-    running: false,
-    total_scheduled: 0,
-  });
-  const [serviceTailoring, setServiceTailoring] = useState<ServiceTailoringStatus>({
-    success: true,
-    changed: false,
-    sync_count: 0,
-    changes_detected: 0,
-    current_profile: {
-      configured_service_count: 0,
-      active_capabilities: [],
-      configured_services: {},
-    },
-  });
+  const [schedulerStatus, setSchedulerStatus] = useState<SchedulerStatus | null>(null);
+  const [serviceTailoring, setServiceTailoring] = useState<ServiceTailoringStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [collabLoading, setCollabLoading] = useState(true);
+  const [dataErrors, setDataErrors] = useState<Partial<Record<'agents' | 'tasks' | 'scheduler' | 'executions' | 'tailoring', unknown>>>({});
+  const [collabErrors, setCollabErrors] = useState<Partial<Record<'agents' | 'tasks', unknown>>>({});
   const [dialogOpen, setDialogOpen] = useState(false);
   const [collabAgents, setCollabAgents] = useState<CollabAgent[]>([]);
   const [collabTasks, setCollabTasks] = useState<CollabTask[]>([]);
-  const [collabMetrics, setCollabMetrics] = useState<CollabMetrics | null>(null);
-  const [activeTab, setActiveTab] = useState("tasks");
+  const [activeTab, setActiveTab] = useState('tasks');
+  const [taskSearch, setTaskSearch] = useState('');
+  const [taskStatusFilter, setTaskStatusFilter] = useState('all');
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const visibleTasks = useMemo(() => tasks.filter((task) => {
+    const query = taskSearch.trim().toLowerCase();
+    return (!query || `${task.name} ${task.description || ''}`.toLowerCase().includes(query))
+      && (taskStatusFilter === 'all' || task.status === taskStatusFilter);
+  }), [tasks, taskSearch, taskStatusFilter]);
 
   // ── Fetch all data ──────────────────────────────────────────────────────
 
   const fetchData = useCallback(async () => {
-    try {
-      const [agentsRes, statsRes, schedulerRes, executionsRes, tailoringRes] =
-        await Promise.allSettled([
-          jarvisAPI.getAgents(),
-          jarvisAPI.getAgentStats(),
-          jarvisAPI.getSchedulerStatus(),
-          jarvisAPI.getTaskExecutions(20),
-          jarvisAPI.getServiceTailoringStatus(),
-        ]);
-
-      if (agentsRes.status === "fulfilled") {
-        setTasks(agentsRes.value.tasks || []);
-      } else {
-        // Fallback: use demo data if API is not available
-        setTasks([]);
-      }
-
-      if (statsRes.status === "fulfilled") {
-        setStats(statsRes.value);
-      }
-
-      if (schedulerRes.status === "fulfilled") {
-        setSchedulerStatus(schedulerRes.value);
-      }
-
-      if (executionsRes.status === "fulfilled") {
-        setExecutions(executionsRes.value.executions || []);
-      }
-
-      if (tailoringRes.status === "fulfilled") {
-        setServiceTailoring(tailoringRes.value);
-      }
-    } catch (error) {
-      console.error("Failed to fetch agents data:", error);
-    } finally {
-      setLoading(false);
+    const [agentsRes, tasksRes, schedulerRes, executionsRes, tailoringRes] = await Promise.allSettled([
+      jarvisAPI.getAgents(),
+      jarvisAPI.getAgentTasks(50),
+      jarvisAPI.getSchedulerStatus(),
+      jarvisAPI.getTaskExecutions(20),
+      jarvisAPI.getServiceTailoringStatus(),
+    ]);
+    const errors: Partial<Record<'agents' | 'tasks' | 'scheduler' | 'executions' | 'tailoring', unknown>> = {};
+    if (agentsRes.status === 'fulfilled') {
+      setAgents(agentsRes.value.agents ?? []);
+    } else {
+      setAgents([]);
+      errors.agents = agentsRes.reason;
     }
+    if (tasksRes.status === 'fulfilled') setTasks(tasksRes.value.tasks ?? []);
+    else {
+      setTasks([]);
+      errors.tasks = tasksRes.reason;
+    }
+    if (schedulerRes.status === 'fulfilled') setSchedulerStatus(schedulerRes.value);
+    else {
+      setSchedulerStatus(null);
+      errors.scheduler = schedulerRes.reason;
+    }
+    if (executionsRes.status === 'fulfilled') setExecutions(executionsRes.value.executions ?? []);
+    else {
+      setExecutions([]);
+      errors.executions = executionsRes.reason;
+    }
+    if (tailoringRes.status === 'fulfilled') setServiceTailoring(tailoringRes.value);
+    else {
+      setServiceTailoring(null);
+      errors.tailoring = tailoringRes.reason;
+    }
+    setDataErrors(errors);
+    setLoading(false);
   }, []);
 
   const fetchCollabData = useCallback(async () => {
-    const [agentsRes, tasksRes, metricsRes] = await Promise.allSettled([
+    setCollabLoading(true);
+    const [agentsRes, tasksRes] = await Promise.allSettled([
       jarvisAPI.getCollaborationAgents(),
-      jarvisAPI.getCollaborationTasks("all"),
-      jarvisAPI.getCollaborationMetrics(),
+      jarvisAPI.getCollaborationTasks(),
     ]);
-
+    const errors: Partial<Record<'agents' | 'tasks', unknown>> = {};
     if (agentsRes.status === "fulfilled") {
       setCollabAgents(agentsRes.value.agents || []);
+    } else {
+      setCollabAgents([]);
+      errors.agents = agentsRes.reason;
     }
     if (tasksRes.status === "fulfilled") {
       setCollabTasks(tasksRes.value.tasks || []);
+    } else {
+      setCollabTasks([]);
+      errors.tasks = tasksRes.reason;
     }
-    if (metricsRes.status === "fulfilled") {
-      setCollabMetrics(metricsRes.value);
-    }
+    setCollabErrors(errors);
+    setCollabLoading(false);
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData();
   }, [fetchData]);
 
@@ -1333,6 +1334,7 @@ export default function AgentsPage() {
 
   // Initial load of collaboration data
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchCollabData();
   }, [fetchCollabData]);
 
@@ -1342,8 +1344,8 @@ export default function AgentsPage() {
     await jarvisAPI.registerCustomTask({
       name: formData.name,
       description: formData.description,
-      schedule_type: formData.schedule_type,
-      schedule_value: formData.schedule_value,
+      schedule_type: 'manual',
+      schedule_value: null,
       priority: formData.priority,
       timeout: formData.timeout,
       max_retries: formData.max_retries,
@@ -1358,8 +1360,8 @@ export default function AgentsPage() {
         prev.map((t) => (t.id === taskId ? { ...t, enabled } : t))
       );
       toast.success(`Task ${enabled ? "enabled" : "disabled"}`);
-    } catch (error: any) {
-      toast.error(`Failed to toggle task: ${error.message}`);
+    } catch (error: unknown) {
+      toast.error(`Failed to toggle task: ${getErrorMessage(error)}`);
     }
   };
 
@@ -1376,12 +1378,16 @@ export default function AgentsPage() {
 
   const handleToggleScheduler = async () => {
     try {
+      if (!schedulerStatus || schedulerStatus.status === 'NOT_CONFIGURED') {
+        toast.error('The legacy scheduler is not configured for this environment.');
+        return;
+      }
       const newRunning = !schedulerStatus.running;
       await jarvisAPI.toggleScheduler(newRunning);
-      setSchedulerStatus((prev) => ({ ...prev, running: newRunning }));
-      toast.success(`Scheduler ${newRunning ? "started" : "stopped"}`);
-    } catch (error: any) {
-      toast.error(`Failed to toggle scheduler: ${error.message}`);
+      setSchedulerStatus((prev) => prev ? ({ ...prev, running: newRunning }) : prev);
+      toast.success(`Scheduler ${newRunning ? 'started' : 'stopped'}`);
+    } catch (error: unknown) {
+      toast.error(`Failed to toggle scheduler: ${getErrorMessage(error)}`);
     }
   };
 
@@ -1390,20 +1396,8 @@ export default function AgentsPage() {
       await jarvisAPI.executeCollaborationTask(taskId);
       await fetchCollabData();
       toast.success("Collaboration task executed");
-    } catch (error: any) {
-      toast.error(`Failed to execute task: ${error.message}`);
-    }
-  };
-
-  const handleSelfOrganize = async (description: string) => {
-    try {
-      const result = await jarvisAPI.selfOrganizeTask(description);
-      toast.success(
-        `Self-organized: ${result.assigned_agents?.length || 0} agents assigned`
-      );
-      await fetchCollabData();
-    } catch (error: any) {
-      toast.error(`Failed to self-organize: ${error.message}`);
+    } catch (error: unknown) {
+      toast.error(`Failed to execute task: ${getErrorMessage(error)}`);
     }
   };
 
@@ -1429,10 +1423,10 @@ export default function AgentsPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
-              Autonomous Agents
+              Agents & tasks
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Manage scheduled tasks and autonomous workflows
+              Inspect registered agents and run your own manual tasks
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -1456,20 +1450,24 @@ export default function AgentsPage() {
 
             {/* Scheduler toggle */}
             <div className="flex items-center gap-2 rounded-lg border border-border bg-card/50 px-3 py-2 backdrop-blur-sm">
-              {schedulerStatus.running ? (
+              {schedulerStatus?.running ? (
                 <Power className="h-4 w-4 text-emerald-400" />
               ) : (
                 <PowerOff className="h-4 w-4 text-muted-foreground" />
               )}
               <span className="text-xs font-medium">
-                Scheduler {schedulerStatus.running ? "Running" : "Stopped"}
+                {schedulerStatus?.status === 'NOT_CONFIGURED'
+                  ? 'Scheduler not configured'
+                  : schedulerStatus
+                    ? `Scheduler ${schedulerStatus.running ? 'running' : 'stopped'}`
+                    : 'Scheduler status unavailable'}
               </span>
               <span
                 className={`relative flex h-2 w-2 rounded-full ${
-                  schedulerStatus.running ? "bg-emerald-500" : "bg-muted-foreground/40"
+                  schedulerStatus?.running ? "bg-emerald-500" : "bg-muted-foreground/40"
                 }`}
               >
-                {schedulerStatus.running && (
+                {schedulerStatus?.running && (
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                 )}
               </span>
@@ -1478,8 +1476,9 @@ export default function AgentsPage() {
                 size="sm"
                 className="h-6 px-2 text-xs"
                 onClick={handleToggleScheduler}
+                disabled={!schedulerStatus || schedulerStatus.status === 'NOT_CONFIGURED' || Boolean(dataErrors.scheduler)}
               >
-                {schedulerStatus.running ? "Stop" : "Start"}
+                {!schedulerStatus || schedulerStatus.status === 'NOT_CONFIGURED' ? 'Unavailable' : schedulerStatus.running ? 'Stop' : 'Start'}
               </Button>
             </div>
 
@@ -1490,12 +1489,14 @@ export default function AgentsPage() {
           </div>
         </div>
 
+        {dataErrors.scheduler !== undefined && <AgentRequestFailure error={dataErrors.scheduler} onRetry={() => void fetchData()} />}
+
         {/* ── Tab Navigation ── */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2 mb-4">
             <TabsTrigger value="tasks" className="gap-2">
               <ListTodo className="h-4 w-4" />
-              Scheduled Tasks
+              Manual task queue
             </TabsTrigger>
             <TabsTrigger value="collaboration" className="gap-2">
               <Users className="h-4 w-4" />
@@ -1506,56 +1507,36 @@ export default function AgentsPage() {
 
         {/* ── Stats Cards ─────────────────────────────────────────────── */}
         <TabsContent value="tasks" className="space-y-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            title="Total Tasks"
-            value={stats.total_tasks || tasks.length}
-            icon={ListTodo}
-            description="Registered tasks"
-          />
-          <StatCard
-            title="Active Tasks"
-            value={stats.active_tasks || tasks.filter((t) => t.enabled).length}
-            icon={Activity}
-            description="Currently enabled"
-          />
-          <StatCard
-            title="Success Rate"
-            value={`${(stats?.success_rate_percent ?? 0).toFixed(1)}%`}
-            icon={Percent}
-            description="Last 24 hours"
-            progressValue={stats?.success_rate_percent ?? 0}
-          />
-          <StatCard
-            title="Avg Execution Time"
-            value={
-              stats?.avg_execution_time_ms > 0
-                ? formatDuration(stats?.avg_execution_time_ms ?? 0)
-                : "--"
-            }
-            icon={Timer}
-            description="Mean duration"
-          />
-        </div>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatCard title="Registered agents" value={dataErrors.agents ? 'Unavailable' : agents.length} icon={Bot} description="From the agent registry" />
+            <StatCard title="Active agents" value={dataErrors.agents ? 'Unavailable' : agents.filter((agent) => agent.status === 'active').length} icon={Activity} description="Registry status = active" />
+            <StatCard title="Tasks returned" value={dataErrors.tasks ? 'Unavailable' : tasks.length} icon={ListTodo} description="Owned manual tasks in this response" />
+            <StatCard title="Enabled tasks" value={dataErrors.tasks ? 'Unavailable' : tasks.filter((task) => task.enabled).length} icon={Power} description="Task records marked enabled" />
+          </div>
 
         <Card className="bg-card/50 border-border backdrop-blur-sm">
           <CardHeader>
-            <CardTitle className="text-lg">Service Tailoring Sync</CardTitle>
+            <CardTitle className="text-lg">Service tailoring</CardTitle>
             <CardDescription>
-              Autonomous profile refresh for configured backend services
+              Backend-reported service profile configuration
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {dataErrors.tailoring ? (
+              <AgentRequestFailure error={dataErrors.tailoring} onRetry={() => void fetchData()} />
+            ) : serviceTailoring?.status === 'NOT_CONFIGURED' ? (
+              <p className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+                Not configured by the backend. Sync counts, timestamps, and service profile are not available.
+              </p>
+            ) : !serviceTailoring ? (
+              <p className="text-sm text-muted-foreground">Service-tailoring status has not been reported.</p>
+            ) : (
+              <>
             <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              <span>
-                Last sync:{" "}
-                {serviceTailoring.last_synced_at
-                  ? formatDistanceToNow(new Date(serviceTailoring.last_synced_at), { addSuffix: true })
-                  : "never"}
-              </span>
-              <span>Changes detected: {serviceTailoring.changes_detected}</span>
-              <span>Syncs: {serviceTailoring.sync_count}</span>
-              {schedulerStatus.single_worker_required && (
+              {serviceTailoring.last_synced_at && isValid(new Date(serviceTailoring.last_synced_at)) && <span>Last sync: {formatDistanceToNow(new Date(serviceTailoring.last_synced_at), { addSuffix: true })}</span>}
+              {serviceTailoring.changes_detected !== undefined && <span>Changes detected: {serviceTailoring.changes_detected}</span>}
+              {serviceTailoring.sync_count !== undefined && <span>Syncs: {serviceTailoring.sync_count}</span>}
+              {schedulerStatus?.single_worker_required && (
                 <Badge variant="outline" className="text-amber-400 border-amber-500/30 bg-amber-500/10">
                   Single backend worker required for recurring runs
                 </Badge>
@@ -1569,7 +1550,7 @@ export default function AgentsPage() {
                   </Badge>
                 ))
               ) : (
-                <span className="text-sm text-muted-foreground">No configured services detected yet.</span>
+                <span className="text-sm text-muted-foreground">No configured services were reported.</span>
               )}
             </div>
             {(serviceTailoring.current_profile?.active_capabilities || []).length > 0 && (
@@ -1581,19 +1562,69 @@ export default function AgentsPage() {
                 ))}
               </div>
             )}
+              </>
+            )}
           </CardContent>
         </Card>
 
+        <section aria-labelledby="agent-roster-heading" className="space-y-3">
+          <div className="flex items-baseline justify-between">
+            <h2 id="agent-roster-heading" className="text-lg font-semibold">Agent registry</h2>
+            <span className="text-sm text-muted-foreground">Capabilities and statuses from the registry response</span>
+          </div>
+          {dataErrors.agents ? <AgentRequestFailure error={dataErrors.agents} onRetry={() => void fetchData()} /> : agents.length === 0 ? (
+            <Card><CardContent className="py-6 text-sm text-muted-foreground">No agents were returned by the registry.</CardContent></Card>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {agents.map((agent) => (
+                <Card key={agent.id}>
+                  <CardContent className="flex items-start justify-between gap-3 p-4">
+                    <div className="min-w-0">
+                      <p className="font-medium">{agent.name || 'Unnamed agent'}</p>
+                      <p className="text-sm text-muted-foreground">{agent.role || 'Role not reported'}</p>
+                      <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{agent.id}</p>
+                      {agent.capabilities && agent.capabilities.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {agent.capabilities.map((capability) => <Badge key={capability} variant="secondary" className="text-xs">{capability}</Badge>)}
+                        </div>
+                      )}
+                    </div>
+                    <Badge variant="outline">{agent.status || 'unknown'}</Badge>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </section>
+
         {/* ── Task Cards Grid ─────────────────────────────────────────── */}
         <div>
-          <h2 className="text-lg font-semibold mb-3">Scheduled Tasks</h2>
-          {tasks.length === 0 ? (
+          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">Task queue</h2>
+              <p className="text-sm text-muted-foreground">Filters apply to the latest task response; recurring scheduling is not configured.</p>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(12rem,1fr)_10rem]">
+              <Input aria-label="Search tasks" placeholder="Search name or description" value={taskSearch} onChange={(event) => setTaskSearch(event.target.value)} />
+              <Select value={taskStatusFilter} onValueChange={setTaskStatusFilter}>
+                <SelectTrigger aria-label="Filter tasks by status"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="running">Running</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="failed">Failed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          {dataErrors.tasks ? <AgentRequestFailure error={dataErrors.tasks} onRetry={() => void fetchData()} /> : tasks.length === 0 ? (
             <Card className="bg-card/50 border-border backdrop-blur-sm">
               <CardContent className="flex flex-col items-center justify-center py-12 text-center">
                 <Bot className="h-12 w-12 text-muted-foreground/40 mb-3" />
                 <h3 className="text-lg font-medium mb-1">No tasks yet</h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Create your first autonomous task to get started.
+                  Create a manual task to add it to your queue.
                 </p>
                 <Button onClick={() => setDialogOpen(true)} className="gap-1.5">
                   <Plus className="h-4 w-4" />
@@ -1601,10 +1632,12 @@ export default function AgentsPage() {
                 </Button>
               </CardContent>
             </Card>
+          ) : visibleTasks.length === 0 ? (
+            <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">No tasks in this response match those filters.</CardContent></Card>
           ) : (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
               <AnimatePresence>
-                {tasks.map((task) => (
+                {visibleTasks.map((task) => (
                   <TaskCard
                     key={task.id || task.name}
                     task={task}
@@ -1619,7 +1652,9 @@ export default function AgentsPage() {
         </div>
 
         {/* ── Execution History ───────────────────────────────────────── */}
-        <ExecutionHistoryTable executions={executions} />
+        {dataErrors.executions
+          ? <AgentRequestFailure error={dataErrors.executions} onRetry={() => void fetchData()} />
+          : <ExecutionHistoryTable executions={executions} />}
         </TabsContent>
 
         {/* ── Agent Collaboration Tab ─────────────────────────────────── */}
@@ -1627,11 +1662,11 @@ export default function AgentsPage() {
           <AgentCollaboration
             collabAgents={collabAgents}
             collabTasks={collabTasks}
-            collabMetrics={collabMetrics}
             onExecute={handleExecuteCollabTask}
-            onSelfOrganize={handleSelfOrganize}
             onRefresh={fetchCollabData}
-            loading={loading}
+            loading={collabLoading}
+            collabAgentError={collabErrors.agents}
+            collabTaskError={collabErrors.tasks}
           />
         </TabsContent>
       </Tabs>

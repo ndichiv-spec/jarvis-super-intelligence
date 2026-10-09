@@ -43,14 +43,14 @@ export interface ActivityEvent {
   metadata?: Record<string, unknown>;
 }
 
-/** Provider status summary returned by the control/status endpoint. */
+/** Provider state returned by the integration capability endpoint. */
 export interface ProviderStatus {
   provider: string;
   display_name: string;
   connected: boolean;
   status: string;
   capabilities: string[];
-  model_count: number;
+  model_count?: number;
   detail?: string;
   last_tested?: string;
   expires_at?: string;

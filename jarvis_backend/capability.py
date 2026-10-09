@@ -41,17 +41,17 @@ This is the orchestration layer described in the JARVIS architecture:
 from __future__ import annotations
 
 import asyncio
-import uuid
-import time
 import json
 import threading
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
-from enum import Enum
-from typing import Any, Dict, List, Optional, Callable, Awaitable, AsyncIterator
+import time
+import uuid
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
-
+from copy import deepcopy
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from enum import Enum
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional
 
 # ============================================================================
 # STATUS ENUMERATION (truthful, never fake)
@@ -97,6 +97,7 @@ class Capability(ABC):
     name: str = "abstract"
     version: str = "1.0.0"
     category: str = "abstract"
+    sensitive: bool = False
 
     def __init__(self):
         self._status: CapabilityStatus = CapabilityStatus.UNAVAILABLE
@@ -230,6 +231,7 @@ class ExecutionContext:
     permissions: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
     timeout_seconds: float = 30.0
+    execution_id: str = field(default_factory=lambda: f"exec-{uuid.uuid4()}")
 
     def __post_init__(self):
         if not self.correlation_id:
@@ -273,6 +275,7 @@ class CapabilityEvent:
     status: str = "started"
     payload: Dict[str, Any] = field(default_factory=dict)
     metrics: Dict[str, Any] = field(default_factory=dict)
+    execution_id: str = ""
 
 
 class EventBus:
@@ -308,6 +311,43 @@ class EventBus:
             self._events.append(event)
             if len(self._events) > self._max_events:
                 self._events = self._events[-self._max_events:]
+
+        if (
+            event.user_id
+            and event.session_id
+            and event.event_type.endswith((
+                ".execution.started",
+                ".execution.completed",
+                ".execution.failed",
+            ))
+        ):
+            from .event_fabric import Event, get_event_bus
+
+            suffix = event.event_type.rsplit(".", 1)[-1]
+            if suffix == "completed" and event.status in {"failed", "error"}:
+                suffix = "failed"
+            event_type = (
+                "tool.execution." + suffix
+                if event.capability == "tool"
+                else "capability.execution." + suffix
+            )
+            payload = {"execution_id": event.execution_id} if event.execution_id else {}
+            latency = event.metrics.get("latency_ms")
+            if isinstance(latency, (int, float)):
+                payload["latency_ms"] = latency
+            get_event_bus().emit(
+                event_type=event_type,
+                event=Event.create(
+                    event_type=event_type,
+                    source="capability_runtime",
+                    capability=event.capability,
+                    correlation_id=event.correlation_id,
+                    session_id=event.session_id,
+                    user_id=event.user_id,
+                    status=event.status,
+                    payload=payload,
+                ),
+            )
 
         # Notify sync subscribers
         for cb in self._subscribers.get('*', []):
@@ -383,6 +423,43 @@ class CapabilityRegistry:
         with self._lock:
             if name in self._capabilities:
                 del self._capabilities[name]
+                self._metadata.pop(name, None)
+
+    def register_presentation_binding(self, name: str, binding: Any) -> None:
+        """Attach validated presentation metadata to an existing capability."""
+        with self._lock:
+            if name not in self._capabilities:
+                raise KeyError(f"Cannot attach presentation metadata to unknown capability: {name}")
+            from .presentation.schemas import PresentationCapabilityBinding
+
+            validated = PresentationCapabilityBinding.model_validate(binding)
+            self._metadata.setdefault(name, {})["presentation"] = validated.model_dump(
+                mode="json",
+                by_alias=True,
+            )
+
+    def register_output_contract(self, name: str, outputs: list[Any]) -> None:
+        """Attach validated output declarations to an existing capability."""
+        with self._lock:
+            if name not in self._capabilities:
+                raise KeyError(f"Cannot attach outputs to unknown capability: {name}")
+            from .presentation.schemas import CapabilityOutput
+
+            validated = [CapabilityOutput.model_validate(output) for output in outputs]
+            if not validated:
+                raise ValueError("Capability output contracts must declare at least one output.")
+            output_ids = [output.id for output in validated]
+            if len(output_ids) != len(set(output_ids)):
+                raise ValueError("Capability output contract identifiers must be unique.")
+            self._metadata.setdefault(name, {})["outputs"] = [
+                output.model_dump(mode="json", by_alias=True)
+                for output in validated
+            ]
+
+    def get_metadata(self, name: str) -> Dict[str, Any]:
+        """Return a copy of metadata owned by the registered capability."""
+        with self._lock:
+            return deepcopy(self._metadata.get(name, {}))
 
     def get(self, name: str) -> Optional[Capability]:
         """Get a capability by name."""
@@ -470,6 +547,7 @@ class Orchestrator:
                 error_type="NOT_FOUND",
                 correlation_id=context.correlation_id,
             )
+        sensitive = bool(cap.sensitive)
 
         # Capabilities that can probe an individual action should avoid
         # blocking execution on unrelated tools' health checks.
@@ -497,10 +575,15 @@ class Orchestrator:
             capability=capability_name,
             source='orchestrator',
             correlation_id=context.correlation_id,
+            execution_id=context.execution_id,
             session_id=context.session_id,
             user_id=context.user_id,
             status='started',
-            payload={'request': request},
+            payload=(
+                {'sensitive': True, 'request_redacted': True}
+                if sensitive
+                else {'request': request}
+            ),
         ))
 
         start_time = time.time()
@@ -564,20 +647,21 @@ class Orchestrator:
                 span.set_attribute("capability.error", result.error[:200])
 
             # LangSmith trace (extends OTel with prompt tracing + cost attribution)
-            try:
-                from .langsmith_integration import get_langsmith_tracer
-                ls_tracer = get_langsmith_tracer()
-                ls_tracer.record_capability_execution(
-                    capability=capability_name,
-                    action=request.get('action', 'execute'),
-                    request=request,
-                    result=result.to_dict(),
-                    latency_ms=result.latency_ms,
-                    correlation_id=context.correlation_id,
-                    user_id=context.user_id,
-                )
-            except Exception:
-                pass  # LangSmith is non-blocking — never break capability execution
+            if not sensitive:
+                try:
+                    from .langsmith_integration import get_langsmith_tracer
+                    ls_tracer = get_langsmith_tracer()
+                    ls_tracer.record_capability_execution(
+                        capability=capability_name,
+                        action=request.get('action', 'execute'),
+                        request=request,
+                        result=result.to_dict(),
+                        latency_ms=result.latency_ms,
+                        correlation_id=context.correlation_id,
+                        user_id=context.user_id,
+                    )
+                except Exception:
+                    pass  # LangSmith is non-blocking — never break capability execution
 
         # Emit completion event
         await self.registry.event_bus.emit_async(CapabilityEvent(
@@ -585,10 +669,22 @@ class Orchestrator:
             capability=capability_name,
             source='orchestrator',
             correlation_id=context.correlation_id,
+            execution_id=context.execution_id,
             session_id=context.session_id,
             user_id=context.user_id,
             status='completed' if result.success else 'failed',
-            payload=result.to_dict(),
+            payload=(
+                {
+                    'success': result.success,
+                    'error_type': result.error_type,
+                    'latency_ms': result.latency_ms,
+                    'correlation_id': result.correlation_id,
+                    'sensitive': True,
+                    'result_redacted': True,
+                }
+                if sensitive
+                else result.to_dict()
+            ),
         ))
 
         return result

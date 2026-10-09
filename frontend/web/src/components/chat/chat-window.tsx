@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import {
-  Bot,
+  Activity,
   RefreshCw,
   AlertTriangle,
   Loader2,
@@ -13,7 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { ChatMessageBubble } from './chat-message';
 import { ChatInput } from './chat-input';
 import { SessionList } from './session-list';
-import { useChatStore } from '@/features/chat/store';
+import { isCurrentLocationRequest, useChatStore } from '@/features/chat/store';
 import { newClientMessageId } from '@/features/chat/api';
 import type { ChatMessage, ProviderInfo } from '@/features/chat/types';
 import { detectAIMood, useNeuralTheme } from '@/lib/neural-theme-engine';
@@ -83,7 +83,7 @@ export function ChatWindow({ className = '', showSidebar = true }: ChatWindowPro
   }, [loadSessions, loadModelCatalog]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
   }, [messages, streamingContent]);
 
   useEffect(() => {
@@ -98,7 +98,7 @@ export function ChatWindow({ className = '', showSidebar = true }: ChatWindowPro
 
   const handleSend = useCallback(
     (content: string) => {
-      if (useStreaming) {
+      if (useStreaming && !isCurrentLocationRequest(content)) {
         sendStreamMessage(content);
       } else {
         sendMessage(content);
@@ -120,7 +120,7 @@ export function ChatWindow({ className = '', showSidebar = true }: ChatWindowPro
       messages: messages.slice(0, retryStartIndex),
       error: null,
     });
-    if (useStreaming) {
+    if (useStreaming && !isCurrentLocationRequest(retryableMessage.content)) {
       sendStreamMessage(retryableMessage.content, clientMessageId);
     } else {
       sendMessage(retryableMessage.content, clientMessageId);
@@ -131,6 +131,38 @@ export function ChatWindow({ className = '', showSidebar = true }: ChatWindowPro
     /failed to fetch|fetch failed|network(?:error| request failed)|load failed/i.test(error ?? '');
   const isServiceError = /(?:status|http)\s*(?:code\s*)?5\d{2}|service unavailable|bad gateway|gateway timeout/i
     .test(error ?? '');
+  const hasUsableProvider = modelCatalog !== null && modelCatalog.providers.some(
+    (provider) => provider.available || provider.authorized || provider.configured,
+  );
+  const isRoutingLoading = modelCatalog === null;
+  const isChatReady = !isRoutingLoading && hasUsableProvider;
+  const friendlyError = error
+    ? (() => {
+        const normalized = error.toLowerCase();
+        if (/signal is aborted|signal was aborted|aborted without reason|abort.*reason/i.test(normalized)) {
+          return {
+            title: 'The request was interrupted before a response arrived',
+            detail: 'Retry the message or refresh the provider list. The backend is reachable, but the request did not complete.',
+          };
+        }
+        if (isNetworkUnavailable) {
+          return {
+            title: 'Unable to reach the JARVIS chat service',
+            detail: 'The message was not delivered. Check your connection or backend status, then retry.',
+          };
+        }
+        if (isServiceError) {
+          return {
+            title: 'The JARVIS chat service returned an error',
+            detail: 'The service responded but did not complete the request. Retry in a moment.',
+          };
+        }
+        return {
+          title: 'JARVIS could not complete that request',
+          detail: error,
+        };
+      })()
+    : null;
 
   // Show streaming content as a temporary message
   const displayMessages: ChatMessage[] = isStreaming && streamingContent
@@ -176,7 +208,7 @@ export function ChatWindow({ className = '', showSidebar = true }: ChatWindowPro
   };
 
   return (
-    <div className={`flex h-full gap-0 ${className}`}>
+    <div className={`flex h-full min-w-0 gap-0 ${className}`}>
       {/* Session Sidebar */}
       {showSidebar && (
         <div className="hidden w-64 shrink-0 border-r border-white/5 bg-white/[0.02] p-3 lg:flex lg:flex-col">
@@ -191,23 +223,28 @@ export function ChatWindow({ className = '', showSidebar = true }: ChatWindowPro
       )}
 
       {/* Main Chat Area */}
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col bg-[#090e16]">
         {/* Model Selector Bar */}
-        <div className="flex items-center justify-between border-b border-white/5 px-4 py-2">
-          <div className="flex items-center gap-2">
-            <Bot className="h-4 w-4 text-cyan-400" />
-            <span className="text-xs font-medium text-muted-foreground/60">
-              Active Model:
+        <div className="flex min-h-12 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-white/[0.06] bg-[#0a101a]/75 px-4 py-2 sm:px-6">
+          <div className="flex min-w-0 items-center gap-2">
+            <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-indigo-300/15 bg-indigo-400/[0.07] text-indigo-200">
+              <Activity className="h-4 w-4" />
             </span>
+            <label htmlFor="chat-model" className="sr-only">Chat model</label>
             {modelCatalog === null ? (
-              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground/40" />
+              <span role="status" aria-label="Loading chat models" className="inline-flex items-center gap-2 text-xs text-slate-500">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Loading routing options
+              </span>
             ) : (
               <select
+                id="chat-model"
                 value={activeModel}
                 onChange={(e) => switchModel(e.target.value)}
-                className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-xs text-foreground outline-none focus:border-blue-500/40"
+                aria-label="Choose chat model"
+                className="max-w-[min(65vw,20rem)] rounded-lg border border-white/[0.08] bg-[#0c1420] px-2.5 py-1.5 text-xs text-slate-300 outline-none transition hover:border-white/15 focus-visible:border-indigo-300/40 focus-visible:ring-2 focus-visible:ring-indigo-300/15"
               >
-                <option value="auto">Auto-Select</option>
+                <option value="auto">Automatic routing</option>
                 {modelCatalog?.providers
                   .filter((p) => p.available || p.authorized || p.configured)
                   .map((p) => {
@@ -229,47 +266,69 @@ export function ChatWindow({ className = '', showSidebar = true }: ChatWindowPro
             )}
             {/* Refresh catalog button */}
             <button
+              type="button"
               onClick={loadModelCatalog}
-              className="rounded-md p-1 text-xs text-muted-foreground/40 hover:text-foreground/70 hover:bg-white/[0.05]"
+              aria-label="Refresh provider list"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white/[0.05] hover:text-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-300"
               title="Refresh provider list"
             >
-              <RefreshCw className="h-3 w-3" />
+              <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
             </button>
           </div>
 
           {/* Current model with status indicator */}
-          <div className="flex items-center gap-2 text-xs text-muted-foreground/60">
-            <span>{getActiveModelLabel()}</span>
-            {(() => {
-              const current = getCurrentProvider();
-              return current ? <ProviderStatusIcon provider={current} /> : null;
-            })()}
-          </div>
+          {modelCatalog && activeModel !== 'auto' && (
+            <div className="flex min-w-0 items-center gap-2 text-[11px] text-slate-500">
+              <span className="truncate">{getActiveModelLabel()}</span>
+              {(() => {
+                const current = getCurrentProvider();
+                return current ? <ProviderStatusIcon provider={current} /> : null;
+              })()}
+            </div>
+          )}
 
-          <label className="flex items-center gap-2 text-xs text-muted-foreground/50">
+          <label className="flex items-center gap-2 text-[11px] text-slate-500">
             <input
               type="checkbox"
               checked={useStreaming}
               onChange={(e) => setUseStreaming(e.target.checked)}
-              className="rounded border-white/20 bg-white/5"
+              className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 accent-indigo-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-300"
             />
-            Stream
+            Stream replies
           </label>
         </div>
 
         {/* Messages */}
-        <ScrollArea className="flex-1 px-4 py-4">
-          {displayMessages.length === 0 && !isLoading && !error ? (
-            <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border border-blue-500/10">
-                <Bot className="h-8 w-8 text-cyan-400" />
+        <ScrollArea className="min-h-0 flex-1 px-4 py-4 sm:px-6">
+          {displayMessages.length === 0 && !isLoading ? (
+            <div className="mx-auto flex min-h-full max-w-2xl flex-col items-center justify-center gap-5 px-4 py-12 text-center">
+              <div className="flex items-center justify-center">
+                <div aria-hidden="true" className="flex items-center gap-2 rounded-full border border-white/[0.08] bg-slate-900/70 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.22em] text-indigo-200/80">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  JARVIS // console
+                </div>
               </div>
-              <div>
-                <h3 className="text-lg font-semibold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-                  How can I help you today?
-                </h3>
-                <p className="mt-1 text-sm text-muted-foreground/50">
-                  Ask me anything or give me a task to accomplish
+              <div className="space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-indigo-200/65">
+                  {error ? 'Runtime unavailable' : isRoutingLoading ? 'Checking chat routing' : isChatReady ? 'Your workspace is ready' : 'Awaiting live routing'}
+                </p>
+                <h2 className="text-2xl font-medium tracking-[-0.035em] text-slate-100 sm:text-3xl">
+                  {error
+                    ? 'JARVIS cannot answer right now'
+                    : isRoutingLoading
+                      ? 'Checking the chat routing path'
+                      : isChatReady
+                        ? 'Where should we start?'
+                        : 'No live model is ready yet'}
+                </h2>
+                <p className="mx-auto max-w-md text-sm leading-6 text-slate-400">
+                  {error
+                    ? 'The conversation shell is available, but the backend is not ready to answer yet.'
+                    : isRoutingLoading
+                      ? 'JARVIS is checking the backend and available models before the first response.'
+                      : isChatReady
+                        ? 'Send a message to begin a conversation. JARVIS will respond through the configured chat service.'
+                        : 'The connected backend is running, but no configured chat provider is currently available.'}
                 </p>
               </div>
             </div>
@@ -296,19 +355,11 @@ export function ChatWindow({ className = '', showSidebar = true }: ChatWindowPro
               <div className="flex items-start gap-3">
                 <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-rose-300" />
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium">
-                    {isNetworkUnavailable
-                      ? 'Unable to reach the JARVIS chat service'
-                      : isServiceError
-                        ? 'The JARVIS chat service returned an error'
-                        : 'JARVIS could not complete that request'}
+                  <p className="font-medium text-rose-50">
+                    {friendlyError?.title ?? 'JARVIS could not complete that request'}
                   </p>
-                  <p className="mt-1 break-words text-xs leading-relaxed text-rose-100/70">
-                    {isNetworkUnavailable
-                      ? 'The message was not delivered. Check your connection or backend status, then retry.'
-                      : isServiceError
-                        ? 'The service responded but did not complete the request. Retry in a moment.'
-                        : error}
+                  <p className="mt-1 break-words text-xs leading-relaxed text-rose-100/80">
+                    {friendlyError?.detail ?? error}
                   </p>
                 </div>
               </div>
@@ -339,7 +390,7 @@ export function ChatWindow({ className = '', showSidebar = true }: ChatWindowPro
         </ScrollArea>
 
         {/* Input */}
-        <div className="border-t border-white/5 p-4">
+        <div className="border-t border-white/[0.06] bg-[#090e16] px-3 py-3 sm:px-6 sm:py-4">
           <div className="mx-auto max-w-3xl">
             <ChatInput
               onSend={handleSend}
@@ -347,7 +398,7 @@ export function ChatWindow({ className = '', showSidebar = true }: ChatWindowPro
               isStreaming={isStreaming}
               onStopStreaming={stopStream}
             />
-            <p className="mt-2 text-center text-[10px] text-muted-foreground/30">
+            <p className="mt-2 text-center text-[10px] font-medium leading-relaxed text-slate-400">
               JARVIS may produce inaccurate information. Verify critical facts.
             </p>
           </div>

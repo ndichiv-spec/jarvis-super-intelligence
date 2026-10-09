@@ -81,7 +81,8 @@ def test_command_event_downgrade_refuses_to_discard_history(tmp_path, monkeypatc
     )
 
     try:
-        downgrade(db.LATEST_SCHEMA_REVISION)
+        downgrade("003_durable_runtime_event_journal")
+        downgrade("002_durable_command_events")
     except RuntimeError as exc:
         assert "event history exists" in str(exc)
     else:

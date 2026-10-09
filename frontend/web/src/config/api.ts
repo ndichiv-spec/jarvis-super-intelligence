@@ -17,6 +17,38 @@ export const API_ENDPOINTS = {
     apiKeys: `${env.API_URL}${API_PREFIX}/auth/api-keys`,
   },
 
+  presentation: {
+    contract: `${env.API_URL}${API_PREFIX}/presentation/contract`,
+    capabilities: `${env.API_URL}${API_PREFIX}/presentation/capabilities`,
+    renderers: `${env.API_URL}${API_PREFIX}/presentation/renderers`,
+    environments: `${env.API_URL}${API_PREFIX}/presentation/environments`,
+    registerClient: `${env.API_URL}${API_PREFIX}/presentation/clients/register`,
+    negotiate: `${env.API_URL}${API_PREFIX}/presentation/negotiate`,
+    locationData: (presentationId: string) =>
+      `${env.API_URL}${API_PREFIX}/presentation/location/${encodeURIComponent(presentationId)}`,
+    locationAuthorization: `${env.API_URL}${API_PREFIX}/presentation/location/authorization`,
+    locationRendered: (presentationId: string) =>
+      `${env.API_URL}${API_PREFIX}/presentation/location/${encodeURIComponent(presentationId)}/rendered`,
+    locationInteraction: (presentationId: string) =>
+      `${env.API_URL}${API_PREFIX}/presentation/location/${encodeURIComponent(presentationId)}/interactions`,
+  },
+
+  runtime: {
+    snapshot: (sessionId: string) =>
+      `${env.API_URL}${API_PREFIX}/runtime/snapshot/${encodeURIComponent(sessionId)}`,
+    resume: (sessionId: string) =>
+      `${env.API_URL}${API_PREFIX}/runtime/resume/${encodeURIComponent(sessionId)}`,
+    events: `${env.API_URL}${API_PREFIX}/runtime/events`,
+  },
+
+  endpoints: {
+    register: `${env.API_URL}${API_PREFIX}/endpoints/register`,
+    heartbeat: (endpointId: string) =>
+      `${env.API_URL}${API_PREFIX}/endpoints/${encodeURIComponent(endpointId)}/heartbeat`,
+    attachSession: (endpointId: string, sessionId: string) =>
+      `${env.API_URL}${API_PREFIX}/endpoints/${encodeURIComponent(endpointId)}/sessions/${encodeURIComponent(sessionId)}`,
+  },
+
   chat: {
     send: `${env.API_URL}/api/chat`,
     stream: `${env.API_URL}/api/chat/stream`,

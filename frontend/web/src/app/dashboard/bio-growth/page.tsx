@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Activity, BookOpen, FlaskConical, Globe, Layers3, RefreshCw, Search, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient } from '@/lib/api-client';
@@ -38,10 +38,66 @@ const STATUS_ENDPOINTS = [
   ['Technology Radar', '/api/v1/tech/status'],
 ] as const;
 
-function formatResult(value: unknown): string {
-  if (value === undefined) return 'No data returned.';
-  const formatted = JSON.stringify(value, null, 2);
-  return formatted ?? String(value);
+function displayName(value: string): string {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function parseStructuredString(value: string): unknown {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return value;
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    return value;
+  }
+}
+
+function HumanizedValue({ value, depth = 0 }: { value: unknown; depth?: number }): ReactNode {
+  const normalized = typeof value === 'string' ? parseStructuredString(value) : value;
+  if (normalized === null || normalized === undefined) {
+    return <span className="text-muted-foreground">Not reported</span>;
+  }
+  if (typeof normalized === 'string' || typeof normalized === 'number') {
+    return <span className="break-words text-sm text-foreground">{String(normalized)}</span>;
+  }
+  if (typeof normalized === 'boolean') {
+    return <span className="text-sm text-foreground">{normalized ? 'Yes' : 'No'}</span>;
+  }
+  if (depth >= 4) {
+    return <span className="text-sm text-muted-foreground">Additional details available</span>;
+  }
+  if (Array.isArray(normalized)) {
+    if (!normalized.length) return <span className="text-sm text-muted-foreground">No items reported</span>;
+    return (
+      <ul className="space-y-2">
+        {normalized.slice(0, 20).map((item, index) => (
+          <li key={index} className="rounded-md border border-white/5 bg-black/15 p-2">
+            <HumanizedValue value={item} depth={depth + 1} />
+          </li>
+        ))}
+        {normalized.length > 20 && <li className="text-xs text-muted-foreground">{normalized.length - 20} more items</li>}
+      </ul>
+    );
+  }
+
+  const entries = Object.entries(normalized as Record<string, unknown>);
+  if (!entries.length) return <span className="text-sm text-muted-foreground">No details reported</span>;
+  return (
+    <dl className={`grid gap-3 ${depth === 0 ? 'sm:grid-cols-2' : ''}`}>
+      {entries.slice(0, 16).map(([key, entry]) => (
+        <div key={key} className="min-w-0 rounded-md border border-white/5 bg-black/15 p-3">
+          <dt className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{displayName(key)}</dt>
+          <dd><HumanizedValue value={entry} depth={depth + 1} /></dd>
+        </div>
+      ))}
+      {entries.length > 16 && <div className="text-xs text-muted-foreground">{entries.length - 16} more details</div>}
+    </dl>
+  );
 }
 
 function errorMessage(error: unknown): string {
@@ -146,9 +202,7 @@ export default function BioGrowthPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <pre className="max-h-24 overflow-auto whitespace-pre-wrap break-words text-xs text-muted-foreground">
-                {statuses[name] ? formatResult(statuses[name]) : 'Checking service status…'}
-              </pre>
+              <div className="max-h-40 overflow-auto">{statuses[name] ? <HumanizedValue value={statuses[name]} /> : 'Checking service status…'}</div>
             </CardContent>
           </Card>
         ))}
@@ -274,7 +328,7 @@ export default function BioGrowthPage() {
       <section className="space-y-3">
         <div className="flex items-center gap-2">
           <Activity className="h-5 w-5 text-cyan-300" />
-          <h2 className="text-xl font-semibold">Live operation results</h2>
+          <h2 className="text-xl font-semibold">Latest operation results</h2>
           <Sparkles className="h-4 w-4 text-cyan-300" />
         </div>
         {results.length === 0 ? (
@@ -285,9 +339,7 @@ export default function BioGrowthPage() {
               <Card key={`${result.title}-${index}`} className="border-white/10 bg-slate-900/70">
                 <CardHeader className="pb-2"><CardTitle className="text-base">{result.title}</CardTitle></CardHeader>
                 <CardContent>
-                  <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-md bg-black/30 p-3 text-xs text-emerald-100">
-                    {formatResult(result.value)}
-                  </pre>
+                  <HumanizedValue value={result.value} />
                 </CardContent>
               </Card>
             ))}

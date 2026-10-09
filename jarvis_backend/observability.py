@@ -575,15 +575,11 @@ def _init_opentelemetry(app: FastAPI) -> None:
 
         provider = TracerProvider(resource=resource)
 
-        # OTLP exporter — sends spans to otel-collector or Tempo/Jaeger
-        otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
-        try:
+        # Traces are exported only when an external collector is configured.
+        otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip()
+        if otlp_endpoint:
             exporter = OTLPSpanExporter(endpoint=otlp_endpoint)
             provider.add_span_processor(BatchSpanProcessor(exporter))
-        except Exception:
-            # Fall back to console exporter if OTLP endpoint is unreachable
-            from opentelemetry.sdk.trace.export import ConsoleSpanExporter
-            provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
 
         trace.set_tracer_provider(provider)
 

@@ -44,6 +44,7 @@ import logging
 import os
 import threading
 import time
+import uuid
 from typing import Any, AsyncIterator, Callable, Dict, Iterator, Optional
 
 from infrastructure.vault.manager import get_secrets_manager
@@ -573,6 +574,7 @@ class ProviderGateway:
             ProviderRouter,
             TaskClassifier,
         )
+        from .observability import request_id_var
 
         forced_provider, resolved_model = _parse_model_reference(model)
         if forced_provider == "silverwing":
@@ -590,7 +592,7 @@ class ProviderGateway:
                 return [], forced_provider, registry
             pairs.append((forced_provider, resolved_model))
         else:
-            decision = router.route(profile)
+            decision = router.route(profile, request_id=request_id_var.get())
             if not decision.selected_provider:
                 return [], None, registry
             pairs.append((
@@ -653,6 +655,7 @@ class ProviderGateway:
             ProviderAuthenticationError,
             ProviderError,
         )
+        from .observability import request_id_var
 
         candidates, forced_provider, _registry = self._resolve_fabric_candidates(
             messages, model
@@ -679,6 +682,7 @@ class ProviderGateway:
                 messages=msgs,
                 model=selected_model,
                 stream=True,
+                request_id=request_id_var.get() or uuid.uuid4().hex[:16],
                 timeout=deadline,
             )
             started = time.monotonic()
@@ -893,7 +897,7 @@ class ProviderGateway:
                     return None
                 candidates.append((forced_provider, resolved_model))
             else:
-                decision = router.route(profile)
+                decision = router.route(profile, request_id=request_id_var.get())
                 if not decision.selected_provider:
                     return None
                 candidates.append((
@@ -930,6 +934,7 @@ class ProviderGateway:
                     messages=msgs,
                     model=selected_model,
                     stream=False,
+                    request_id=request_id_var.get() or uuid.uuid4().hex[:16],
                     timeout=deadline,
                 )
                 try:
@@ -1038,6 +1043,11 @@ class ProviderGateway:
         timeout_seconds = max(float(deadline), 1.0)
 
         headers = {"content-type": "application/json"}
+        from .observability import request_id_var
+
+        active_request_id = request_id_var.get()
+        if active_request_id:
+            headers["X-Request-ID"] = active_request_id
         silverwing_key = os.environ.get("SILVERWING_API_KEY", "").strip()
         if silverwing_key:
             headers["Authorization"] = f"Bearer {silverwing_key}"

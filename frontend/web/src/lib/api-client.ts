@@ -86,6 +86,9 @@ export class ApiClient {
     const headers: Record<string, string> = {
       ...(fetchConfig.headers as Record<string, string>),
     };
+    const hasExplicitAuthorization = Object.keys(headers).some(
+      (name) => name.toLowerCase() === 'authorization',
+    );
 
     if (!(data instanceof FormData)) {
       headers['Content-Type'] = 'application/json';
@@ -118,7 +121,12 @@ export class ApiClient {
           // If it succeeds, retry the request with the rotated access cookie instead
           // of forcing the user back to the login page.
           let refreshed = false;
-          if (response.status === 401 && !_refreshing && !refreshAttempted) {
+          if (
+            response.status === 401
+            && !hasExplicitAuthorization
+            && !_refreshing
+            && !refreshAttempted
+          ) {
             refreshAttempted = true;
             _refreshing = true;
             try {
@@ -137,7 +145,7 @@ export class ApiClient {
           // Only treat actual 401 as auth errors. For other HTTP errors, throw
           // a generic ApiClientError with the real status code so page-level
           // catch blocks can handle non-auth failures gracefully.
-          if (response.status === 401) {
+          if (response.status === 401 && !hasExplicitAuthorization) {
             if (_onAuthError) {
               _onAuthError();
             }
@@ -150,11 +158,10 @@ export class ApiClient {
             // After the auth-error redirect is fired, throw an AuthError so that
             // page-level catch blocks can recognize it and suppress any visible
             // error toast (the user is already being sent to /login).
-            throw new AuthError(
-              errorMessage,
-              errorBody.code,
-              { ...errorBody, error_category: errorCategory }
-            );
+            throw new AuthError(errorMessage, errorBody.code, {
+              ...errorBody,
+              error_category: errorCategory,
+            });
           }
 
           throw new ApiClientError(

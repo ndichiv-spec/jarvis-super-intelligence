@@ -7,15 +7,16 @@ import { AlertTriangle, Brain, Loader2, Square, User, Volume2 } from 'lucide-rea
 import { cn } from '@/lib/utils';
 import { MarkdownMessage } from '@/components/chat/markdown-message';
 import { ToolCallList } from '@/components/chat/tool-call-card';
+import { LocationMap } from '@/components/chat/location-map';
 import type { ChatMessage } from '@/features/chat/types';
 import { getApiUrl } from '@/lib/runtime-url';
+import { useJarvisRuntime } from '@/features/runtime/store';
 
 /**
  * Chat message bubble.
  *
- * Renders one turn of the transcript: role affordance, model attribution,
- * streamed markdown body, and any capabilities the agent invoked while
- * producing it.
+ * Renders one turn of the transcript: role affordance, streamed markdown
+ * body, and any capabilities the agent invoked while producing it.
  */
 
 interface ChatMessageBubbleProps {
@@ -39,27 +40,41 @@ function MessageMeta({ message }: { message: ChatMessage }) {
   if (message.skill_used) {
     rows.push(['Skill', message.skill_used]);
   }
-  if (message.provider) {
-    rows.push(['Provider', message.provider]);
-  }
-  if (message.model) {
-    rows.push(['Model', message.model]);
-  }
   if (message.sources?.length) {
     rows.push(['Sources', String(message.sources.length)]);
   }
 
-  if (!rows.length) return null;
+  const technicalDetails = [message.provider && ['Provider', message.provider], message.model && ['Model', message.model]]
+    .filter((row): row is [string, string] => Boolean(row));
+
+  if (!rows.length && !technicalDetails.length) return null;
 
   return (
-    <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] uppercase tracking-wider text-muted-foreground/50">
-      {rows.map(([label, value]) => (
-        <div key={label} className="flex gap-1.5">
-          <dt>{label}</dt>
-          <dd className="text-foreground/60">{value}</dd>
-        </div>
-      ))}
-    </dl>
+    <div className="mt-2">
+      {rows.length > 0 && (
+        <dl className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] uppercase tracking-wider text-muted-foreground/50">
+          {rows.map(([label, value]) => (
+            <div key={label} className="flex gap-1.5">
+              <dt>{label}</dt>
+              <dd className="text-foreground/60">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {technicalDetails.length > 0 && (
+        <details className="mt-1 text-[10px] text-muted-foreground/50">
+          <summary className="w-fit cursor-pointer">Technical details</summary>
+          <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-1 uppercase tracking-wider">
+            {technicalDetails.map(([label, value]) => (
+              <div key={label} className="flex gap-1.5">
+                <dt>{label}</dt>
+                <dd className="text-foreground/60">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
+      )}
+    </div>
   );
 }
 
@@ -160,6 +175,7 @@ function GeneratedImage({ artifact }: { artifact: GeneratedImageArtifact }) {
 function ChatMessageBubbleImpl({ message, isStreaming = false, className }: ChatMessageBubbleProps) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speechError, setSpeechError] = useState<string | null>(null);
+  const setVoiceState = useJarvisRuntime((state) => state.setVoiceState);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
@@ -182,24 +198,31 @@ function ChatMessageBubbleImpl({ message, isStreaming = false, className }: Chat
       window.speechSynthesis.cancel();
       utteranceRef.current = null;
       setIsSpeaking(false);
+      setVoiceState('idle');
       return;
     }
     if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
       setSpeechError('Spoken playback is not supported by this browser.');
+      setVoiceState('unavailable');
       return;
     }
 
     setSpeechError(null);
     const utterance = new SpeechSynthesisUtterance(message.content);
     utteranceRef.current = utterance;
-    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onstart = () => {
+      setIsSpeaking(true);
+      setVoiceState('speaking');
+    };
     utterance.onend = () => {
       utteranceRef.current = null;
       setIsSpeaking(false);
+      setVoiceState('idle');
     };
     utterance.onerror = () => {
       utteranceRef.current = null;
       setIsSpeaking(false);
+      setVoiceState('error');
       setSpeechError('Browser speech playback failed.');
     };
     window.speechSynthesis.speak(utterance);
@@ -242,14 +265,6 @@ function ChatMessageBubbleImpl({ message, isStreaming = false, className }: Chat
           )}
         >
           <span>{isUser ? 'You' : 'JARVIS'}</span>
-          {!isUser && message.model && (
-            <>
-              <span aria-hidden="true" className="text-white/15">
-                /
-              </span>
-              <span className="truncate">{message.model}</span>
-            </>
-          )}
           {message.timestamp && (
             <time className="font-normal normal-case tracking-normal opacity-60">
               {new Date(message.timestamp).toLocaleTimeString([], {
@@ -279,6 +294,10 @@ function ChatMessageBubbleImpl({ message, isStreaming = false, className }: Chat
             )
           ) : isStreaming ? null : (
             <p className="text-[13.5px] italic text-muted-foreground/50">No content</p>
+          )}
+
+          {!isUser && message.presentation?.intent.environment.type === 'geospatial' && (
+            <LocationMap intent={message.presentation.intent} />
           )}
 
           {/* Capabilities invoked to produce this turn */}
@@ -321,7 +340,7 @@ function ChatMessageBubbleImpl({ message, isStreaming = false, className }: Chat
         {isStreaming && (
           <div className="mt-1 flex items-center gap-1.5 text-[10.5px] text-muted-foreground/50">
             <Loader2 className="h-3 w-3 animate-spin text-cyan-400/70" />
-            {message.status === 'THINKING' ? 'Thinking' : 'Responding'}
+            {message.status === 'THINKING' ? 'Processing request' : 'Responding'}
           </div>
         )}
 

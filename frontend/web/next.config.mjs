@@ -24,6 +24,14 @@ const nextConfig = {
         destination: `${backendOrigin}/api/v1/:path*`,
       },
       {
+        source: '/api/chat/:path*',
+        destination: `${backendOrigin}/api/chat/:path*`,
+      },
+      {
+        source: '/api/chat',
+        destination: `${backendOrigin}/api/chat`,
+      },
+      {
         source: '/api/health',
         destination: `${backendOrigin}/health`,
       },
@@ -40,6 +48,15 @@ const nextConfig = {
         destination: `${backendOrigin}/api/version`,
       },
     ];
+  },
+  async headers() {
+    return [{
+      source: '/:path*',
+      headers: [{
+        key: 'Permissions-Policy',
+        value: 'camera=(), microphone=(), geolocation=(self)',
+      }],
+    }];
   },
 };
 

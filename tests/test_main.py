@@ -12,3 +12,7 @@ def test_main_registers_core_api_routes():
     paths = set(main.app.openapi()["paths"])
     assert "/api/v1/health/status" in paths
     assert "/api/v1/integrations/providers" in paths
+    assert "/api/v1/presentation/contract" in paths
+    assert "/api/v1/presentation/negotiate" in paths
+    assert "/api/v1/presentation/preferences" in paths
+    assert "/api/v1/presentation/state/{session_id}" in paths

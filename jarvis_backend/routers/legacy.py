@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -28,6 +28,13 @@ class ChatIn(BaseModel):
     stream: bool = False
     model: Optional[str] = None
     client_message_id: Optional[str] = None
+    location: Optional[Dict[str, Any]] = None
+    location_error: Optional[Literal[
+        "permission_denied",
+        "unsupported",
+        "position_unavailable",
+        "timeout",
+    ]] = None
 
 
 def _chat_result_to_payload(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -45,13 +52,20 @@ def _chat_result_to_payload(result: Dict[str, Any]) -> Dict[str, Any]:
         "error": result.get("error"),
         "resumed": result.get("resumed", False),
         "message_id": result.get("message_id"),
+        "request_id": result.get("request_id"),
         "timestamp": now_iso(),
+        "presentation": result.get("presentation"),
+        "presentation_events": result.get("presentation_events") or [],
     }
     return payload
 
 
 @router.post("/api/chat")
-async def legacy_chat(body: ChatIn, user: Dict[str, Any] = Depends(get_current_user)):
+async def legacy_chat(
+    body: ChatIn,
+    request: Request,
+    user: Dict[str, Any] = Depends(get_current_user),
+):
     user_id = user["id"]
     session_id = body.session_id or str(uuid.uuid4())
     chat_service.create_session(user_id, session_id, body.message)
@@ -59,23 +73,35 @@ async def legacy_chat(body: ChatIn, user: Dict[str, Any] = Depends(get_current_u
         user_id, session_id, body.message,
         model=body.model,
         client_message_id=body.client_message_id,
+        request_id=getattr(request.state, "request_id", None),
+        principal=user,
+        location=body.location,
+        location_error=body.location_error,
     )
     return _chat_result_to_payload(result)
 
 
 @router.post("/api/chat/stream")
-async def legacy_chat_stream(body: ChatIn, user: Dict[str, Any] = Depends(get_current_user)):
+async def legacy_chat_stream(
+    body: ChatIn,
+    request: Request,
+    user: Dict[str, Any] = Depends(get_current_user),
+):
     user_id = user["id"]
     session_id = body.session_id or str(uuid.uuid4())
+    request_id = getattr(request.state, "request_id", None)
     chat_service.create_session(user_id, session_id, body.message)
 
     async def gen():
-        yield "data: " + json.dumps({"type": "typing"}) + "\n\n"
         try:
             async for event in chat_service.stream_message(
                 user_id, session_id, body.message,
                 model=body.model,
                 client_message_id=body.client_message_id,
+                request_id=request_id,
+                principal=user,
+                location=body.location,
+                location_error=body.location_error,
             ):
                 yield "data: " + json.dumps(event, default=str) + "\n\n"
         except Exception:
@@ -93,6 +119,7 @@ async def legacy_chat_stream(body: ChatIn, user: Dict[str, Any] = Depends(get_cu
                 "retryable": True,
                 "status": FAILED,
                 "session_id": session_id,
+                "request_id": request_id,
             }, default=str) + "\n\n"
 
     return StreamingResponse(

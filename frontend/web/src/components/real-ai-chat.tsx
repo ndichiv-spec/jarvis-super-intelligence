@@ -717,7 +717,7 @@ export default function RealAIChat() {
       setBackendConnected(true);
       setUsingLocalFallback(false);
       // Signal that the SSE stream connection is established;
-      // the first backend event (typing/meta) will transition to THINKING.
+      // The backend's accepted-request metadata transitions to THINKING.
       patch({ status: "CONNECTING" });
 
       const reader = response.body.getReader();
@@ -746,9 +746,6 @@ export default function RealAIChat() {
             }
 
             switch (event.type) {
-              case "typing":
-                patch({ status: "THINKING" });
-                break;
               case "meta":
                 if (event.session_id) sessionIdRef.current = event.session_id;
                 patch({ status: "THINKING" });

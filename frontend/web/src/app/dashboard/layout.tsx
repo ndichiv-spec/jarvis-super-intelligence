@@ -1,58 +1,47 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { onAuthError, clearAuthToken } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/authStore";
 import { usePlatformStore } from "@/stores/platform-store";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
-import { ConnectionBanner } from "@/components/connection-banner";
+import { AuthGuard } from "@/components/auth/auth-guard";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
+  return (
+    <AuthGuard>
+      <DashboardRuntime>{children}</DashboardRuntime>
+    </AuthGuard>
+  );
+}
+
+function DashboardRuntime({ children }: { children: React.ReactNode }) {
+  const authStatus = useAuthStore((state) => state.authStatus);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const user = useAuthStore((state) => state.user);
 
   useEffect(() => {
-    // Any 401 that cannot be resolved by cookie refresh clears local auth
-    // presentation state and returns the user to sign-in.
-    onAuthError(() => {
-      clearAuthToken();
-      // Synchronously clear the zustand persist store so the login page
-      // sees isAuthenticated === false and shows the sign-in form.
-      useAuthStore.setState({
-        token: null,
-        refreshToken: null,
-        user: null,
-        isAuthenticated: false,
-      });
-      router.replace("/login");
-    });
+    if (
+      !isAuthenticated ||
+      !user ||
+      (authStatus !== "authenticated" && authStatus !== "unavailable")
+    ) {
+      return;
+    }
 
     // Initialize the unified platform store:
     // sync user identity, fetch backend/system/metrics state, and
     // subscribe to real-time WebSocket events.
-    const { refreshAll, subscribeToEvents, setUser } = usePlatformStore.getState();
-    const authUser = useAuthStore.getState().user;
-    if (authUser) {
-      setUser({
-        id: authUser.id,
-        email: authUser.email,
-        full_name: authUser.full_name ?? null,
-        roles: Array.isArray(authUser.roles) ? authUser.roles.map((r) => typeof r === 'string' ? r : r.name) : [],
-        isAuthenticated: true,
-      });
-    }
-    refreshAll();
-    const unsub = subscribeToEvents();
-
-    return () => unsub();
-  }, [router]);
+    const { setUser } = usePlatformStore.getState();
+    setUser({
+      id: user.id,
+      email: user.email,
+      full_name: user.full_name ?? null,
+      roles: Array.isArray(user.roles) ? user.roles.map((r) => typeof r === 'string' ? r : r.name) : [],
+      isAuthenticated: true,
+    });
+  }, [authStatus, isAuthenticated, user]);
 
   return (
-    <>
-      <ConnectionBanner />
-      <DashboardShell>
-        {children}
-      </DashboardShell>
-    </>
+    <DashboardShell>{children}</DashboardShell>
   );
 }

@@ -5,47 +5,46 @@
 
 @layer base {
   :root {
-    /* Stark holographic color scheme - cyan/teal/blue on deep black */
-    --background: 210 40% 2%;
-    --foreground: 195 100% 90%;
+    --background: 222 47% 5%;
+    --foreground: 218 32% 92%;
 
-    --card: 210 30% 5%;
-    --card-foreground: 195 100% 90%;
+    --card: 222 38% 8%;
+    --card-foreground: 218 32% 92%;
 
-    --popover: 210 30% 5%;
-    --popover-foreground: 195 100% 90%;
+    --popover: 222 38% 8%;
+    --popover-foreground: 218 32% 92%;
 
-    --primary: 190 100% 50%;
-    --primary-foreground: 210 40% 5%;
+    --primary: 229 82% 66%;
+    --primary-foreground: 225 35% 8%;
 
-    --secondary: 210 30% 8%;
-    --secondary-foreground: 195 100% 90%;
+    --secondary: 223 28% 13%;
+    --secondary-foreground: 218 32% 92%;
 
-    --muted: 210 20% 15%;
-    --muted-foreground: 195 50% 65%;
+    --muted: 221 24% 14%;
+    --muted-foreground: 218 15% 65%;
 
-    --accent: 174 100% 45%;
-    --accent-foreground: 210 40% 5%;
+    --accent: 247 74% 68%;
+    --accent-foreground: 225 35% 8%;
 
     --destructive: 0 84% 60%;
-    --destructive-foreground: 195 100% 90%;
+    --destructive-foreground: 218 32% 92%;
 
-    --border: 190 60% 20%;
-    --input: 190 60% 20%;
-    --ring: 190 100% 50%;
+    --border: 220 23% 18%;
+    --input: 220 23% 18%;
+    --ring: 229 82% 66%;
 
     --success: 142 71% 45%;
     --warning: 38 92% 50%;
-    --info: 190 100% 50%;
+    --info: 229 82% 66%;
 
-    --gradient-primary: linear-gradient(135deg, #00d4ff, #00e5a0, #00d4ff);
-    --gradient-secondary: linear-gradient(135deg, #0078d4, #00d4ff);
-    --gradient-glow: linear-gradient(135deg, rgba(0, 212, 255, 0.3), rgba(0, 229, 160, 0.1));
+    --gradient-primary: linear-gradient(135deg, #6d82ed, #818cf8, #6d82ed);
+    --gradient-secondary: linear-gradient(135deg, #4f65c9, #7b8df2);
+    --gradient-glow: linear-gradient(135deg, rgba(105, 126, 232, 0.24), rgba(129, 140, 248, 0.08));
 
     --radius: 0.5rem;
 
-    --shadow-glow: 0 0 40px rgba(0, 212, 255, 0.2), 0 0 80px rgba(0, 212, 255, 0.1);
-    --shadow-card: 0 0 20px rgba(0, 212, 255, 0.1), 0 4px 16px rgba(0, 0, 0, 0.5);
+    --shadow-glow: 0 0 36px rgba(99, 116, 220, 0.14), 0 0 72px rgba(99, 116, 220, 0.07);
+    --shadow-card: 0 0 20px rgba(99, 116, 220, 0.07), 0 4px 16px rgba(0, 0, 0, 0.45);
   }
 }
 
@@ -56,43 +55,30 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
-    /* Prevent white flash - force dark background immediately */
-    background-color: #030712 !important;
     background:
-      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0, 212, 255, 0.08), transparent),
-      radial-gradient(ellipse 60% 40% at 80% 60%, rgba(0, 229, 160, 0.05), transparent),
-      #030712 !important;
-    color: #b3e5fc !important;
+      radial-gradient(ellipse 76% 46% at 50% -18%, rgba(77, 93, 185, 0.12), transparent),
+      radial-gradient(ellipse 58% 42% at 94% 64%, rgba(74, 84, 157, 0.06), transparent),
+      #080d17;
     min-height: 100vh;
   }
 
   html {
-    background: #030712 !important;
-    background-color: #030712 !important;
+    background: #080d17;
   }
 
-  /* Prevent FOUC (Flash of Unstyled Content) */
-  #__next,
-  main,
-  div[role="main"] {
-    background-color: #030712 !important;
-    min-height: 100vh;
-  }
-
-  /* Scrollbar - holographic style */
   ::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
+    width: 8px;
+    height: 8px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: rgba(0, 212, 255, 0.3);
-    border-radius: 2px;
+    background: rgba(142, 154, 196, 0.23);
+    border-radius: 6px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(0, 212, 255, 0.5);
+    background: rgba(142, 154, 196, 0.4);
   }
 }
 
@@ -100,8 +86,8 @@
   /* Holographic glass card - Stark style */
   .glass {
     @apply backdrop-blur-xl;
-    background: linear-gradient(135deg, rgba(0, 212, 255, 0.08), rgba(0, 229, 160, 0.04), rgba(0, 120, 212, 0.06));
-    border: 1px solid rgba(0, 212, 255, 0.2);
+    background: linear-gradient(135deg, rgba(91, 107, 194, 0.08), rgba(61, 76, 144, 0.04), rgba(42, 57, 113, 0.06));
+    border: 1px solid rgba(130, 144, 209, 0.13);
     box-shadow: var(--shadow-card), var(--shadow-glow);
   }
 
@@ -137,9 +123,9 @@
   /* Fine holographic grid - v3.0 dashboard backdrop */
   .bg-grid {
     background-image:
-      linear-gradient(rgba(0, 212, 255, 0.04) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0, 212, 255, 0.04) 1px, transparent 1px);
-    background-size: 40px 40px;
+      linear-gradient(rgba(120, 137, 202, 0.027) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(120, 137, 202, 0.027) 1px, transparent 1px);
+    background-size: 44px 44px;
   }
 
   /* Scan line effect */
@@ -591,6 +577,23 @@
 .status-dot-connected { box-shadow: 0 0 8px rgba(34, 197, 94, 0.6); }
 .status-dot-degraded { box-shadow: 0 0 8px rgba(245, 158, 11, 0.6); }
 .status-dot-offline { box-shadow: 0 0 8px rgba(239, 68, 68, 0.6); }
+
+@media (max-width: 767px) {
+  .jarvis-sidebar {
+    width: min(86vw, 304px) !important;
+  }
+
+  .jarvis-sidebar[data-mobile-open="false"] {
+    transform: translateX(-100%) !important;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .jarvis-sidebar[data-mobile-open="true"] {
+    visibility: visible;
+    pointer-events: auto;
+  }
+}
 
 /* ---------------------------------------------------------------------------
    Reduced motion

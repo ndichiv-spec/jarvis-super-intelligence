@@ -120,17 +120,6 @@ const APP_ICONS: Record<string, React.ElementType> = {
   default: Grid3X3,
 };
 
-const FALLBACK_APPS: AppItem[] = [
-  { name: "Notepad", command: "notepad" },
-  { name: "Browser", command: "browser" },
-  { name: "Terminal", command: "cmd" },
-  { name: "File Explorer", command: "explorer" },
-  { name: "Calculator", command: "calculator" },
-  { name: "Photos", command: "photos" },
-  { name: "Music Player", command: "music" },
-  { name: "Video Player", command: "video" },
-];
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function formatUptime(seconds: number): string {
@@ -164,12 +153,12 @@ function getAppIcon(command: string): React.ElementType {
 
 // ─── Gauge Component (CPU) ──────────────────────────────────────────────────
 
-function CpuGauge({ value }: { value: number }) {
+function CpuGauge({ value }: { value: number | null }) {
   const radius = 54;
   const circumference = Math.PI * radius;
-  const progress = Math.min(value / 100, 1);
+  const progress = value === null ? 0 : Math.min(value / 100, 1);
   const dashOffset = circumference * (1 - progress);
-  const colorClass = getCpuProgressColor(value);
+  const colorClass = value === null ? "text-slate-600" : getCpuProgressColor(value);
 
   return (
     <div className="flex flex-col items-center gap-2">
@@ -184,21 +173,23 @@ function CpuGauge({ value }: { value: number }) {
             strokeLinecap="round"
           />
           {/* Progress arc */}
-          <path
-            d="M 10 70 A 54 54 0 0 1 130 70"
-            fill="none"
-            strokeWidth="10"
-            strokeLinecap="round"
-            className={colorClass}
-            stroke="currentColor"
-            strokeDasharray={circumference}
-            strokeDashoffset={dashOffset}
-            style={{ transition: "stroke-dashoffset 0.8s ease" }}
-          />
+          {value !== null && (
+            <path
+              d="M 10 70 A 54 54 0 0 1 130 70"
+              fill="none"
+              strokeWidth="10"
+              strokeLinecap="round"
+              className={colorClass}
+              stroke="currentColor"
+              strokeDasharray={circumference}
+              strokeDashoffset={dashOffset}
+              style={{ transition: "stroke-dashoffset 0.8s ease" }}
+            />
+          )}
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-end pb-1">
-          <span className={`text-2xl font-bold ${getCpuColor(value)}`}>
-            {value.toFixed(0)}%
+          <span className={`text-2xl font-bold ${value === null ? "text-muted-foreground" : getCpuColor(value)}`}>
+            {value === null ? "—" : `${value.toFixed(0)}%`}
           </span>
         </div>
       </div>
@@ -242,10 +233,10 @@ function SystemStatusCards({
   lastRefreshed: Date | null;
   onRefresh: () => void;
 }) {
-  const cpu = metrics?.system.cpu_percent ?? 0;
-  const memory = metrics?.system.memory_percent ?? 0;
-  const disk = metrics?.system.disk_percent ?? 0;
-  const uptime = metrics?.uptime_seconds ?? 0;
+  const cpu = metrics?.system.cpu_percent ?? null;
+  const memory = metrics?.system.memory_percent ?? null;
+  const disk = metrics?.system.disk_percent ?? null;
+  const uptime = metrics?.uptime_seconds ?? null;
 
   return (
     <div className="space-y-4">
@@ -280,21 +271,27 @@ function SystemStatusCards({
           <div className="flex flex-col items-center gap-3 w-full">
             <div className="flex items-center gap-2">
               <Memory className="h-5 w-5 text-violet-400" />
-              <span className="text-2xl font-bold">{memory.toFixed(1)}%</span>
+              <span className="text-2xl font-bold">
+                {memory === null ? "—" : `${memory.toFixed(1)}%`}
+              </span>
             </div>
-            <div className="relative h-2 w-full overflow-hidden rounded-full bg-secondary">
-              <div
-                className={`h-full transition-all ${
-                  memory > 80
-                    ? "bg-red-500"
-                    : memory > 60
-                    ? "bg-amber-500"
-                    : "bg-violet-500"
-                }`}
-                style={{ width: `${memory}%` }}
-              />
-            </div>
-            {metrics && (
+            {memory !== null ? (
+              <div className="relative h-2 w-full overflow-hidden rounded-full bg-secondary">
+                <div
+                  className={`h-full transition-all ${
+                    memory > 80
+                      ? "bg-red-500"
+                      : memory > 60
+                      ? "bg-amber-500"
+                      : "bg-violet-500"
+                  }`}
+                  style={{ width: `${memory}%` }}
+                />
+              </div>
+            ) : (
+              <span className="text-xs text-muted-foreground">Not reported</span>
+            )}
+            {metrics?.system.memory_available_mb != null && (
               <span className="text-xs text-muted-foreground">
                 {metrics.system.memory_available_mb.toFixed(0)} MB available
               </span>
@@ -307,21 +304,27 @@ function SystemStatusCards({
           <div className="flex flex-col items-center gap-3 w-full">
             <div className="flex items-center gap-2">
               <HardDrive className="h-5 w-5 text-cyan-400" />
-              <span className="text-2xl font-bold">{disk.toFixed(1)}%</span>
+              <span className="text-2xl font-bold">
+                {disk === null ? "—" : `${disk.toFixed(1)}%`}
+              </span>
             </div>
-            <div className="relative h-2 w-full overflow-hidden rounded-full bg-secondary">
-              <div
-                className={`h-full transition-all ${
-                  disk > 85
-                    ? "bg-red-500"
-                    : disk > 65
-                    ? "bg-amber-500"
-                    : "bg-cyan-500"
-                }`}
-                style={{ width: `${disk}%` }}
-              />
-            </div>
-            {metrics && (
+            {disk !== null ? (
+              <div className="relative h-2 w-full overflow-hidden rounded-full bg-secondary">
+                <div
+                  className={`h-full transition-all ${
+                    disk > 85
+                      ? "bg-red-500"
+                      : disk > 65
+                      ? "bg-amber-500"
+                      : "bg-indigo-400"
+                  }`}
+                  style={{ width: `${disk}%` }}
+                />
+              </div>
+            ) : (
+              <span className="text-xs text-muted-foreground">Not reported</span>
+            )}
+            {metrics?.system.disk_used_gb != null && (
               <span className="text-xs text-muted-foreground">
                 {metrics.system.disk_used_gb.toFixed(1)} GB used
               </span>
@@ -335,11 +338,13 @@ function SystemStatusCards({
             <div className="flex items-center gap-2">
               <Clock className="h-5 w-5 text-emerald-400" />
               <span className="text-2xl font-bold tabular-nums">
-                {formatUptime(uptime)}
+                {uptime === null ? "—" : formatUptime(uptime)}
               </span>
             </div>
             <span className="text-xs text-muted-foreground">
-              {metrics?.system.process_count ?? 0} processes
+              {metrics?.system.process_count != null
+                ? `${metrics.system.process_count} processes`
+                : "Process count not reported"}
             </span>
           </div>
         </StatusCard>
@@ -631,6 +636,7 @@ function ProcessManager() {
 function AppLauncher() {
   const [apps, setApps] = useState<AppItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [launching, setLaunching] = useState<string | null>(null);
 
   const fetchApps = useCallback(async () => {
@@ -638,13 +644,11 @@ function AppLauncher() {
     try {
       const data = await jarvisAPI.getCommonApps();
       const appList = (data.apps || data.common_apps || data) as AppItem[];
-      if (Array.isArray(appList) && appList.length > 0) {
-        setApps(appList);
-      } else {
-        setApps(FALLBACK_APPS);
-      }
+      setApps(Array.isArray(appList) ? appList : []);
+      setLoadError(false);
     } catch {
-      setApps(FALLBACK_APPS);
+      setApps([]);
+      setLoadError(true);
     } finally {
       setIsLoading(false);
     }
@@ -676,7 +680,24 @@ function AppLauncher() {
 
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold">Applications</h3>
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-lg font-semibold">Applications</h3>
+        {(loadError || apps.length === 0) && (
+          <Button variant="outline" size="sm" onClick={() => void fetchApps()}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Retry
+          </Button>
+        )}
+      </div>
+      {apps.length === 0 ? (
+        <Card role={loadError ? "alert" : "status"} className="border-dashed border-slate-700/80 bg-slate-900/30">
+          <CardContent className="py-8 text-center text-sm text-muted-foreground">
+            {loadError
+              ? "The application catalog could not be loaded. Retry to check the system service."
+              : "No applications are currently reported by the system service."}
+          </CardContent>
+        </Card>
+      ) : (
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
         {apps.map((app, i) => {
           const Icon = getAppIcon(app.command);
@@ -719,6 +740,7 @@ function AppLauncher() {
           );
         })}
       </div>
+      )}
     </div>
   );
 }
