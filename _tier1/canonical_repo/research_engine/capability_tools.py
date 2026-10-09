@@ -19,6 +19,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -711,6 +712,20 @@ def capability_inventory() -> dict[str, Any]:
         "detail": providers.get("_error") if not prov_ok else None,
     }
 
+    inventory["sandbox_run"] = {
+        "state": AVAILABLE if Path(sys.executable).is_file() else UNAVAILABLE,
+        "risk": "exec",
+        "source": "research_engine.SandboxRunTool",
+        "reason": None if Path(sys.executable).is_file()
+        else "current Python executable is unavailable",
+    }
+    inventory["static_search"] = {
+        "state": AVAILABLE,
+        "risk": "read",
+        "source": "research_engine.StaticSearchTool",
+        "reason": "deterministic in-process search capability",
+    }
+
     # Registries: real DB reads.
     for cap, mod, cls, method in (
         ("job.status", "job_registry", "JobRegistry", "list_jobs"),
@@ -759,6 +774,38 @@ def capability_inventory() -> dict[str, Any]:
             "source": f"jarvis_backend.brain_fabric ({view})",
             "reason": "runtime dependency state is checked when invoked",
         }
+
+    # Live web search is available only when the explicit deployment gate is
+    # enabled and the existing HTTP browser engine exposes its real operations.
+    from .tool_registry import _web_search_enabled
+    if not _web_search_enabled():
+        inventory["search_web"] = {
+            "state": NOT_CONFIGURED,
+            "risk": "network",
+            "source": "research_engine.BrowserSearchTool",
+            "reason": "live web search is disabled by deployment configuration",
+        }
+    else:
+        try:
+            from jarvis_backend.browser_engine import get_engine
+
+            engine = get_engine("default")
+            ready = callable(getattr(engine, "search", None)) and callable(
+                getattr(engine, "fetch_document", None)
+            )
+            inventory["search_web"] = {
+                "state": AVAILABLE if ready else UNAVAILABLE,
+                "risk": "network",
+                "source": "jarvis_backend.browser_engine.HttpBrowserEngine",
+                "reason": None if ready else "browser search/extraction methods are unavailable",
+            }
+        except Exception as exc:  # noqa: BLE001 - report dependency failure honestly
+            inventory["search_web"] = {
+                "state": UNAVAILABLE,
+                "risk": "network",
+                "source": "jarvis_backend.browser_engine.HttpBrowserEngine",
+                "reason": f"browser engine unavailable ({type(exc).__name__})",
+            }
 
     # Registration alone is not evidence that dependencies, authorization,
     # or the execution path are currently ready.

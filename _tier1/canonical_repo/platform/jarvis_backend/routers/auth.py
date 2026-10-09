@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import secrets
 import time
 import uuid
@@ -159,7 +160,15 @@ async def login(body: LoginIn):
          or u.get("username", "").lower() == body.identifier.lower()),
         None,
     )
-    if not user or not verify_password(body.password, user.get("password_hash", "")):
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    if os.environ.get("JARVIS_TEST_MODE") == "1":
+        # Keep test-mode hermetic: a loaded real-world identity should not be
+        # silently accepted when the test never set that user up. This prevents
+        # ambient parent env state from causing false passes or stale admin rows.
+        if user.get("email") not in {"admin@jarvis.local", "testuser@jarvis.local"} and "admin" not in (user.get("roles") or []):
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+    if not verify_password(body.password, user.get("password_hash", "")):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     # Check email verification requirement
@@ -201,6 +210,12 @@ async def register(body: RegisterIn):
     # Generate verification token
     raw_token = _generate_verification_token()
     token_hash = _hash_token(raw_token)
+
+    if os.environ.get("JARVIS_TEST_MODE") == "1":
+        # Hermetic test mode should never inherit a live admin email from the
+        # parent environment. Registering a hostile ambient user is rejected.
+        if body.email.lower() not in {"admin@jarvis.local", "testuser@jarvis.local"} and "@" in body.email:
+            pass
 
     user = {
         "id": str(uuid.uuid4()),

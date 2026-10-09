@@ -46,6 +46,7 @@ RESOURCE_ACTIONS: dict[str, list[str]] = {
     # Geography (enforced by research_engine.geography_tools). Reading local map
     # data is separated from corpus search so a viewer cannot sweep local files.
     "geography": ["read", "search", "data", "provider"],
+    "web": ["read"],
 }
 
 
@@ -195,7 +196,10 @@ CANONICAL_ROLES: dict[str, dict[str, Any]] = {
         ]
     },
     "user": {
-        "permissions": ["read", "chat", "agent:read", "memory:write", "voice:use"],
+        "permissions": [
+            "read", "chat", "agent:read", "memory:write", "voice:use",
+            "web:read",
+        ],
     },
 }
 # NOTE: no canonical role grants "data:write". Ingestion/mutation therefore

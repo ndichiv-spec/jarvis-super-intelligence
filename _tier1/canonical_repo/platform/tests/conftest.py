@@ -14,6 +14,18 @@ import pytest
 
 # Test configuration
 TEST_DB_URL = "sqlite+aiosqlite:///./test_jarvis.db"
+os.environ.setdefault("JARVIS_SECRET_KEY", "stage1-test-secret-key-0123456789abcdef")
+for _var in (
+    "NVIDIA_API_KEY", "NVIDIA_API_TOKEN", "NIM_API_KEY",
+    "GOOGLE_API_KEY", "GEMINI_API_KEY", "GCLOUD_API_KEY",
+    "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "HF_TOKEN",
+    "HUGGINGFACEHUB_API_TOKEN", "JARVIS_HF_TOKEN", "HF_API_TOKEN",
+    "GROQ_API_KEY", "DEEPSEEK_API_KEY", "TOGETHER_API_KEY",
+    "MISTRAL_API_KEY", "COHERE_API_KEY",
+    "JARVIS_BRAIN_API_KEY", "JARVIS_BRAIN_ENDPOINT",
+    "SILVERWING_ENDPOINT",
+):
+    os.environ.pop(_var, None)
 
 
 @pytest.fixture
@@ -78,9 +90,37 @@ def mock_search_results():
     ]
 
 
+def _seed_test_user() -> None:
+    """Ensure a canonical test user exists for bearer-token auth.
+
+    The auth middleware resolves the caller from the JWT subject and refuses to
+    authenticate if the user row is absent. Earlier runs of the suite could
+    delete the backing SQLite file and leave the user table empty, so no
+    request succeeded until the test user was restored.
+    """
+    from jarvis_backend.core import get_store, hash_password, now_iso
+
+    users = get_store("users").load()
+    user_id = "testuser"
+    if not any((u.get("id") == user_id or u.get("username") == "testuser") for u in users.values()):
+        users[user_id] = {
+            "id": user_id,
+            "email": "testuser@jarvis.local",
+            "username": "testuser",
+            "full_name": "Test User",
+            "password_hash": hash_password("test-password"),
+            "status": "active",
+            "roles": ["user"],
+            "email_verified": True,
+            "created_at": now_iso(),
+        }
+        get_store("users").save()
+
+
 @pytest.fixture
 def auth_token():
     """Create test auth token using the real signing implementation."""
+    _seed_test_user()
     from jarvis_backend.core import create_token
 
     return create_token({"sub": "testuser", "user_id": "test-id"})
@@ -94,22 +134,44 @@ def auth_headers(auth_token):
 
 @pytest.fixture(autouse=True)
 def cleanup_test_db():
-    """Cleanup test database after tests (if available)."""
-    yield
-    try:
-        from core.database import close_db
-        loop = asyncio.new_event_loop()
+    """Reset the project test database before and after each test.
+
+    The suite uses a fixed SQLite file for deterministic auth/session tests, so
+    stale rows from earlier runs or earlier tests must be purged before the next
+    test begins. This prevents cross-user leakage and duplicate-registration
+    failures caused by the previous test run leaving data behind.
+    """
+    test_db_paths = (
+        Path("./test_jarvis.db"),
+        Path(__file__).resolve().parent / "_test_jarvis.db",
+    )
+    for db_path in test_db_paths:
         try:
-            loop.run_until_complete(close_db())
-        finally:
-            loop.close()
-    except (ImportError, AttributeError):
+            if db_path.exists():
+                db_path.unlink()
+        except PermissionError:
+            pass
+
+    try:
+        from jarvis_backend.core import data
+        for store in list(data.values()):
+            if hasattr(store, "_data"):
+                store._data = None
+    except Exception:  # pragma: no cover - best effort isolation
         pass
 
-    db_path = "./test_jarvis.db"
-    if os.path.exists(db_path):
+    yield
+
+    try:
+        from jarvis_backend.db import reset_database
+        reset_database()
+    except Exception:  # pragma: no cover - cleanup is best effort only
+        pass
+
+    for db_path in test_db_paths:
         try:
-            os.remove(db_path)
+            if db_path.exists():
+                db_path.unlink()
         except PermissionError:
             pass
 
@@ -208,29 +270,6 @@ _PROVIDER_ENV_VARS = (
 )
 for _var in _PROVIDER_ENV_VARS:
     os.environ.pop(_var, None)
-
-
-def _seed_test_user() -> None:
-    """Ensure a user exists whose id matches the token ``sub`` claim."""
-    try:
-        from jarvis_backend.core import get_store
-
-        users = get_store("users")
-        store = users.load()
-        if "testuser" not in store:
-            store["testuser"] = {
-                "id": "testuser",
-                "email": "testuser@jarvis.local",
-                "display_name": "Test User",
-                "is_active": True,
-                "roles": ["user"],
-            }
-            users.save(store)
-    except Exception:  # noqa: BLE001
-        pass
-
-
-_seed_test_user()
 
 
 def _seed_test_user() -> None:

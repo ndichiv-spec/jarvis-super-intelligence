@@ -21,21 +21,32 @@ Brain.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Optional
+from urllib.parse import urlsplit
+
+from research_engine.models import ToolResult, VerificationStatus
+from research_engine.tool_registry import ToolContext, ToolRegistry, scrub_secrets
 
 from .audit import BrainAudit, EventType
 from .budget import TaskBudget, TaskBudgetExceeded
-from .contract import (
-    AutonomyLevel, BrainInput, BrainIntent, BrainOutput, CapabilityRequest,
-    ConfidenceState, ExecutionMode, Plan, PlanDecision, PlanStep,
-)
 from .context_engine import ContextEngine, ContextLimits
+from .contract import (
+    AutonomyLevel,
+    BrainInput,
+    BrainIntent,
+    BrainOutput,
+    CapabilityRequest,
+    ConfidenceState,
+    ExecutionMode,
+    Plan,
+    PlanDecision,
+    PlanStep,
+)
 from .plan_validator import PlanValidator, ValidationResult
 from .protocol import BrainControlProtocol, ProtocolViolationError
-from research_engine.models import VerificationStatus, ToolResult
-from research_engine.tool_registry import ToolRegistry, ToolContext, scrub_secrets
 
 
 @dataclass
@@ -507,6 +518,11 @@ class BrainOrchestrator:
             if ctype == "answer_generated" and any(
                     r.success and (getattr(r, "result", None) or "") for r in evidence):
                 return ctype
+            if ctype == "source_observed" and any(
+                    r.success and self._has_public_source(
+                        getattr(r, "artifacts", None) or [])
+                    for r in evidence):
+                return ctype
             if ctype == "evidence_sufficient" and any(r.success for r in evidence):
                 return ctype if len([r for r in evidence if r.success]) >= 1 else ""
             if ctype == "tests_passed" and any(
@@ -517,6 +533,36 @@ class BrainOrchestrator:
                 if self._verification_verified(evidence):
                     return ctype
         return ""
+
+    @staticmethod
+    def _has_public_source(artifacts: list[dict[str, Any]]) -> bool:
+        for artifact in artifacts:
+            if not isinstance(artifact, dict):
+                continue
+            url = str(artifact.get("url") or "").strip()
+            title = str(artifact.get("title") or "").strip()
+            try:
+                parsed = urlsplit(url)
+                hostname = (parsed.hostname or "").rstrip(".").lower()
+                if (
+                    parsed.scheme != "https"
+                    or not hostname
+                    or parsed.username
+                    or parsed.password
+                    or hostname == "localhost"
+                    or hostname.endswith((".localhost", ".local", ".internal"))
+                    or not title
+                ):
+                    continue
+                try:
+                    if not ipaddress.ip_address(hostname).is_global:
+                        continue
+                except ValueError:
+                    pass
+                return True
+            except ValueError:
+                continue
+        return False
 
     def _exit_zero(self, r: ToolResult) -> bool:
         m = getattr(r, "metrics", None) or {}

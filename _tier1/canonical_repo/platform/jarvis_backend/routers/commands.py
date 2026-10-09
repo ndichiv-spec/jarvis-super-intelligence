@@ -85,6 +85,10 @@ def _owner_id(user: dict[str, Any]) -> str:
     return str(user.get("id") or user.get("email") or "")
 
 
+def _effective_autonomy(command: dict[str, Any]) -> str:
+    return str(command.get("execution_autonomy") or command.get("autonomy") or "SUPERVISED")
+
+
 def _owned_command(command_id: str, user: dict[str, Any]) -> dict[str, Any]:
     command = _commands().get(command_id)
     if command is None:
@@ -101,6 +105,33 @@ def _append_event(command_id: str, event_type: str, **payload: Any) -> None:
     if command is None:
         return
     safe_payload = _safe_value(payload)
+    event_data = dict(safe_payload)
+    safe_payload.setdefault("protocol_version", "1.0")
+    safe_payload.setdefault("state", safe_payload.get("status") or event_type)
+    safe_payload.setdefault("request_id", command.get("request_id"))
+    safe_payload.setdefault("session_id", command.get("conversation_id"))
+    safe_payload.setdefault("conversation_id", command.get("conversation_id"))
+    safe_payload.setdefault(
+        "capability_id",
+        safe_payload.get("capability")
+        or command.get("capability_id")
+        or command.get("requested_capability_id"),
+    )
+    safe_payload.setdefault("execution_id", command.get("active_execution_id"))
+    safe_payload.setdefault("endpoint_id", command.get("endpoint_id"))
+    safe_payload.setdefault(
+        "source",
+        "world_resolver" if command.get("execution_kind") == "world_resolver"
+        else "jarvis_core",
+    )
+    safe_payload.setdefault("data", event_data)
+    safe_payload.setdefault("presentation", None)
+    safe_payload.setdefault("security", {"authorization": "server"})
+    safe_payload.setdefault("correlation", {
+        "request_id": command.get("request_id"),
+        "command_id": command_id,
+        "execution_id": command.get("active_execution_id"),
+    })
     plan_id = command.get("plan_id")
     if plan_id:
         safe_payload["plan_id"] = plan_id
@@ -211,7 +242,7 @@ async def recover_commands_on_startup() -> None:
         command["status"] = "RECEIVED"
         store.save()
         _append_event(command["command_id"], "command_recovered_and_queued")
-        _schedule_command(command["command_id"], user, command.get("autonomy", "SUPERVISED"))
+        _schedule_command(command["command_id"], user, _effective_autonomy(command))
 
     for record in orphaned:
         command = commands.get(record["command_id"])
@@ -283,7 +314,7 @@ async def _supervise_execution_recovery() -> None:
                 )
                 _schedule_command(
                     command["command_id"], user,
-                    command.get("autonomy", "SUPERVISED"),
+                    _effective_autonomy(command),
                 )
             elif record["status"] == ExecutionState.RECOVERY_REQUIRED.value:
                 command["status"] = "RECOVERY_REQUIRED"
@@ -461,6 +492,27 @@ def _audit_callback(command_id: str):
             success=audit_event.success,
             provenance=_safe_value(provenance),
         )
+        if command.get("execution_kind") == "world_resolver":
+            selected_capability = command.get("selected_capability_id")
+            if event_name == "CAPABILITY_STARTED" and audit_event.capability == selected_capability:
+                _append_event(
+                    command_id,
+                    "world.execution.started",
+                    capability_id=selected_capability,
+                    execution_surface=command.get("execution_surface"),
+                )
+            elif (
+                event_name in {"CAPABILITY_COMPLETED", "CAPABILITY_FAILED"}
+                and audit_event.capability == selected_capability
+            ):
+                _append_event(
+                    command_id,
+                    "world.execution.completed"
+                    if event_name == "CAPABILITY_COMPLETED"
+                    else "world.execution.failed",
+                    capability_id=selected_capability,
+                    success=bool(audit_event.success),
+                )
 
     return record
 
@@ -505,13 +557,123 @@ async def _execute_command(command_id: str, user: dict[str, Any], autonomy: str)
             TaskBudget,
             build_brain_adapter,
         )
-        from research_engine.capability_tools import build_capability_registry
-        from research_engine.tool_registry import resolve_permissions
+        from research_engine.capability_contract import build_contracts
+        from research_engine.capability_tools import (
+            build_capability_registry,
+            capability_inventory,
+        )
+        from research_engine.tool_registry import (
+            DefaultPermissionPolicy,
+            resolve_permissions,
+        )
+        from ..world_resolver import (
+            ExecutionSelection,
+            WorldResolverAdapter,
+            resolve_execution_surface,
+            resolve_presentation,
+            resolve_world_intent,
+        )
 
         command = _commands().get(command_id)
         if command is None:
             return
+        world_intent = resolve_world_intent(command["goal"])
+        user_id = _owner_id(user)
+        permissions = resolve_permissions(user_id, principal=user)
         registry = build_capability_registry()
+        if world_intent is not None:
+            inventory = capability_inventory()
+            contracts = build_contracts(registry, inventory)
+            explicit_intent_confirmations = {
+                f"{user_id}:{capability_id}": True
+                for capability_id, contract in contracts.items()
+                if world_intent.operation in contract.get("operations", [])
+                and world_intent.operation in contract.get(
+                    "intent_confirmation_operations", [],
+                )
+                and contract.get("risk_level") == "network"
+            }
+            registry = build_capability_registry(
+                policy=DefaultPermissionPolicy(
+                    confirmations=explicit_intent_confirmations,
+                ),
+            )
+            contracts = build_contracts(registry, inventory)
+            _append_event(
+                command_id,
+                "world.resolve.started",
+                requested_capability_id=world_intent.operation,
+                intent=world_intent.kind,
+            )
+            selection = resolve_execution_surface(
+                world_intent.operation,
+                registry,
+                contracts,
+                user_id=user_id,
+                permissions=permissions,
+                principal=user,
+            )
+            command = _commands()[command_id]
+            command["capability_id"] = selection.capability_id
+            command["selected_capability_id"] = selection.capability_id
+            command["execution_surface"] = selection.execution_surface
+            command["resolution_status"] = selection.status
+            command["resolution_reason"] = selection.reason
+            get_store("commands").save()
+            _append_event(
+                command_id,
+                "world.resolve.completed",
+                requested_capability_id=world_intent.operation,
+                selected_capability_id=selection.capability_id,
+                execution_surface=selection.execution_surface,
+                resolution_status=selection.status,
+            )
+            if selection.status == "selected":
+                _append_event(
+                    command_id,
+                    "world.execution.selected",
+                    capability_id=selection.capability_id,
+                    execution_surface=selection.execution_surface,
+                    operation=world_intent.operation,
+                )
+            else:
+                _append_event(
+                    command_id,
+                    "world.execution.failed",
+                    requested_capability_id=world_intent.operation,
+                    reason=selection.reason,
+                    operation=world_intent.operation,
+                )
+        else:
+            selection = ExecutionSelection(
+                operation="",
+                status="unavailable",
+                reason="No world operation was resolved.",
+            )
+
+        def record_world_selection(next_selection: ExecutionSelection) -> None:
+            if not next_selection.capability_id:
+                return
+            store = get_store("commands")
+            current = store.load()[command_id]
+            if current.get("selected_capability_id") == next_selection.capability_id:
+                return
+            previous = current.get("selected_capability_id")
+            current["capability_id"] = next_selection.capability_id
+            current["selected_capability_id"] = next_selection.capability_id
+            current["execution_surface"] = next_selection.execution_surface
+            current["resolution_status"] = "selected"
+            current["resolution_reason"] = None
+            store.save()
+            _append_event(
+                command_id,
+                "world.execution.selected",
+                capability_id=next_selection.capability_id,
+                execution_surface=next_selection.execution_surface,
+                operation=next_selection.operation,
+                fallback_from=previous,
+            )
+
         cancel_token = _cancel_tokens[command_id]
         authorization_event = _authorization_events[command_id]
 
@@ -540,12 +702,19 @@ async def _execute_command(command_id: str, user: dict[str, Any], autonomy: str)
             if cancel_token.is_set():
                 return False
             authorization = _commands()[command_id].get("authorization") or {}
-            return authorization.get("approved") is True
+            approved = authorization.get("approved") is True
+            if approved:
+                for capability in authorization.get("capabilities", []):
+                    registry.record_confirmation(user_id, str(capability))
+            return approved
 
-        user_id = _owner_id(user)
-        permissions = resolve_permissions(user_id, principal=user)
         orchestrator = BrainOrchestrator(
-            build_brain_adapter(),
+            WorldResolverAdapter(
+                world_intent,
+                selection,
+                on_select=record_world_selection,
+            )
+            if world_intent is not None else build_brain_adapter(),
             registry,
             PlanValidator(registry),
             budget=TaskBudget(max_execution_time=300, max_cost=1.0),
@@ -567,6 +736,35 @@ async def _execute_command(command_id: str, user: dict[str, Any], autonomy: str)
                 ),
                 timeout=300,
             )
+            if world_intent is not None:
+                resolved_capability = (
+                    _commands()[command_id].get("selected_capability_id")
+                )
+                search_evidence = [
+                    item for item in result.evidence
+                    if item.get("name") == resolved_capability
+                    and item.get("success")
+                ]
+                artifacts = [
+                    artifact
+                    for item in search_evidence
+                    for artifact in item.get("artifacts", [])
+                    if isinstance(artifact, dict)
+                ]
+                if search_evidence:
+                    _append_event(
+                        command_id,
+                        "world.result.observed",
+                        capability_id=resolved_capability,
+                        operation=world_intent.operation,
+                        result_count=len(artifacts),
+                    )
+                _append_event(
+                    command_id,
+                    "presentation.updated",
+                    presentation=resolve_presentation(world_intent, artifacts),
+                    result_count=len(artifacts),
+                )
         store = get_store("commands")
         current = store.load()[command_id]
         verified = (
@@ -803,14 +1001,30 @@ async def _create_command(body: CommandCreate, user: dict[str, Any]) -> dict[str
         )
     command_id = str(uuid.uuid4())
     now = time.time()
+    from ..world_resolver import resolve_world_intent
+
+    world_intent = resolve_world_intent(goal)
+    world_request = world_intent is not None
+    execution_autonomy = "AUTONOMOUS" if world_request else body.autonomy
     command = {
         "command_id": command_id,
         "conversation_id": body.conversation_id,
         "request_id": body.request_id,
         "user_id": _owner_id(user),
         "goal": goal,
+        "execution_kind": "world_resolver" if world_request else "brain",
+        "capability_id": None,
+        "requested_capability_id": (
+            world_intent.operation if world_intent else None
+        ),
+        "selected_capability_id": None,
+        "execution_surface": None,
+        "execution_scope": (
+            "single_operation" if world_request else "general_capabilities"
+        ),
         "status": "RECEIVED",
         "autonomy": body.autonomy,
+        "execution_autonomy": execution_autonomy,
         "plan_id": str(uuid.uuid4()),
         "plan_ids": [],
         "priority": "normal",
@@ -849,7 +1063,7 @@ async def _create_command(body: CommandCreate, user: dict[str, Any]) -> dict[str
     command["status"] = "RECEIVED"
     store.save()
     _append_event(command_id, "command_received")
-    _schedule_command(command_id, user, body.autonomy)
+    _schedule_command(command_id, user, execution_autonomy)
     return copy.deepcopy(command)
 
 
@@ -1063,7 +1277,7 @@ async def resume_command(
     command["status"] = "RECEIVED"
     get_store("commands").save()
     _append_event(command_id, "command_resumed", execution_id=execution_id)
-    _schedule_command(command_id, user, command.get("autonomy", "SUPERVISED"))
+    _schedule_command(command_id, user, _effective_autonomy(command))
     return {"command_id": command_id, "status": "RECEIVED"}
 
 
@@ -1096,5 +1310,5 @@ async def retry_command(
         execution_id=execution_id,
         attempt=jarvis_runtime.get_execution(execution_id)["attempt"],
     )
-    _schedule_command(command_id, user, command.get("autonomy", "SUPERVISED"))
+    _schedule_command(command_id, user, _effective_autonomy(command))
     return {"command_id": command_id, "execution_id": execution_id, "status": "QUEUED"}

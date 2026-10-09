@@ -41,6 +41,8 @@ def _chat_result_to_payload(result: Dict[str, Any]) -> Dict[str, Any]:
         "usage": result.get("usage"),
         "latency_ms": result.get("latency_ms"),
         "sources": result.get("sources"),
+        "tool_calls": result.get("tool_calls"),
+        "runtime_command_id": result.get("runtime_command_id"),
         "status": result.get("status", "COMPLETED"),
         "error": result.get("error"),
         "resumed": result.get("resumed", False),
@@ -59,6 +61,7 @@ async def legacy_chat(body: ChatIn, user: Dict[str, Any] = Depends(get_current_u
         user_id, session_id, body.message,
         model=body.model,
         client_message_id=body.client_message_id,
+        principal=user,
     )
     return _chat_result_to_payload(result)
 
@@ -76,6 +79,7 @@ async def legacy_chat_stream(body: ChatIn, user: Dict[str, Any] = Depends(get_cu
                 user_id, session_id, body.message,
                 model=body.model,
                 client_message_id=body.client_message_id,
+                principal=user,
             ):
                 yield "data: " + json.dumps(event, default=str) + "\n\n"
         except Exception:

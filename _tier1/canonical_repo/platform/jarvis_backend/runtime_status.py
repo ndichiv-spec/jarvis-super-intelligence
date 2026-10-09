@@ -526,12 +526,11 @@ async def build_canonical_runtime_status(probe: bool = False) -> Dict[str, Any]:
     }
 
     # Derive overall platform health
-    # At least AUTH, CHAT, and DATABASE must be AVAILABLE
+    # MCP and individual providers are execution surfaces, not JARVIS core.
     core_ok = (
         auth_res["status"] == RuntimeState.AVAILABLE.value
         and chat_res["status"] == RuntimeState.AVAILABLE.value
         and db_res["status"] == RuntimeState.AVAILABLE.value
-        and mcp_res["status"] == "AVAILABLE"
     )
     # At least one AI provider must be AVAILABLE
     any_provider_available = any(
@@ -550,7 +549,14 @@ async def build_canonical_runtime_status(probe: bool = False) -> Dict[str, Any]:
     return {
         "status": overall_status,
         "alive": True,
+        "core_state": "AVAILABLE" if core_ok else "DEGRADED",
         "service_readiness": "READY" if core_ok else "DEGRADED",
+        "endpoint_states": {
+            "brain": brain_res["status"],
+            "silverwing": silverwing_res["status"],
+        },
+        "service_states": components,
+        "network_state": "UNKNOWN" if probe else "UNPROBED",
         "generated_at": now_iso(),
         "probe": probe,
         "components": components,

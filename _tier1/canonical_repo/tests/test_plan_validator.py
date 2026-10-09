@@ -92,8 +92,16 @@ def test_destructive_capability_needs_human_approval(validator):
     assert "sandbox_run" in res.needs_approval_for
 
 
-def test_network_capability_needs_confirmation(validator):
+def test_network_capability_needs_confirmation(validator, monkeypatch):
     # search_web is network + confirmation-gated -> HUMAN_APPROVAL.
+    # The intent of this test is policy, so isolate availability separately.
+    from research_engine import capability_tools
+
+    monkeypatch.setattr(
+        capability_tools,
+        "capability_inventory",
+        lambda: {"search_web": {"state": "AVAILABLE"}},
+    )
     res = validator.validate(_out("search_web").to_dict(), user_id="alice",
                              autonomy=AutonomyLevel.AUTONOMOUS.value)
     assert res.decision == PlanDecision.HUMAN_APPROVAL

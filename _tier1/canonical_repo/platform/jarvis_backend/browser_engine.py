@@ -411,6 +411,10 @@ class BrowserEngine(ABC):
         return ["http_fetch", "page_extraction"]
 
 
+class BrowserSearchError(RuntimeError):
+    """Raised when every configured live-search backend failed."""
+
+
 class HttpBrowserEngine(BrowserEngine):
     """Default browser engine using urllib (HTTP/HTTPS only, no JS execution).
 
@@ -430,6 +434,10 @@ class HttpBrowserEngine(BrowserEngine):
     def __init__(self, timeout: float = 15.0, max_bytes: int = 5 * 1024 * 1024):
         self.timeout = timeout
         self.max_bytes = max_bytes
+
+    @property
+    def capabilities(self) -> List[str]:
+        return ["public_web_search", "http_fetch", "page_extraction"]
 
     def fetch(self, url: str, options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         opts = options or {}
@@ -520,21 +528,28 @@ class HttpBrowserEngine(BrowserEngine):
         """
         max_results = max(1, min(int(max_results), 20))
         results: List[Dict[str, Any]] = []
+        failures: list[Exception] = []
+        completed_backends = 0
 
         try:
             results.extend(self._ddg_lite_search(query, max_results, timeout))
-        except Exception:
-            # DDG may be blocked/interstitial; try the Wikipedia API fallback
-            # only if DDG returned nothing or raised.
-            results = []
+            completed_backends += 1
+        except Exception as exc:
+            failures.append(exc)
 
         if len(results) < max_results:
             try:
                 results.extend(
                     self._wikipedia_search(query, max_results - len(results), timeout)
                 )
-            except Exception:
-                pass
+                completed_backends += 1
+            except Exception as exc:
+                failures.append(exc)
+
+        if completed_backends == 0 and failures:
+            raise BrowserSearchError(
+                "All configured public search backends failed."
+            ) from failures[-1]
 
         # Normalise ordering + provenance metadata.
         for i, r in enumerate(results):

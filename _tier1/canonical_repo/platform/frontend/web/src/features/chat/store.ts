@@ -226,6 +226,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         model: response.model,
         sources: response.sources,
         tool_calls: response.tool_calls,
+        metadata: response.runtime_command_id
+          ? { runtime_command_id: response.runtime_command_id }
+          : undefined,
       };
 
       set((state) => ({
@@ -306,6 +309,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
                       confidence: chunk.confidence,
                       sources: chunk.sources,
                       tool_calls: chunk.tool_calls,
+                      metadata: chunk.runtime_command_id
+                        ? { runtime_command_id: chunk.runtime_command_id }
+                        : msg.metadata,
                       status: chunk.status || 'COMPLETED',
                     }
                   : msg

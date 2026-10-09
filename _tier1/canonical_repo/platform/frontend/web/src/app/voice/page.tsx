@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { jarvisAPI } from "@/lib/api";
+import { chatApi } from "@/features/chat/api";
 
 interface VoiceMessage {
   id: string;
@@ -16,6 +17,7 @@ interface VoiceMessage {
   text: string;
   createdAt: Date;
   tools?: string[];
+  sources?: string[];
 }
 
 interface VoiceServiceStatus {
@@ -75,6 +77,7 @@ export default function VoiceControlPanel() {
   const [speakResponses, setSpeakResponses] = useState(true);
   const [voiceStatus, setVoiceStatus] = useState<VoiceServiceStatus | null>(null);
   const recognitionRef = useRef<BrowserRecognition | null>(null);
+  const conversationIdRef = useRef<string | undefined>(undefined);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const browserRecognitionSupported = useSyncExternalStore(
     () => () => {},
@@ -131,26 +134,27 @@ export default function VoiceControlPanel() {
     ]);
     setIsSending(true);
     try {
-      const result = await jarvisAPI.starkChat({
+      const result = await chatApi.sendMessage({
         message,
-        context: {
-          conversation_history: messages.slice(-12).map(({ role, text }) => ({ role, content: text })),
-        },
+        session_id: conversationIdRef.current,
       });
-      if (!result.success || !result.response?.trim()) {
-        throw new Error(result.response || "JARVIS returned no response");
+      const responseText = result.message;
+      if (result.status !== "COMPLETED" || !responseText?.trim()) {
+        throw new Error(result.error?.message || "JARVIS returned no response");
       }
+      conversationIdRef.current = result.session_id || conversationIdRef.current;
       setMessages((current) => [
         ...current,
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          text: result.response,
+          text: responseText,
           createdAt: new Date(),
-          tools: result.tools_used,
+          tools: result.tool_calls?.map((tool) => tool.name),
+          sources: result.sources,
         },
       ]);
-      if (speakResponses) speak(result.response);
+      if (speakResponses) speak(responseText);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "JARVIS could not process that request");
     } finally {
@@ -268,6 +272,21 @@ export default function VoiceControlPanel() {
                   <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
                     <article className={`max-w-[88%] rounded-xl border p-3 ${message.role === "user" ? "border-cyan-300/15 bg-cyan-300/[0.07]" : "border-white/[0.08] bg-white/[0.035]"}`}>
                       <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{message.text}</p>
+                      {message.sources && message.sources.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {message.sources.map((source) => (
+                            <a
+                              key={source}
+                              href={source}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="break-all text-xs text-cyan-200 underline hover:text-cyan-100"
+                            >
+                              {source}
+                            </a>
+                          ))}
+                        </div>
+                      )}
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
                         <span>{message.createdAt.toLocaleTimeString()}</span>
                         {message.tools?.map((tool) => <Badge variant="outline" key={tool} className="px-1.5 py-0 text-[10px]">{tool}</Badge>)}

@@ -311,6 +311,8 @@ class ChatService:
             "device": reply.get("device"),
             "latency_ms": reply.get("latency_ms"),
             "sources": reply.get("sources"),
+            "tool_calls": reply.get("tool_calls"),
+            "runtime_command_id": reply.get("runtime_command_id"),
             "status": reply.get("status"),
             "error": reply.get("error"),
             "resumed": True,
@@ -505,9 +507,164 @@ class ChatService:
                 logger.debug("capability audit record failed for %s", tool,
                              exc_info=True)
 
+    async def _world_resolution_reply(
+        self,
+        prompt: str,
+        user_id: str,
+        session_id: str,
+        request_id: str,
+        principal: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        from .world_resolver import (
+            has_prior_world_results,
+            is_result_selection_request,
+            render_world_results,
+            resolve_result_followup,
+            resolve_world_intent,
+        )
+
+        intent = resolve_world_intent(prompt)
+        if intent is None and not is_result_selection_request(prompt):
+            return None
+
+        session = self.get_session(user_id, session_id)
+        messages = session.get("messages") or []
+        if intent is None and has_prior_world_results(messages):
+            selected = resolve_result_followup(prompt, messages)
+            if selected is not None:
+                title, url = selected
+                return {
+                    "message": (
+                        f"Here is the selected result: [{title}]({url}). "
+                        "This link hands off to the external site; JARVIS has "
+                        "not navigated or performed an authenticated action there."
+                    ),
+                    "sources": [url],
+                    "tool_calls": [],
+                    "provider": "world_resolver",
+                }
+            return {
+                "message": (
+                    "I couldn't select that result from the most recent completed "
+                    "discovery in this conversation. Ask me to search again to "
+                    "refresh the links."
+                ),
+                "sources": [],
+                "tool_calls": [],
+                "provider": "world_resolver",
+            }
+
+        if intent is None:
+            return None
+
+        from .routers.commands import CommandCreate, _commands, _create_command
+
+        caller = principal or get_store("users").load().get(user_id)
+        if not isinstance(caller, dict) or str(caller.get("id") or "") != str(user_id):
+            raise ChatError(
+                ErrorCategory.INVALID_REQUEST,
+                "The authenticated identity could not be verified for execution.",
+            )
+
+        started = time.monotonic()
+        command = await _create_command(
+            CommandCreate(
+                goal=prompt,
+                conversation_id=session_id,
+                request_id=request_id,
+                autonomy="SUPERVISED",
+            ),
+            caller,
+        )
+        command_id = str(command["command_id"])
+        deadline = time.monotonic() + 105
+        current: dict[str, Any] | None = None
+        terminal_states = {
+            "COMPLETED", "PARTIAL", "FAILED", "CANCELLED", "RECOVERY_REQUIRED",
+        }
+        while time.monotonic() < deadline:
+            current = _commands().get(command_id)
+            if current and current.get("status") in terminal_states:
+                break
+            await asyncio.sleep(0.05)
+
+        if not current or current.get("status") not in terminal_states:
+            capability_name = (
+                (current or {}).get("selected_capability_id") or intent.operation
+            )
+            return {
+                "message": (
+                    "The requested operation has not completed yet. No result "
+                    "is being claimed. Its durable runtime command is "
+                    f"{command_id}."
+                ),
+                "sources": [],
+                "tool_calls": [{
+                    "name": capability_name,
+                    "operation": intent.operation,
+                    "arguments": {},
+                    "status": "running",
+                }],
+                "provider": "world_resolver",
+                "latency_ms": int((time.monotonic() - started) * 1000),
+                "runtime_command_id": command_id,
+            }
+
+        command_result = current.get("result") or {}
+        evidence = command_result.get("evidence") or []
+        selected_capability = current.get("selected_capability_id")
+        search_result = next(
+            (item for item in evidence
+             if isinstance(item, dict)
+             and item.get("name") == selected_capability
+             and item.get("success")),
+            {},
+        )
+        artifacts = [
+            item for item in (search_result.get("artifacts") or [])
+            if isinstance(item, dict)
+        ]
+        if current.get("status") == "COMPLETED" and search_result.get("success"):
+            message, sources = render_world_results(intent, artifacts)
+            tool_status = "completed"
+        elif current.get("resolution_status") != "selected":
+            reason = current.get("resolution_reason") or (
+                "No authorized execution surface is currently available."
+            )
+            message = (
+                f"I couldn't perform {intent.operation}: {reason} "
+                "I cannot provide sourced results."
+            )
+            sources = []
+            tool_status = "failed"
+        else:
+            message = (
+                f"I couldn't complete {intent.operation} because the selected "
+                "execution surface was unavailable or returned an execution "
+                "error. No result is claimed."
+            )
+            sources = []
+            tool_status = "failed"
+
+        return {
+            "message": message,
+            "sources": sources,
+            "tool_calls": [{
+                "name": current.get("selected_capability_id") or intent.operation,
+                "operation": intent.operation,
+                "arguments": {"query": intent.query},
+                "status": tool_status,
+                "selectable_results": intent.selectable_results,
+            }],
+            "provider": "world_resolver",
+            "latency_ms": int((time.monotonic() - started) * 1000),
+            "runtime_command_id": command_id,
+        }
+
     # -- provider call (the ONLY place a real provider answer is produced) -- #
     async def _generate(self, prompt: str, model: str | None, user_id: str,
-                        session_id: str, request_id: str | None = None) -> dict[str, Any]:
+                        session_id: str, request_id: str | None = None,
+                        principal: dict[str, Any] | None = None) -> dict[str, Any]:
         """Call the provider; raise ChatError on any failure.
 
         This method must never return a fabricated "success".  If the provider
@@ -521,6 +678,12 @@ class ChatService:
         # Generate a request_id if not provided (for exactly-once recording)
         if request_id is None:
             request_id = str(uuid.uuid4())
+
+        world_result = await self._world_resolution_reply(
+            prompt, user_id, session_id, request_id, principal,
+        )
+        if world_result is not None:
+            return world_result
         
         retries = self.max_retries
         attempt = 0
@@ -736,7 +899,8 @@ class ChatService:
     # -- non-streaming send -------------------------------------------------- #
     async def send_message(self, user_id: str, session_id: str, content: str,
                            *, model: str | None = None,
-                           client_message_id: str | None = None) -> dict[str, Any]:
+                           client_message_id: str | None = None,
+                           principal: dict[str, Any] | None = None) -> dict[str, Any]:
         session = self.get_session(user_id, session_id)
         messages: list[dict[str, Any]] = session.setdefault("messages", [])
 
@@ -754,6 +918,8 @@ class ChatService:
                         "device": reply.get("device"),
                         "latency_ms": reply.get("latency_ms"),
                         "sources": reply.get("sources"),
+                        "tool_calls": reply.get("tool_calls"),
+                        "runtime_command_id": reply.get("runtime_command_id"),
                         "status": reply.get("status"),
                         "error": reply.get("error"),
                         "resumed": True,
@@ -775,11 +941,16 @@ class ChatService:
             assistant_id, "assistant", "", status=QUEUED, model=model,
             client_message_id=client_message_id,
         )
+        request_id = client_message_id or str(uuid.uuid4())
+        assistant_msg["request_id"] = request_id
         messages.append(assistant_msg)
         get_store("chat_sessions").save()
 
         try:
-            result = await self._generate(content, model, user_id, session_id)
+            result = await self._generate(
+                content, model, user_id, session_id,
+                request_id=request_id, principal=principal,
+            )
             assistant_msg.update({
                 "content": result["message"],
                 "status": COMPLETED,
@@ -790,6 +961,9 @@ class ChatService:
                 "usage": result.get("usage"),
                 "provider": result.get("provider"),
                 "latency_ms": result.get("latency_ms"),
+                "sources": result.get("sources"),
+                "tool_calls": result.get("tool_calls"),
+                "runtime_command_id": result.get("runtime_command_id"),
             })
         except ChatError as exc:
             assistant_msg["status"] = FAILED
@@ -813,6 +987,8 @@ class ChatService:
             "latency_ms": assistant_msg.get("latency_ms"),
             "usage": assistant_msg.get("usage"),
             "sources": assistant_msg.get("sources"),
+            "tool_calls": assistant_msg.get("tool_calls"),
+            "runtime_command_id": assistant_msg.get("runtime_command_id"),
             "status": assistant_msg.get("status"),
             "error": assistant_msg.get("error"),
             "resumed": False,
@@ -822,7 +998,8 @@ class ChatService:
     # -- streaming send ------------------------------------------------------ #
     async def stream_message(self, user_id: str, session_id: str, content: str,
                              *, model: str | None = None,
-                             client_message_id: str | None = None
+                             client_message_id: str | None = None,
+                             principal: dict[str, Any] | None = None,
                              ) -> AsyncIterator[dict[str, Any]]:
         session = self.get_session(user_id, session_id)
         messages: list[dict[str, Any]] = session.setdefault("messages", [])
@@ -838,6 +1015,9 @@ class ChatService:
                         "content": reply.get("content"),
                         "status": reply.get("status"),
                         "error": reply.get("error"),
+                        "sources": reply.get("sources"),
+                        "tool_calls": reply.get("tool_calls"),
+                        "runtime_command_id": reply.get("runtime_command_id"),
                         "resumed": True,
                         "message_id": reply.get("id"),
                     }
@@ -861,7 +1041,7 @@ class ChatService:
         messages.append(assistant_msg)
         get_store("chat_sessions").save()
 
-        request_id_for_audit = str(uuid.uuid4())
+        request_id_for_audit = client_message_id or str(uuid.uuid4())
         assistant_msg["request_id"] = request_id_for_audit
         get_store("chat_sessions").save()
 
@@ -873,6 +1053,45 @@ class ChatService:
         }
 
         try:
+            from .world_resolver import (
+                has_prior_media_results,
+                is_result_selection_request,
+                resolve_world_intent,
+            )
+
+            if resolve_world_intent(content) is not None or (
+                is_result_selection_request(content)
+                and has_prior_media_results(messages)
+            ):
+                world_result = await self._generate(
+                    content, model, user_id, session_id,
+                    request_id=request_id_for_audit, principal=principal,
+                )
+                full_text = world_result["message"]
+                assistant_msg.update({
+                    "content": full_text,
+                    "status": COMPLETED,
+                    "provider": world_result.get("provider"),
+                    "latency_ms": world_result.get("latency_ms"),
+                    "sources": world_result.get("sources"),
+                    "tool_calls": world_result.get("tool_calls"),
+                    "runtime_command_id": world_result.get("runtime_command_id"),
+                })
+                session["updated_at"] = now_iso()
+                get_store("chat_sessions").save()
+                yield {
+                    "type": "complete",
+                    "session_id": session_id,
+                    "content": full_text,
+                    "status": COMPLETED,
+                    "message_id": assistant_id,
+                    "sources": world_result.get("sources"),
+                    "tool_calls": world_result.get("tool_calls"),
+                    "runtime_command_id": world_result.get("runtime_command_id"),
+                    "request_id": request_id_for_audit,
+                }
+                return
+
             streamed = False
             reasoning_parts: list[str] = []
             content_parts: list[str] = []
@@ -960,7 +1179,10 @@ class ChatService:
                 # No provider in the fabric could stream. Fall back to the
                 # buffered path so non-streaming providers still work; this is
                 # reported honestly as streamed=False rather than faked.
-                result = await self._generate(content, model, user_id, session_id)
+                result = await self._generate(
+                    content, model, user_id, session_id,
+                    request_id=request_id_for_audit, principal=principal,
+                )
                 full_text = result["message"]
                 result["streamed"] = False
                 if full_text:
@@ -983,6 +1205,9 @@ class ChatService:
                 "usage": result.get("usage"),
                 "provider": result.get("provider"),
                 "latency_ms": result.get("latency_ms"),
+                "sources": result.get("sources"),
+                "tool_calls": result.get("tool_calls"),
+                "runtime_command_id": result.get("runtime_command_id"),
             })
             get_store("chat_sessions").save()
             session["updated_at"] = now_iso()

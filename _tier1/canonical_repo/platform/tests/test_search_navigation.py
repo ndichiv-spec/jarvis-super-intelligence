@@ -260,6 +260,14 @@ class TestBrowserProfiles:
 # Browser engine abstraction (spec §4)
 # --------------------------------------------------------------------------- #
 class TestBrowserEngine:
+    def test_http_engine_declares_only_implemented_capabilities(self):
+        from jarvis_backend.browser_engine import HttpBrowserEngine
+
+        capabilities = set(HttpBrowserEngine().capabilities)
+        assert capabilities == {
+            "public_web_search", "http_fetch", "page_extraction",
+        }
+
     def test_get_engine_info(self, test_client, auth_headers):
         resp = test_client.get("/api/v1/browser/engine", headers=auth_headers)
         assert resp.status_code == 200
@@ -267,6 +275,37 @@ class TestBrowserEngine:
         assert data["engine"] == "http_browser_engine"
         assert "http_fetch" in data["capabilities"]
         assert "page_extraction" in data["capabilities"]
+        assert "public_web_search" in data["capabilities"]
+
+    def test_http_search_surfaces_total_backend_failure(self, monkeypatch):
+        from jarvis_backend.browser_engine import BrowserSearchError, HttpBrowserEngine
+
+        engine = HttpBrowserEngine()
+
+        def failed(*args, **kwargs):
+            raise OSError("backend unreachable")
+
+        monkeypatch.setattr(engine, "_ddg_lite_search", failed)
+        monkeypatch.setattr(engine, "_wikipedia_search", failed)
+
+        with pytest.raises(BrowserSearchError, match="All configured"):
+            engine.search("example")
+
+    def test_http_search_uses_real_result_when_a_backend_succeeds(self, monkeypatch):
+        from jarvis_backend.browser_engine import HttpBrowserEngine
+
+        engine = HttpBrowserEngine()
+
+        def failed(*args, **kwargs):
+            raise OSError("backend unavailable")
+
+        monkeypatch.setattr(engine, "_ddg_lite_search", failed)
+        monkeypatch.setattr(engine, "_wikipedia_search", lambda *args, **kwargs: [{
+            "title": "Observed result",
+            "url": "https://example.com",
+        }])
+
+        assert engine.search("example")[0]["title"] == "Observed result"
 
 
 # --------------------------------------------------------------------------- #

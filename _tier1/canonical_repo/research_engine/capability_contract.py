@@ -10,24 +10,20 @@ The contract per capability::
 
     id, name, description, domain, version,
     input_schema, output_schema,
-    availability, availability_reason,
-    authentication_required, required_permissions,
-    risk_level, supports_streaming, supports_async, supports_offline,
+    availability, availability_reason, health,
+    execution_surface, operations, operation_arguments,
+    authentication_required, required_permissions,
+    requires_confirmation, risk_level, data_classification,
+    network_requirements, endpoint_requirements, latency_ms, quality_score,
+    fallbacks, supported_environments, observability,
+    supports_streaming, supports_async, supports_offline,
     supports_background_jobs, service_dependencies, provider_dependencies,
     cost_model, timeout, retry_policy, audit_policy
 
 New domains are added by declaring a :class:`DomainPack` and registering
 capabilities into it - no Brain change required.
 """
-from __future__ import annotations
-
-from dataclasses import dataclass, field
-from typing import Any, Optional
-
-from .models import RiskLevel
-from .tool_registry import ToolRegistry
-
-CONTRACT_VERSION = "1.0"
+from __future__ import annotationsfrom dataclasses import dataclass, fieldfrom typing import Any, Optionalfrom .models import RiskLevelfrom .tool_registry import ToolRegistryCONTRACT_VERSION = "1.1"
 
 # Operating modes.  A capability declares which modes it can serve so the
 # fabric can degrade honestly instead of pretending a cloud path exists.
@@ -97,20 +93,35 @@ class CapabilityContract:
     domain: str
     version: str = CONTRACT_VERSION
     input_schema: dict[str, Any] = field(default_factory=dict)
-    output_schema: dict[str, Any] = field(
-        default_factory=lambda: {"type": "object"})
+    output_schema: dict[str, Any] = field(default_factory=dict)
     availability: str = "UNKNOWN"
     availability_reason: Optional[str] = None
-    authentication_required: bool = True
-    required_permissions: tuple[str, ...] = ()
-    risk_level: str = RiskLevel.READ.value
+    health: str = "unknown"
+    execution_surface: str = "unknown"
+    operations: tuple[str, ...] = ()
+    operation_arguments: dict[str, dict[str, Any]] = field(default_factory=dict)
+    operation_intents: dict[str, dict[str, Any]] = field(default_factory=dict)
+    intent_confirmation_operations: tuple[str, ...] = ()
+    operation_output_requirements: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    authentication_required: Optional[bool] = None
+    required_permissions: tuple[str, ...] = ()
+    requires_confirmation: bool = False
+    risk_level: str = RiskLevel.READ.value
+    data_classification: str = "unspecified"
+    network_requirements: str = "unknown"
+    endpoint_requirements: tuple[str, ...] = ()
+    latency_ms: Optional[float] = None
+    quality_score: Optional[float] = None
+    fallbacks: tuple[str, ...] = ()
+    supported_environments: tuple[str, ...] = ()
+    observability: str = "unknown"
     supports_streaming: bool = False
     supports_async: bool = True
-    supports_offline: bool = False
+    supports_offline: Optional[bool] = None
     supports_background_jobs: bool = False
     service_dependencies: tuple[str, ...] = ()
     provider_dependencies: tuple[str, ...] = ()
-    cost_model: str = "none"
+    cost_model: str = "unknown"
     timeout: int = 30
     retry_policy: str = "none"
     audit_policy: str = "record_execution"
@@ -124,9 +135,28 @@ class CapabilityContract:
             "output_schema": self.output_schema,
             "availability": self.availability,
             "availability_reason": self.availability_reason,
-            "authentication_required": self.authentication_required,
-            "required_permissions": list(self.required_permissions),
-            "risk_level": self.risk_level,
+            "health": self.health,
+            "execution_surface": self.execution_surface,
+            "operations": list(self.operations),
+            "operation_arguments": self.operation_arguments,
+            "operation_intents": self.operation_intents,
+            "intent_confirmation_operations": list(self.intent_confirmation_operations),
+            "operation_output_requirements": {
+                operation: list(requirements)
+                for operation, requirements in self.operation_output_requirements.items()
+            },
+            "authentication_required": self.authentication_required,
+            "required_permissions": list(self.required_permissions),
+            "requires_confirmation": self.requires_confirmation,
+            "risk_level": self.risk_level,
+            "data_classification": self.data_classification,
+            "network_requirements": self.network_requirements,
+            "endpoint_requirements": list(self.endpoint_requirements),
+            "latency_ms": self.latency_ms,
+            "quality_score": self.quality_score,
+            "fallbacks": list(self.fallbacks),
+            "supported_environments": list(self.supported_environments),
+            "observability": self.observability,
             "supports_streaming": self.supports_streaming,
             "supports_async": self.supports_async,
             "supports_offline": self.supports_offline,
@@ -181,9 +211,93 @@ _META: dict[str, dict[str, Any]] = {
                           service_dependencies=("github_api",),
                           required_permissions=("github:read",), timeout=25),
     # -- research / web ------------------------------------------------------
-    "search_web": dict(domain="web", service_dependencies=("browser",),
-                       required_permissions=("web:read",), timeout=30,
-                       retry_policy="backoff_1"),
+    "search_web": dict(
+        domain="web",
+        execution_surface="http_browser_engine",
+        operations=("web.search", "media.discovery"),
+        operation_arguments={
+            "media.discovery": {
+                "query": "$query",
+                "max_results": 8,
+                "extract": False,
+            },
+            "web.search": {
+                "query": "$query",
+                "max_results": 8,
+                "extract": False,
+            },
+        },
+        operation_intents={
+            "media.discovery": {
+                "semantic_type": "media.discovery",
+                "match_patterns": [
+                    r"\b(?:watch|stream|find|search|where\s+can\s+i\s+watch|where\s+to\s+watch)\b",
+                    r"\b(?:movies?|films?|series|tv\s+shows?|where\s+can\s+i\s+watch|where\s+to\s+watch)\b",
+                ],
+                "subject_pattern": (
+                    r"^\s*(?:(?:jarvis)[,:]?\s*)?"
+                    r"(?:(?:i\s+)?(?:want|would\s+like)\s+to\s+)?"
+                    r"(?:where\s+can\s+i\s+watch|where\s+to\s+watch|"
+                    r"watch|stream|find|search)\s+"
+                    r"(?P<subject>.+?)\s*"
+                    r"(?:movies?|films?|series|tv\s+shows?|streaming|"
+                    r"legally|online|to\s+watch)?\s*[?.!,]*\s*$"
+                ),
+                "query_template": (
+                    "{subject} movies official streaming availability where to watch"
+                ),
+                "result_caveat": (
+                    "These listings are not verified as official or current and do "
+                    "not confirm licensing, subscription access, or regional playback. "
+                    "Prefer an official provider result and authenticate there if required. "
+                    "Discovery is supported by this execution surface; playback is not "
+                    "currently supported here. I have not started playback."
+                ),
+                "empty_result_message": (
+                    "I could not confirm where this title is available. This execution "
+                    "surface supports discovery only, not playback; I have not started "
+                    "playback."
+                ),
+                "plan_summary": "Search the selected source for media viewing information.",
+                "step_summary": "Retrieve current viewing information from this source.",
+                "completion_expected": "public HTTPS source with a title observed",
+                "completion_condition_type": "source_observed",
+                "selectable_results": True,
+            },
+        },
+        operation_output_requirements={
+            "media.discovery": ("artifacts.url", "artifacts.title"),
+        },
+        intent_confirmation_operations=("media.discovery",),
+        output_schema={
+            "type": "object",
+            "properties": {
+                "result": {"type": "string"},
+                "artifacts": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "url": {"type": "string"},
+                            "title": {"type": "string"},
+                            "snippet": {"type": "string"},
+                        },
+                        "required": ["url", "title"],
+                    },
+                },
+            },
+            "required": ["result", "artifacts"],
+        },
+        network_requirements="required",
+        data_classification="public",
+        supported_environments=("web", "conversation"),
+        service_dependencies=("browser",),
+        required_permissions=("web:read",),
+        observability="canonical_runtime_events",
+        cost_model="unknown",
+        timeout=30,
+        retry_policy="backoff_1",
+    ),
     "knowledge_retrieve": dict(domain="research", supports_offline=True,
                                cost_model="local_index", timeout=20),
     "static_search": dict(domain="research", supports_offline=True,
@@ -560,16 +674,37 @@ def build_contracts(registry: ToolRegistry | None = None,
             or {"type": "object", "properties": {}},
             availability=availability,
             availability_reason=reason,
-            authentication_required=True,
-            required_permissions=tuple(meta.get("required_permissions", ())),
-            risk_level=risk,
+            health=inv.get("health", "unknown"),
+            execution_surface=meta.get("execution_surface", "unknown"),
+            operations=tuple(meta.get("operations", ())),
+            operation_arguments=meta.get("operation_arguments", {}),
+            operation_intents=meta.get("operation_intents", {}),
+            intent_confirmation_operations=tuple(
+                meta.get("intent_confirmation_operations", ())
+            ),
+            operation_output_requirements=meta.get(
+                "operation_output_requirements", {},
+            ),
+            output_schema=meta.get("output_schema", {}),
+            authentication_required=meta.get("authentication_required"),
+            required_permissions=tuple(meta.get("required_permissions", ())),
+            requires_confirmation=bool(described.get("requires_confirmation", False)),
+            risk_level=risk,
+            data_classification=meta.get("data_classification", "unspecified"),
+            network_requirements=meta.get("network_requirements", "unknown"),
+            endpoint_requirements=tuple(meta.get("endpoint_requirements", ())),
+            latency_ms=meta.get("latency_ms"),
+            quality_score=meta.get("quality_score"),
+            fallbacks=tuple(meta.get("fallbacks", ())),
+            supported_environments=tuple(meta.get("supported_environments", ())),
+            observability=meta.get("observability", "unknown"),
             supports_streaming=name in _STREAMING,
             supports_async=True,
-            supports_offline=bool(meta.get("supports_offline", False)),
+            supports_offline=meta.get("supports_offline"),
             supports_background_jobs=name in _BACKGROUND,
             service_dependencies=tuple(meta.get("service_dependencies", ())),
             provider_dependencies=tuple(meta.get("provider_dependencies", ())),
-            cost_model=meta.get("cost_model", "none"),
+            cost_model=meta.get("cost_model", "unknown"),
             timeout=int(meta.get("timeout", 30)),
             retry_policy=meta.get("retry_policy", "none"),
             audit_policy=meta.get("audit_policy", "record_execution"),

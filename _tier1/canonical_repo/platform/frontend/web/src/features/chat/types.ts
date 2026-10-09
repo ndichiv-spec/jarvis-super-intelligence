@@ -68,6 +68,7 @@ export interface ChatResponse {
   timestamp?: string;
   tool_calls?: ToolCall[];
   tool_results?: unknown[];
+  runtime_command_id?: string;
 }
 
 export interface SessionInfo {
@@ -139,6 +140,7 @@ export interface ChatStreamChunk {
   message_id?: string;
   model?: string;
   resumed?: boolean;
+  runtime_command_id?: string;
 }
 
 export interface MessageTurnResult {
@@ -153,6 +155,7 @@ export interface MessageTurnResult {
   message_id?: string;
   timestamp?: string;
   tool_calls?: ToolCall[];
+  runtime_command_id?: string;
 }
 
 export const CHAT_MODELS = [

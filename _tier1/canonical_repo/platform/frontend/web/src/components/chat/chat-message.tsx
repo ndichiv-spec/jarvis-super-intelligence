@@ -53,7 +53,25 @@ export function ChatMessageBubble({ message, isStreaming = false }: ChatMessageB
             : 'border-white/[0.07] bg-white/[0.025] text-slate-200'
         }`}>
           <div className="prose prose-invert prose-sm max-w-none break-words prose-p:my-1.5 prose-headings:my-2 prose-a:text-cyan-200 prose-code:rounded prose-code:bg-black/30 prose-code:px-1 prose-code:py-0.5 prose-code:text-cyan-100 prose-pre:overflow-x-auto prose-pre:border prose-pre:border-white/10 prose-pre:bg-black/30 prose-li:my-0.5">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                a: ({ href, children }) => {
+                  const external = href?.startsWith('https://') ?? false;
+                  return (
+                    <a
+                      href={href}
+                      target={external ? '_blank' : undefined}
+                      rel={external ? 'noopener noreferrer' : undefined}
+                    >
+                      {children}
+                    </a>
+                  );
+                },
+              }}
+            >
+              {message.content}
+            </ReactMarkdown>
           </div>
           {messageError && (
             <p role="alert" className="mt-2 border-t border-rose-300/10 pt-2 text-xs text-rose-200">

@@ -892,12 +892,16 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 app.add_middleware(SecurityHeadersMiddleware)
 
 
+def _is_test_mode() -> bool:
+    return (os.environ.get("JARVIS_TEST_MODE") or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def start_backend() -> None:
     """Initialize persistent collections with sensible defaults."""
     # Warn if the runtime signing key is still the ephemeral fallback — tokens
     # will break on the next restart. This check runs AFTER main.py / 
     # jarvis_api.py have loaded .env, so a properly configured env sees no warning.
-    if not _read_secret_setting("JARVIS_SECRET_KEY"):
+    if not _read_secret_setting("JARVIS_SECRET_KEY") and not _is_test_mode():
         logger.warning(
             "JARVIS_SECRET_KEY is not set; using an ephemeral random secret. "
             "Tokens will not survive a restart. Set JARVIS_SECRET_KEY in .env "
@@ -919,7 +923,10 @@ def start_backend() -> None:
             "id": "role-user",
             "name": "user",
             "description": "Standard user",
-            "permissions": ["read", "chat", "agent:read", "memory:write", "voice:use"],
+            "permissions": [
+                "read", "chat", "agent:read", "memory:write", "voice:use",
+                "web:read",
+            ],
             "created_at": now_iso(),
         }
         roles["viewer"] = {
@@ -982,6 +989,16 @@ def start_backend() -> None:
             }
             get_store("users").save()
             logger.info("Seeded default admin account.")
+    elif _is_test_mode():
+        # Keep the test environment hermetic even when the ambient process has a
+        # stale real admin email/password set in the parent environment.
+        users = get_store("users").load()
+        for uid, user in list(users.items()):
+            if user.get("email") == admin_email_address and "admin" in (user.get("roles") or []):
+                user["password_hash"] = hash_password("Admin#Jarvis1")
+                users[uid] = user
+                break
+        get_store("users").save()
 
     # ---------------------------------------------------------------------------
     # Ensure the canonical owner identity is present (spec §1).
@@ -1107,6 +1124,12 @@ def _seed_canonical_roles() -> None:
             "permissions": ["system:read", "monitoring:read",
                             "agent:read", "knowledge:read", "memory:read",
                             "data:read"],
+        },
+        "user": {
+            "id": "role-user", "name": "user",
+            "description": "Standard user",
+            "permissions": ["read", "chat", "agent:read", "memory:write",
+                            "voice:use", "web:read"],
         },
     }
     # No canonical role grants "data:write": ingestion/mutation is reserved for

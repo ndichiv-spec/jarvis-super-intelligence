@@ -90,7 +90,7 @@ def test_live_search_returns_results():
     if not _internet_ok():
         pytest.skip("no internet")
     reg = _registry()
-    ctx = ToolContext(user_id="researcher")
+    ctx = ToolContext(user_id="researcher", permissions={"web:read"})
     res = _run(reg.invoke("search_web", {"query": "python programming language", "max_results": 8}, ctx))
     assert res.success, res.error
     assert res.metrics.get("available") is True
@@ -104,7 +104,7 @@ def test_live_search_returns_results():
 
 def test_live_search_no_query_is_client_error():
     reg = _registry()
-    ctx = ToolContext(user_id="researcher")
+    ctx = ToolContext(user_id="researcher", permissions={"web:read"})
     res = _run(reg.invoke("search_web", {}, ctx))
     assert not res.success
     assert "required" in res.error.lower()

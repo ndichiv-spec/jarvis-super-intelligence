@@ -92,6 +92,10 @@ class DefaultPermissionPolicy(PermissionPolicy):
     def __init__(self, confirmations: Optional[dict[str, bool]] = None):
         self._confirmations = confirmations or {}
 
+    def record_confirmation(self, user_id: str, tool_name: str) -> None:
+        """Record an explicit approval for this policy instance only."""
+        self._confirmations[f"{user_id}:{tool_name}"] = True
+
     def authorize(self, user_id: str, tool_name: str, risk: RiskLevel) -> tuple[bool, str]:
         if risk == RiskLevel.READ or risk == RiskLevel.EXEC or risk == RiskLevel.WRITE:
             # READ / local EXEC / local WRITE are auto-granted to authenticated
@@ -327,7 +331,8 @@ class BrowserSearchTool(Tool):
         "Search the live web and return source URLs with extracted snippets and "
         "provenance. When 'extract' is true, the top result pages are navigated "
         "and their main text extracted so evidence carries the actual source. "
-        "Requires network access and explicit user confirmation."
+        "This is a read-only public web operation; it requires web:read "
+        "permission and explicit confirmation through the authorization policy."
     )
     schema = {
         "type": "object",
@@ -340,6 +345,7 @@ class BrowserSearchTool(Tool):
     }
     risk = RiskLevel.NETWORK
     requires_confirmation = True
+    required_permissions = ("web:read",)
 
     async def invoke(self, args: dict[str, Any], ctx: ToolContext) -> ToolResult:
         # Deployment gate: live web search is an opt-in capability of the
@@ -643,6 +649,14 @@ class ToolRegistry:
             # never a credential.
             return False, "PERMISSION_DENIED:" + ",".join(missing)
         return True, reason
+
+    def record_confirmation(self, user_id: str, tool_name: str) -> bool:
+        """Apply an explicit approval to this registry's policy instance."""
+        recorder = getattr(self._policy, "record_confirmation", None)
+        if not callable(recorder):
+            return False
+        recorder(user_id, tool_name)
+        return True
 
     async def invoke(self, tool_name: str, args: dict[str, Any], ctx: ToolContext) -> ToolResult:
         """Authorize → invoke → scrub secrets, for one tool call."""

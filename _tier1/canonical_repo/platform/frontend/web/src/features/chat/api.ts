@@ -31,6 +31,7 @@ function toMessageTurnResult(data: Record<string, unknown>): MessageTurnResult {
     message_id: data.message_id as string,
     timestamp: data.timestamp as string | undefined,
     tool_calls: data.tool_calls as ToolCall[] | undefined,
+    runtime_command_id: data.runtime_command_id as string | undefined,
   };
 }
 
