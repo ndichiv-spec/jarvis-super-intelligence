@@ -226,9 +226,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
         model: response.model,
         sources: response.sources,
         tool_calls: response.tool_calls,
-        metadata: response.runtime_command_id
-          ? { runtime_command_id: response.runtime_command_id }
-          : undefined,
+        presentation: response.presentation,
+        canonical_task_id: response.canonical_task_id,
+        presentation_revision_id: response.presentation_revision_id,
+        metadata: {
+          ...(response.runtime_command_id
+            ? { runtime_command_id: response.runtime_command_id }
+            : {}),
+          ...(response.canonical_task_id
+            ? { canonical_task_id: response.canonical_task_id }
+            : {}),
+          ...(response.presentation_revision_id
+            ? { presentation_revision_id: response.presentation_revision_id }
+            : {}),
+        },
       };
 
       set((state) => ({
@@ -309,9 +320,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
                       confidence: chunk.confidence,
                       sources: chunk.sources,
                       tool_calls: chunk.tool_calls,
-                      metadata: chunk.runtime_command_id
-                        ? { runtime_command_id: chunk.runtime_command_id }
-                        : msg.metadata,
+                      presentation: chunk.presentation,
+                      canonical_task_id: chunk.canonical_task_id,
+                      presentation_revision_id: chunk.presentation_revision_id,
+                      metadata: {
+                        ...(msg.metadata ?? {}),
+                        ...(chunk.runtime_command_id
+                          ? { runtime_command_id: chunk.runtime_command_id }
+                          : {}),
+                        ...(chunk.canonical_task_id
+                          ? { canonical_task_id: chunk.canonical_task_id }
+                          : {}),
+                        ...(chunk.presentation_revision_id
+                          ? { presentation_revision_id: chunk.presentation_revision_id }
+                          : {}),
+                      },
                       status: chunk.status || 'COMPLETED',
                     }
                   : msg
@@ -372,6 +395,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
          content: (msg.content || msg.response || msg.answer || '') as string,
         timestamp: (msg.timestamp as string) || new Date().toISOString(),
         model: msg.model as string | undefined,
+        presentation: msg.presentation as ChatMessage['presentation'],
+        sources: msg.sources as string[] | undefined,
+        tool_calls: msg.tool_calls as ChatMessage['tool_calls'],
+        canonical_task_id: msg.canonical_task_id as string | undefined,
+        presentation_revision_id: msg.presentation_revision_id as string | undefined,
       }));
       set({ messages, currentSessionId: sessionId, isLoading: false });
     } catch (error) {

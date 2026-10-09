@@ -91,7 +91,7 @@ def test_scrub_secrets_plain_text_not_redacted():
 def test_network_tool_denied_without_confirmation():
     reg = ToolRegistry(policy=DefaultPermissionPolicy())
     reg.register(BrowserSearchTool())
-    ctx = ToolContext(user_id="alice")
+    ctx = ToolContext(user_id="alice", permissions={"web:read"})
     res = _run(reg.invoke("search_web", {"query": "hello"}, ctx))
     assert not res.success
     assert "TOOL_DENIED" in res.error
@@ -100,12 +100,46 @@ def test_network_tool_denied_without_confirmation():
 def test_network_tool_allowed_with_confirmation():
     reg = ToolRegistry(policy=DefaultPermissionPolicy(confirmations={"alice:search_web": True}))
     reg.register(BrowserSearchTool())
-    ctx = ToolContext(user_id="alice")
+    ctx = ToolContext(user_id="alice", permissions={"web:read"})
     # search_web needs BrowserEngine which isn't importable in tests -> BROWSER_UNAVAILABLE,
     # but it must NOT be a denial (authorization passed).
     res = _run(reg.invoke("search_web", {"query": "hello"}, ctx))
     assert not res.success  # no browser in test env
     assert "BROWSER_UNAVAILABLE" in res.error or "TOOL_DENIED" not in res.error
+
+
+def test_read_tool_declaring_confirmation_requires_user_scoped_approval():
+    from research_engine.tool_registry import Tool
+
+    class ConfirmedReadTool(Tool):
+        name = "confirmed.read"
+        description = "A read tool that requires approval."
+        schema = {"type": "object", "properties": {}}
+        risk = RiskLevel.READ
+        requires_confirmation = True
+
+        async def invoke(self, args, ctx):
+            return ToolResult(
+                tool_id=ctx.request_id, name=self.name, success=True,
+                result="observed",
+            )
+
+    registry = ToolRegistry(policy=DefaultPermissionPolicy())
+    registry.register(ConfirmedReadTool())
+    assert registry.authorize("alice", "confirmed.read")[0] is False
+    denied = _run(registry.invoke(
+        "confirmed.read", {}, ToolContext(user_id="alice"),
+    ))
+    assert not denied.success
+    assert "requires_user_confirmation" in denied.error
+
+    assert registry.record_confirmation("alice", "confirmed.read")
+    assert registry.authorize("alice", "confirmed.read")[0] is True
+    approved = _run(registry.invoke(
+        "confirmed.read", {}, ToolContext(user_id="alice"),
+    ))
+    assert approved.success
+    assert registry.authorize("bob", "confirmed.read")[0] is False
 
 
 def test_exec_tool_auto_allowed():

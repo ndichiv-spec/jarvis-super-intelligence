@@ -212,3 +212,44 @@ def test_mode_coverage_reported(catalogue) -> None:
     coverage = catalogue["mode_coverage"]
     assert set(coverage) == set(cc.MODES)
     assert coverage["offline"], "offline mode must list real offline capabilities"
+
+
+def test_capability_manifest_is_complete_and_claims_do_not_prove_operation():
+    manifest = cc.build_capability_manifest("project.search")
+    assert manifest["lifecycle_state"] == "registered"
+    assert manifest["registration_verified"] is True
+    assert manifest["claimed_lifecycle_state"] == "registered"
+    for field in (
+        "required_provider", "required_services", "required_hardware",
+        "availability", "health", "required_permissions", "approval_policy",
+        "data_classification", "network_requirements",
+        "supported_presentation_formats", "compatibility_requirements",
+        "timeout_seconds", "cancellation_semantics", "error_semantics",
+        "alternatives", "observability", "provenance_requirements",
+    ):
+        assert field in manifest
+
+    manifest["lifecycle_state"] = "verified_operational"
+    untrusted = cc.validate_capability_manifest(manifest)
+    assert untrusted["lifecycle_state"] == "discovered"
+    assert untrusted["claimed_lifecycle_state"] == "verified_operational"
+
+
+def test_external_manifest_cannot_install_a_tool_or_widen_its_schema():
+    from research_engine.capability_tools import build_capability_registry
+
+    manifest = cc.build_capability_manifest("project.search")
+    unregistered = dict(manifest)
+    unregistered.update(id="untrusted.execute", name="untrusted.execute")
+
+    with pytest.raises(ValueError, match="cannot install"):
+        cc.register_capability_manifest(
+            unregistered, build_capability_registry(),
+        )
+
+    incompatible = dict(manifest)
+    incompatible["input_schema"] = {"type": "object", "properties": {"admin": {}}}
+    with pytest.raises(ValueError, match="schema conflicts"):
+        cc.register_capability_manifest(
+            incompatible, build_capability_registry(),
+        )

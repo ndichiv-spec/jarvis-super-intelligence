@@ -96,6 +96,9 @@ class DefaultPermissionPolicy(PermissionPolicy):
         """Record an explicit approval for this policy instance only."""
         self._confirmations[f"{user_id}:{tool_name}"] = True
 
+    def has_confirmation(self, user_id: str, tool_name: str) -> bool:
+        return bool(self._confirmations.get(f"{user_id}:{tool_name}", False))
+
     def authorize(self, user_id: str, tool_name: str, risk: RiskLevel) -> tuple[bool, str]:
         if risk == RiskLevel.READ or risk == RiskLevel.EXEC or risk == RiskLevel.WRITE:
             # READ / local EXEC / local WRITE are auto-granted to authenticated
@@ -149,6 +152,7 @@ class ToolContext:
     # resolved the call is DENIED (fail closed).
     permissions: Optional[set[str]] = None
     principal: Optional[dict[str, Any]] = None
+    correlation_id: Optional[str] = None
 
 
 def resolve_permissions(
@@ -332,7 +336,7 @@ class BrowserSearchTool(Tool):
         "provenance. When 'extract' is true, the top result pages are navigated "
         "and their main text extracted so evidence carries the actual source. "
         "This is a read-only public web operation; it requires web:read "
-        "permission and explicit confirmation through the authorization policy."
+        "permission and explicit user approval through the policy."
     )
     schema = {
         "type": "object",
@@ -596,12 +600,26 @@ class ToolRegistry:
 
     def __init__(self, policy: Optional[PermissionPolicy] = None):
         self._tools: dict[str, Tool] = {}
+        self._required_permissions: dict[str, tuple[str, ...]] = {}
         self._policy = policy or DefaultPermissionPolicy()
         self._history: list[ToolCall] = []
 
     def register(self, tool: Tool) -> "ToolRegistry":
         self._tools[tool.name] = tool
+        self._required_permissions[tool.name] = tuple(
+            getattr(tool, "required_permissions", ()) or ()
+        )
         return self
+
+    def require_permissions(
+        self, tool_name: str, permissions: tuple[str, ...],
+    ) -> None:
+        """Attach catalogue permissions to the existing invocation boundary."""
+        if tool_name not in self._tools:
+            raise ValueError(f"cannot set permissions for unregistered tool {tool_name!r}")
+        self._required_permissions[tool_name] = tuple(dict.fromkeys(
+            (*self._required_permissions.get(tool_name, ()), *permissions)
+        ))
 
     def describe(self) -> list[dict[str, Any]]:
         """The ONLY shape the model sees — no credentials, no secrets."""
@@ -625,10 +643,12 @@ class ToolRegistry:
         Both layers fail closed:
 
         * risk is decided by the existing :class:`PermissionPolicy`
-        * if the tool declares ``required_permissions``, the caller must
+        * if the tool or its capability contract declares ``required_permissions``, the caller must
           actually hold them. Permissions are resolved from the caller context
           and matched wildcard-aware. A caller whose permissions cannot be
           resolved holds none, so the call is denied.
+        * a tool that declares ``requires_confirmation`` is denied unless the
+          current policy instance can verify an approval for this user/tool.
 
         Tools that declare no ``required_permissions`` keep their previous
         behaviour exactly (risk-only), so unrelated domains are unaffected.
@@ -636,10 +656,16 @@ class ToolRegistry:
         tool = self._tools.get(tool_name)
         if tool is None:
             return False, "TOOL_NOT_REGISTERED"
+        if tool.requires_confirmation:
+            confirmation_check = getattr(self._policy, "has_confirmation", None)
+            if not callable(confirmation_check) or not confirmation_check(
+                user_id, tool_name,
+            ):
+                return False, "requires_user_confirmation"
         ok, reason = self._policy.authorize(user_id, tool_name, tool.risk)
         if not ok:
             return False, reason
-        required = tuple(getattr(tool, "required_permissions", ()) or ())
+        required = self._required_permissions.get(tool_name, ())
         if not required:
             return True, reason
         granted = resolve_permissions(user_id, permissions, principal)

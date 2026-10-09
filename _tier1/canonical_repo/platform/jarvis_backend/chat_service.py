@@ -170,6 +170,36 @@ class ChatService:
         # a live provider.
         self.gateway = gateway or provider_gateway
 
+    @staticmethod
+    def _persist_presentation_revision(
+        *,
+        user_id: str,
+        session_id: str,
+        request_id: str,
+        assistant_message: dict[str, Any],
+        presentation: dict[str, Any],
+    ) -> None:
+        from .runtime import runtime
+
+        command_id = assistant_message.get("runtime_command_id")
+        task_id = command_id or assistant_message["id"]
+        previous = runtime.list_presentation_revisions(
+            task_id, owner_id=user_id,
+        )
+        revision = runtime.create_presentation_revision(
+            task_id=task_id,
+            owner_id=user_id,
+            request_id=request_id,
+            conversation_id=session_id,
+            command_id=command_id,
+            presentation=presentation,
+            expected_revision=previous[-1]["revision"] if previous else 0,
+            idempotency_key=f"chat-presentation:{assistant_message['id']}",
+            compatibility={"decision": "canonical_contract"},
+        )
+        assistant_message["canonical_task_id"] = task_id
+        assistant_message["presentation_revision_id"] = revision["revision_id"]
+
     # -- session CRUD ------------------------------------------------------- #
     def create_session(self, user_id: str, session_id: str | None = None,
                        title: str = "New conversation") -> dict[str, Any]:
@@ -312,6 +342,9 @@ class ChatService:
             "latency_ms": reply.get("latency_ms"),
             "sources": reply.get("sources"),
             "tool_calls": reply.get("tool_calls"),
+            "presentation": reply.get("presentation"),
+            "canonical_task_id": reply.get("canonical_task_id"),
+            "presentation_revision_id": reply.get("presentation_revision_id"),
             "runtime_command_id": reply.get("runtime_command_id"),
             "status": reply.get("status"),
             "error": reply.get("error"),
@@ -542,6 +575,7 @@ class ChatService:
                     "sources": [url],
                     "tool_calls": [],
                     "provider": "world_resolver",
+                    "presentation": None,
                 }
             return {
                 "message": (
@@ -552,6 +586,7 @@ class ChatService:
                 "sources": [],
                 "tool_calls": [],
                 "provider": "world_resolver",
+                "presentation": None,
             }
 
         if intent is None:
@@ -625,7 +660,9 @@ class ChatService:
             if isinstance(item, dict)
         ]
         if current.get("status") == "COMPLETED" and search_result.get("success"):
-            message, sources = render_world_results(intent, artifacts)
+            message, sources = render_world_results(
+                intent, artifacts, evidence=[search_result],
+            )
             tool_status = "completed"
         elif current.get("resolution_status") != "selected":
             reason = current.get("resolution_reason") or (
@@ -646,9 +683,11 @@ class ChatService:
             sources = []
             tool_status = "failed"
 
+        presentation = (current.get("result") or {}).get("presentation")
         return {
             "message": message,
             "sources": sources,
+            "presentation": presentation,
             "tool_calls": [{
                 "name": current.get("selected_capability_id") or intent.operation,
                 "operation": intent.operation,
@@ -919,6 +958,9 @@ class ChatService:
                         "latency_ms": reply.get("latency_ms"),
                         "sources": reply.get("sources"),
                         "tool_calls": reply.get("tool_calls"),
+                        "presentation": reply.get("presentation"),
+                        "canonical_task_id": reply.get("canonical_task_id"),
+                        "presentation_revision_id": reply.get("presentation_revision_id"),
                         "runtime_command_id": reply.get("runtime_command_id"),
                         "status": reply.get("status"),
                         "error": reply.get("error"),
@@ -951,6 +993,15 @@ class ChatService:
                 content, model, user_id, session_id,
                 request_id=request_id, principal=principal,
             )
+            if result.get("presentation") is None and result.get("message"):
+                from .presentation_contract import build_conversation_presentation
+
+                result["presentation"] = build_conversation_presentation(
+                    result["message"],
+                    request_id=request_id,
+                    session_id=session_id,
+                    conversation_id=session_id,
+                )
             assistant_msg.update({
                 "content": result["message"],
                 "status": COMPLETED,
@@ -964,7 +1015,16 @@ class ChatService:
                 "sources": result.get("sources"),
                 "tool_calls": result.get("tool_calls"),
                 "runtime_command_id": result.get("runtime_command_id"),
+                "presentation": result.get("presentation"),
             })
+            if result.get("presentation"):
+                self._persist_presentation_revision(
+                    user_id=user_id,
+                    session_id=session_id,
+                    request_id=request_id,
+                    assistant_message=assistant_msg,
+                    presentation=result["presentation"],
+                )
         except ChatError as exc:
             assistant_msg["status"] = FAILED
             assistant_msg["error"] = _error_card(exc)
@@ -988,6 +1048,9 @@ class ChatService:
             "usage": assistant_msg.get("usage"),
             "sources": assistant_msg.get("sources"),
             "tool_calls": assistant_msg.get("tool_calls"),
+            "presentation": assistant_msg.get("presentation"),
+            "canonical_task_id": assistant_msg.get("canonical_task_id"),
+            "presentation_revision_id": assistant_msg.get("presentation_revision_id"),
             "runtime_command_id": assistant_msg.get("runtime_command_id"),
             "status": assistant_msg.get("status"),
             "error": assistant_msg.get("error"),
@@ -1017,6 +1080,9 @@ class ChatService:
                         "error": reply.get("error"),
                         "sources": reply.get("sources"),
                         "tool_calls": reply.get("tool_calls"),
+                        "presentation": reply.get("presentation"),
+                        "canonical_task_id": reply.get("canonical_task_id"),
+                        "presentation_revision_id": reply.get("presentation_revision_id"),
                         "runtime_command_id": reply.get("runtime_command_id"),
                         "resumed": True,
                         "message_id": reply.get("id"),
@@ -1068,6 +1134,16 @@ class ChatService:
                     request_id=request_id_for_audit, principal=principal,
                 )
                 full_text = world_result["message"]
+                presentation = world_result.get("presentation")
+                if presentation is None and full_text:
+                    from .presentation_contract import build_conversation_presentation
+
+                    presentation = build_conversation_presentation(
+                        full_text,
+                        request_id=request_id_for_audit,
+                        session_id=session_id,
+                        conversation_id=session_id,
+                    )
                 assistant_msg.update({
                     "content": full_text,
                     "status": COMPLETED,
@@ -1076,7 +1152,16 @@ class ChatService:
                     "sources": world_result.get("sources"),
                     "tool_calls": world_result.get("tool_calls"),
                     "runtime_command_id": world_result.get("runtime_command_id"),
+                    "presentation": presentation,
                 })
+                if presentation:
+                    self._persist_presentation_revision(
+                        user_id=user_id,
+                        session_id=session_id,
+                        request_id=request_id_for_audit,
+                        assistant_message=assistant_msg,
+                        presentation=presentation,
+                    )
                 session["updated_at"] = now_iso()
                 get_store("chat_sessions").save()
                 yield {
@@ -1088,6 +1173,9 @@ class ChatService:
                     "sources": world_result.get("sources"),
                     "tool_calls": world_result.get("tool_calls"),
                     "runtime_command_id": world_result.get("runtime_command_id"),
+                    "presentation": presentation,
+                    "canonical_task_id": assistant_msg.get("canonical_task_id"),
+                    "presentation_revision_id": assistant_msg.get("presentation_revision_id"),
                     "request_id": request_id_for_audit,
                 }
                 return
@@ -1209,6 +1297,23 @@ class ChatService:
                 "tool_calls": result.get("tool_calls"),
                 "runtime_command_id": result.get("runtime_command_id"),
             })
+            if result.get("message"):
+                from .presentation_contract import build_conversation_presentation
+
+                result["presentation"] = build_conversation_presentation(
+                    result["message"],
+                    request_id=request_id_for_audit,
+                    session_id=session_id,
+                    conversation_id=session_id,
+                )
+                assistant_msg["presentation"] = result["presentation"]
+                self._persist_presentation_revision(
+                    user_id=user_id,
+                    session_id=session_id,
+                    request_id=request_id_for_audit,
+                    assistant_message=assistant_msg,
+                    presentation=result["presentation"],
+                )
             get_store("chat_sessions").save()
             session["updated_at"] = now_iso()
             get_store("chat_sessions").save()
@@ -1242,6 +1347,9 @@ class ChatService:
                 "usage": result.get("usage"),
                 "latency_ms": result.get("latency_ms"),
                 "request_id": request_id_for_audit,
+                "presentation": result.get("presentation"),
+                "canonical_task_id": assistant_msg.get("canonical_task_id"),
+                "presentation_revision_id": assistant_msg.get("presentation_revision_id"),
             }
         except ChatError as exc:
             assistant_msg["status"] = FAILED

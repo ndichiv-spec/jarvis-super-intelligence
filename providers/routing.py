@@ -283,9 +283,17 @@ class ProviderRouter:
         ]
 
     # -- routing ---------------------------------------------------------------
-    def route(self, task: TaskProfile, *, skip: tuple[str, ...] = (), policy: Optional[str] = None) -> RoutingDecision:
+    def route(
+        self,
+        task: TaskProfile,
+        *,
+        skip: tuple[str, ...] = (),
+        policy: Optional[str] = None,
+        request_id: Optional[str] = None,
+    ) -> RoutingDecision:
         effective_policy = policy or self.policy
         decision = RoutingDecision(
+            request_id=request_id or uuid.uuid4().hex[:16],
             task_description=task.description,
             capabilities_required=serialize(task.capabilities),
             privacy=task.privacy.value,

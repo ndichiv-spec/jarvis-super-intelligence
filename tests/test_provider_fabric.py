@@ -432,6 +432,18 @@ class TestRouting:
         assert decision.selected_model is not None
         assert decision.reason != ""
 
+    def test_router_preserves_canonical_request_id(self):
+        registry = self._fabric_with_openai(monkeypatch=None)
+        request_id = "canonical-request-id"
+        decision = ProviderRouter(registry).route(
+            TaskClassifier().classify("chat"),
+            request_id=request_id,
+        )
+        request = ProviderRequest(messages=[], request_id=request_id)
+
+        assert decision.request_id == request_id
+        assert request.request_id == request_id
+
     def test_empty_priority_uses_health_backed_candidates(self, monkeypatch):
         monkeypatch.delenv("JARVIS_PROVIDER_PRIORITY", raising=False)
         registry = ProviderRegistry()

@@ -1809,6 +1809,14 @@ def build_capability_registry(policy=None):
         *_geography_tools(),
     ):
         registry.register(tool)
+    # Contract permissions must be enforced by the same registry that invokes
+    # the tools, not merely advertised to the resolver.
+    from .capability_contract import _META
+
+    for name, metadata in _META.items():
+        required_permissions = tuple(metadata.get("required_permissions", ()))
+        if required_permissions and name in registry.available():
+            registry.require_permissions(name, required_permissions)
     return registry
 
 

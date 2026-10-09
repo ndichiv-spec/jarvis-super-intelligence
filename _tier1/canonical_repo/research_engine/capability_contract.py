@@ -81,10 +81,259 @@ DOMAIN_HINTS: dict[str, tuple[str, ...]] = {
     "platform": ("capability", "capabilities", "what can you do", "job",
                  "task status", "usage", "audit", "cost"),
 }
-
-
-@dataclass
-class CapabilityContract:
+
+
+CAPABILITY_LIFECYCLE_STATES = (
+    "discovered",
+    "installed",
+    "configured",
+    "registered",
+    "available",
+    "authorized",
+    "executable",
+    "verified",
+    "verified_operational",
+    "temporarily_unavailable",
+    "unsupported",
+)
+
+
+@dataclass
+class CapabilityManifest:
+    """Validated capability manifest anchored to the existing contract metadata."""
+
+    id: str
+    name: str
+    description: str
+    domain: str
+    version: str = CONTRACT_VERSION
+    lifecycle_state: str = "registered"
+    supported_operations: tuple[str, ...] = ()
+    input_schema: dict[str, Any] = field(default_factory=dict)
+    output_schema: dict[str, Any] = field(default_factory=dict)
+    required_provider: str | None = None
+    required_services: tuple[str, ...] = ()
+    required_hardware: tuple[str, ...] = ()
+    required_permissions: tuple[str, ...] = ()
+    approval_policy: str = "user_confirmation"
+    risk_level: str = RiskLevel.READ.value
+    requires_confirmation: bool = False
+    authentication_required: bool | None = None
+    availability: str = "available"
+    health: str = "healthy"
+    data_classification: str = "unspecified"
+    network_requirements: str = "not_required"
+    endpoint_requirements: tuple[str, ...] = ()
+    supported_presentation_formats: tuple[str, ...] = ()
+    compatibility_requirements: dict[str, Any] = field(default_factory=dict)
+    timeout_seconds: int = 30
+    cancellation_semantics: str = "cooperative"
+    error_semantics: str = "explicit_failure"
+    alternatives: tuple[str, ...] = ()
+    observability: str = "canonical_runtime_events"
+    provenance_requirements: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "domain": self.domain,
+            "version": self.version,
+            "lifecycle_state": self.lifecycle_state,
+            "supported_operations": list(self.supported_operations),
+            "input_schema": self.input_schema,
+            "output_schema": self.output_schema,
+            "required_provider": self.required_provider,
+            "required_services": list(self.required_services),
+            "required_hardware": list(self.required_hardware),
+            "required_permissions": list(self.required_permissions),
+            "approval_policy": self.approval_policy,
+            "risk_level": self.risk_level,
+            "requires_confirmation": self.requires_confirmation,
+            "authentication_required": self.authentication_required,
+            "availability": self.availability,
+            "health": self.health,
+            "data_classification": self.data_classification,
+            "network_requirements": self.network_requirements,
+            "endpoint_requirements": list(self.endpoint_requirements),
+            "supported_presentation_formats": list(self.supported_presentation_formats),
+            "compatibility_requirements": self.compatibility_requirements,
+            "timeout_seconds": self.timeout_seconds,
+            "cancellation_semantics": self.cancellation_semantics,
+            "error_semantics": self.error_semantics,
+            "alternatives": list(self.alternatives),
+            "observability": self.observability,
+            "provenance_requirements": self.provenance_requirements,
+        }
+
+
+def validate_capability_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
+    """Validate a manifest without trusting its claimed lifecycle or health."""
+    if not isinstance(manifest, dict):
+        raise ValueError("capability manifest must be a mapping")
+    required = (
+        "id", "name", "description", "domain", "version",
+        "supported_operations", "input_schema", "output_schema",
+        "required_provider", "required_services", "required_hardware",
+        "required_permissions", "approval_policy", "risk_level",
+        "requires_confirmation", "authentication_required",
+        "availability", "health",
+        "data_classification", "network_requirements", "endpoint_requirements",
+        "supported_presentation_formats", "compatibility_requirements",
+        "timeout_seconds", "cancellation_semantics", "error_semantics",
+        "alternatives", "observability", "provenance_requirements",
+        "lifecycle_state",
+    )
+    missing = [key for key in required if key not in manifest]
+    if missing:
+        raise ValueError(f"missing capability manifest fields: {missing}")
+    state = str(manifest["lifecycle_state"])
+    if state not in CAPABILITY_LIFECYCLE_STATES:
+        raise ValueError(f"unsupported lifecycle state: {state}")
+    if not all(
+        isinstance(manifest.get(key), str) and manifest[key].strip()
+        for key in ("id", "name", "description", "version", "domain")
+    ):
+        raise ValueError("manifest identity fields must be non-empty strings")
+    if manifest["id"] != manifest["name"]:
+        raise ValueError("manifest id must match its registered capability name")
+    if manifest["domain"] not in DOMAINS:
+        raise ValueError("unsupported capability domain")
+    operations = manifest.get("supported_operations") or ()
+    if not isinstance(operations, (list, tuple)) or not operations:
+        raise ValueError("capability manifest must declare one or more operations")
+    if not all(isinstance(item, str) and item.strip() for item in operations):
+        raise ValueError("supported operations must be non-empty strings")
+    if not isinstance(manifest.get("input_schema"), dict):
+        raise ValueError("input_schema must be an object")
+    if not isinstance(manifest.get("output_schema"), dict):
+        raise ValueError("output_schema must be an object")
+    list_fields = (
+        "required_services", "required_hardware", "required_permissions",
+        "endpoint_requirements", "supported_presentation_formats",
+        "alternatives",
+    )
+    for key in list_fields:
+        value = manifest[key]
+        if not isinstance(value, (list, tuple)) or not all(
+            isinstance(item, str) and item.strip() for item in value
+        ):
+            raise ValueError(f"{key} must be a list of non-empty strings")
+    if manifest["required_provider"] is not None and not isinstance(
+        manifest["required_provider"], str,
+    ):
+        raise ValueError("required_provider must be a string or null")
+    if manifest["approval_policy"] not in {"server_policy", "user_confirmation"}:
+        raise ValueError("unsupported capability approval policy")
+    if manifest["risk_level"] not in {level.value for level in RiskLevel}:
+        raise ValueError("unsupported capability risk level")
+    if not isinstance(manifest["requires_confirmation"], bool):
+        raise ValueError("requires_confirmation must be boolean")
+    if manifest["authentication_required"] not in (None, True, False):
+        raise ValueError("authentication_required must be boolean or null")
+    if manifest["availability"] not in {
+        "AVAILABLE", "DEGRADED", "UNAVAILABLE", "OFFLINE",
+        "NOT_CONFIGURED", "UNKNOWN",
+    }:
+        raise ValueError("unsupported capability availability")
+    if manifest["health"] not in {"healthy", "degraded", "unhealthy", "unknown"}:
+        raise ValueError("unsupported capability health state")
+    for key in ("compatibility_requirements", "provenance_requirements"):
+        if not isinstance(manifest[key], dict):
+            raise ValueError(f"{key} must be an object")
+    timeout = manifest["timeout_seconds"]
+    if not isinstance(timeout, int) or isinstance(timeout, bool) or not 1 <= timeout <= 3600:
+        raise ValueError("timeout_seconds must be between 1 and 3600")
+    for key in ("cancellation_semantics", "error_semantics", "observability"):
+        if not isinstance(manifest[key], str) or not manifest[key].strip():
+            raise ValueError(f"{key} must be a non-empty string")
+    safe = dict(manifest)
+    safe["claimed_lifecycle_state"] = state
+    safe["lifecycle_state"] = "discovered"
+    safe["required_services"] = list(manifest["required_services"])
+    safe["required_hardware"] = list(manifest["required_hardware"])
+    safe["required_permissions"] = list(manifest["required_permissions"])
+    safe["endpoint_requirements"] = list(manifest["endpoint_requirements"])
+    safe["supported_presentation_formats"] = list(
+        manifest["supported_presentation_formats"]
+    )
+    safe["alternatives"] = list(manifest["alternatives"])
+    return safe
+
+
+def _manifest_from_contract(contract: dict[str, Any], lifecycle_state: str = "registered") -> dict[str, Any]:
+    """Create a manifest from the canonical capability contract for registries and runtime checks."""
+    requested = {
+        "id": contract.get("id") or contract.get("name"),
+        "name": contract.get("name") or contract.get("id"),
+        "description": contract.get("description") or "",
+        "domain": contract.get("domain") or "platform",
+        "version": contract.get("version") or CONTRACT_VERSION,
+        "lifecycle_state": lifecycle_state,
+        "supported_operations": list(
+            contract.get("operations") or [contract.get("id") or contract.get("name")]
+        ),
+        "input_schema": contract.get("input_schema") or {},
+        "output_schema": contract.get("output_schema") or {},
+        "required_provider": contract.get("provider_dependencies", [None])[0] if contract.get("provider_dependencies") else None,
+        "required_services": list(contract.get("service_dependencies") or ()),
+        "required_hardware": list(contract.get("hardware_dependencies") or ()),
+        "required_permissions": list(contract.get("required_permissions") or ()),
+        "approval_policy": "user_confirmation" if contract.get("requires_confirmation") else "server_policy",
+        "risk_level": contract.get("risk_level") or RiskLevel.READ.value,
+        "requires_confirmation": bool(contract.get("requires_confirmation")),
+        "authentication_required": contract.get("authentication_required"),
+        "availability": contract.get("availability") or "available",
+        "health": contract.get("health") or "healthy",
+        "data_classification": contract.get("data_classification") or "unspecified",
+        "network_requirements": contract.get("network_requirements") or "not_required",
+        "endpoint_requirements": list(contract.get("endpoint_requirements") or ()),
+        "supported_presentation_formats": tuple(contract.get("supported_environments") or ()),
+        "compatibility_requirements": {
+            "supported_environments": list(contract.get("supported_environments") or ()),
+        },
+        "timeout_seconds": int(contract.get("timeout") or 30),
+        "cancellation_semantics": "cooperative" if contract.get("supports_async") else "not_supported",
+        "error_semantics": "explicit_tool_result_failure",
+        "alternatives": list(contract.get("fallbacks") or ()),
+        "observability": contract.get("observability") or "canonical_runtime_events",
+        "provenance_requirements": {
+            "audit_policy": contract.get("audit_policy") or "record_execution",
+            "observability": contract.get("observability") or "canonical_runtime_events",
+        },
+    }
+    return requested
+
+
+def register_capability_manifest(manifest: dict[str, Any], registry: Any | None = None) -> dict[str, Any]:
+    """Validate metadata for an already trusted tool; never register executable code."""
+    validated = validate_capability_manifest(manifest)
+    if registry is not None:
+        registered = {
+            item["name"]: item for item in registry.describe()
+        }
+        existing = registered.get(validated["id"])
+        if existing is None:
+            raise ValueError("capability manifest cannot install an unregistered tool")
+        if existing.get("parameters") != validated["input_schema"]:
+            raise ValueError("capability manifest input schema conflicts with ToolRegistry")
+        required_permissions = tuple(
+            getattr(registry, "_required_permissions", {}).get(validated["id"], ())
+        )
+        if set(required_permissions) != set(validated["required_permissions"]):
+            raise ValueError("capability manifest permissions conflict with ToolRegistry")
+        if existing.get("risk") != validated["risk_level"]:
+            raise ValueError("capability manifest risk conflicts with ToolRegistry")
+        if existing.get("requires_confirmation") != validated["requires_confirmation"]:
+            raise ValueError("capability manifest approval conflicts with ToolRegistry")
+        validated["lifecycle_state"] = "registered"
+        validated["registration_verified"] = True
+    return validated
+
+
+@dataclass
+class CapabilityContract:
     """Machine-readable metadata for one capability."""
 
     id: str
@@ -195,8 +444,56 @@ _META: dict[str, dict[str, Any]] = {
     # -- software engineering -------------------------------------------------
     "project.inspect": dict(domain="software_engineering", supports_offline=True,
                             cost_model="local_io", timeout=60),
-    "project.search": dict(domain="software_engineering", supports_offline=True,
-                           cost_model="local_io", timeout=60),
+    "project.search": dict(
+        domain="software_engineering",
+        supports_offline=True,
+        cost_model="local_io",
+        timeout=60,
+        execution_surface="core_workspace",
+        operations=("workspace.search",),
+        operation_arguments={
+            "workspace.search": {"query": "$query", "max_results": 40},
+        },
+        operation_intents={
+            "workspace.search": {
+                "semantic_type": "workspace.search",
+                "result_renderer": "workspace_matches",
+                "result_count_path": "match_count",
+                "match_patterns": [
+                    r"\b(?:search|find)\b",
+                    r"\b(?:this|the|my)\s+(?:jarvis\s+)?(?:project|workspace|repository|repo)\b",
+                ],
+                "subject_pattern": (
+                    r"^\s*(?:(?:jarvis)[,:]?\s*)?"
+                    r"(?:search|find)\s+(?:this|the|my)\s+"
+                    r"(?:jarvis\s+)?(?:project|workspace|repository|repo)\s+"
+                    r"for\s+(?P<subject>.+?)[?.!,]*\s*$"
+                ),
+                "query_template": "{subject}",
+                "plan_summary": "Search the configured JARVIS workspace for the requested text.",
+                "step_summary": "Search the authorized workspace and report observed matches.",
+                "completion_condition_type": "answer_generated",
+                "completion_expected": "workspace search result observed",
+                "empty_result_message": "The workspace search returned no readable result.",
+            },
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "result": {"type": "string"},
+                "artifacts": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                },
+            },
+            "required": ["result", "artifacts"],
+        },
+        network_requirements="not_required",
+        data_classification="workspace",
+        supported_environments=("core_workspace", "conversation"),
+        observability="canonical_runtime_events",
+        required_permissions=("project:read",),
+    ),
     "project.test_status": dict(domain="software_engineering",
                                 supports_offline=True, cost_model="local_io",
                                 timeout=30),
@@ -264,11 +561,57 @@ _META: dict[str, dict[str, Any]] = {
                 "completion_condition_type": "source_observed",
                 "selectable_results": True,
             },
+            "web.search": {
+                "semantic_type": "web.search",
+                "result_renderer": "public_links",
+                "match_patterns": [
+                    r"\b(?:research|search|find|look\s+up)\b",
+                    r"\b(?:web|internet|online|sources?|latest|current|today)\b",
+                ],
+                "subject_pattern": (
+                    r"^\s*(?:(?:jarvis)[,:]?\s*)?"
+                    r"(?:research|search(?:\s+the\s+web|\s+online)?|"
+                    r"look\s+up|find)\s+(?P<subject>.+?)"
+                    r"(?:\s+(?:on\s+the\s+web|online|with\s+sources))?"
+                    r"[?.!,]*\s*$"
+                ),
+                "query_template": "{subject}",
+                "result_caveat": (
+                    "These are observed public search results, not independently "
+                    "verified claims or authenticated service actions."
+                ),
+                "empty_result_message": "The public web search returned no usable sources.",
+                "plan_summary": "Search the public web for the requested information.",
+                "step_summary": "Retrieve public search results from an authorized source.",
+                "completion_expected": "public HTTPS source observed",
+                "completion_condition_type": "source_observed",
+                "selectable_results": True,
+            },
+            "media.playback": {
+                "semantic_type": "media.playback",
+                "result_renderer": "unsupported",
+                "match_patterns": [
+                    r"\b(?:play|start)\b",
+                    r"\b(?:video|movie|film|episode|stream)\b",
+                ],
+                "subject_pattern": (
+                    r"^\s*(?:(?:jarvis)[,:]?\s*)?"
+                    r"(?:(?:i\s+)?(?:want|would\s+like)\s+to\s+)?"
+                    r"(?:play|start)\s+(?P<subject>.+?)[?.!,]*\s*$"
+                ),
+                "query_template": "{subject}",
+                "empty_result_message": (
+                    "No authorized media playback capability is registered. "
+                    "I have not started playback."
+                ),
+                "plan_summary": "Check for an authorized media playback capability.",
+                "step_summary": "Do not claim playback unless an authorized player exists.",
+            },
         },
         operation_output_requirements={
             "media.discovery": ("artifacts.url", "artifacts.title"),
         },
-        intent_confirmation_operations=("media.discovery",),
+        intent_confirmation_operations=("media.discovery", "web.search"),
         output_schema={
             "type": "object",
             "properties": {
@@ -514,8 +857,49 @@ _META: dict[str, dict[str, Any]] = {
     # Coordinates, distance and bearing use local math only.
     # Map data inspection requires JARVIS_GEOGRAPHY_MAP_ROOT to be configured.
     # Offline search requires KIWIX_CORPUS_PATH with a real ZIM archive.
-    "geography.coordinates": dict(domain="geography", supports_offline=True,
-                                    cost_model="local_compute", timeout=30),
+    "geography.coordinates": dict(
+        domain="geography",
+        supports_offline=True,
+        cost_model="local_compute",
+        timeout=30,
+        execution_surface="local_compute",
+        operations=("geography.coordinates.map",),
+        operation_arguments={
+            "geography.coordinates.map": {"input": "$query"},
+        },
+        operation_intents={
+            "geography.coordinates.map": {
+                "semantic_type": "geography.point_map",
+                "result_renderer": "geospatial_point_map",
+                "match_patterns": [
+                    r"\b(?:map|show|plot)\b",
+                    r"(?:-?\d{1,2}(?:\.\d+)?\s*[, ]\s*-?\d{1,3}(?:\.\d+)?|coordinates?)",
+                ],
+                "subject_pattern": (
+                    r"^\s*(?:(?:jarvis)[,:]?\s*)?(?:please\s+)?"
+                    r"(?:map|show|plot)\s+(?:these\s+)?"
+                    r"(?:coordinates?\s*:?\s*)?"
+                    r"(?P<subject>-?\d{1,2}(?:\.\d+)?"
+                    r"\s*[, ]\s*-?\d{1,3}(?:\.\d+)?)"
+                    r"\s*[?.!,]*\s*$"
+                ),
+                "query_template": "{subject}",
+                "result_caveat": (
+                    "The map uses coordinates explicitly provided in this "
+                    "conversation; it is not a live device location."
+                ),
+                "empty_result_message": (
+                    "The supplied coordinates could not be validated."
+                ),
+                "plan_summary": (
+                    "Validate the user-provided coordinates and prepare a map view."
+                ),
+                "step_summary": (
+                    "Parse and range-check the user-provided coordinate pair."
+                ),
+            },
+        },
+    ),
     "geography.distance": dict(domain="geography", supports_offline=True,
                                cost_model="local_compute", timeout=30),
     "geography.bearing": dict(domain="geography", supports_offline=True,
@@ -687,7 +1071,10 @@ def build_contracts(registry: ToolRegistry | None = None,
             ),
             output_schema=meta.get("output_schema", {}),
             authentication_required=meta.get("authentication_required"),
-            required_permissions=tuple(meta.get("required_permissions", ())),
+            required_permissions=tuple(dict.fromkeys((
+                *meta.get("required_permissions", ()),
+                *described.get("required_permissions", ()),
+            ))),
             requires_confirmation=bool(described.get("requires_confirmation", False)),
             risk_level=risk,
             data_classification=meta.get("data_classification", "unspecified"),
@@ -746,16 +1133,35 @@ def domain_packs(contracts: dict[str, Any] | None = None) -> list[dict[str, Any]
                 if contracts[n]["availability"] == "AVAILABLE"),
         })
     return out
-
-
-def discover_capabilities(
-    task: str,
+
+
+def build_capability_manifest(
+    capability_name: str,
     *,
-    mode: str = ONLINE,
+    lifecycle_state: str = "registered",
     contracts: dict[str, Any] | None = None,
-    include_unavailable: bool = False,
-    max_results: int = 25,
-) -> dict[str, Any]:
+) -> dict[str, Any]:
+    """Build a validated lifecycle manifest for a registered capability."""
+    from .capability_tools import build_capability_registry
+
+    registry = build_capability_registry()
+    if contracts is None:
+        contracts = build_contracts(registry)
+    contract = contracts.get(capability_name)
+    if contract is None:
+        raise KeyError(f"unknown capability {capability_name!r}")
+    manifest = _manifest_from_contract(contract, lifecycle_state)
+    return register_capability_manifest(manifest, registry)
+
+
+def discover_capabilities(
+    task: str,
+    *,
+    mode: str = ONLINE,
+    contracts: dict[str, Any] | None = None,
+    include_unavailable: bool = False,
+    max_results: int = 25,
+) -> dict[str, Any]:
     """Answer "what capabilities are available for this task?".
 
     Filters by domain relevance, operating mode, availability, risk and
@@ -841,7 +1247,10 @@ def capability_catalogue() -> dict[str, Any]:
 
 
 __all__ = [
-    "CapabilityContract", "DomainPack", "build_contracts", "domain_packs",
-    "discover_capabilities", "capability_catalogue", "CONTRACT_VERSION",
-    "DOMAINS", "MODES", "ONLINE", "DEGRADED", "OFFLINE", "DOMAIN_HINTS",
-]
+    "CapabilityContract", "CapabilityManifest", "DomainPack",
+    "build_contracts", "build_capability_manifest",
+    "validate_capability_manifest", "register_capability_manifest",
+    "domain_packs", "discover_capabilities", "capability_catalogue",
+    "CONTRACT_VERSION", "CAPABILITY_LIFECYCLE_STATES",
+    "DOMAINS", "MODES", "ONLINE", "DEGRADED", "OFFLINE", "DOMAIN_HINTS",
+]

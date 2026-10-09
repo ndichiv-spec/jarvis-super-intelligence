@@ -7,8 +7,9 @@ permission system and NO new secret scrubber: authorization, risk levels and
 
 Security boundary
 -----------------
-* Every path is confined to :data:`WORKSPACE_ROOT` (``F:\\AI``).  Traversal
-  (``../``), absolute escapes and symlink escapes are rejected.
+* Every path is confined to :data:`WORKSPACE_ROOT`, configured by
+  ``JARVIS_WORKSPACE_ROOT`` or derived from this installed source tree.
+  Traversal (``../``), absolute escapes and symlink escapes are rejected.
 * Secret-bearing files are never read: ``.env``, ``*.pem``, ``*.key``,
   ``credentials*``, ``*secret*``, ``*token*`` and friends are excluded by name.
 * Only credential *existence* metadata (``configured: true/false``) is ever
@@ -34,7 +35,10 @@ from .tool_registry import Tool, ToolContext, scrub_secrets
 # --------------------------------------------------------------------------- #
 # Boundaries
 # --------------------------------------------------------------------------- #
-WORKSPACE_ROOT = Path(os.environ.get("JARVIS_WORKSPACE_ROOT", r"F:\AI")).resolve()
+_DEFAULT_WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
+WORKSPACE_ROOT = Path(
+    os.environ.get("JARVIS_WORKSPACE_ROOT", str(_DEFAULT_WORKSPACE_ROOT))
+).resolve()
 
 # The JARVIS repository itself.  The workspace is the AUTHORIZATION boundary;
 # the project root is what we actually analyze.  Auto-detected so the map is

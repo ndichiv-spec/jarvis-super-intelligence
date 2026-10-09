@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from sqlalchemy import (
+    Boolean,
     Column,
     Float,
     Index,
@@ -154,6 +155,56 @@ runtime_event_sequences = Table(
     Column("last_sequence", Integer, nullable=False),
 )
 
+endpoints = Table(
+    "jarvis_endpoints",
+    metadata,
+    Column("endpoint_id", String(36), primary_key=True),
+    Column("owner_id", String(255), nullable=False),
+    Column("status", String(32), nullable=False),
+    Column("is_active", Boolean, nullable=False, default=False),
+    Column("version", Integer, nullable=False, default=1),
+    Column("payload", Text, nullable=False),
+    Column("created_at", Float, nullable=False),
+    Column("updated_at", Float, nullable=False),
+)
+Index("ix_jarvis_endpoints_owner", endpoints.c.owner_id, endpoints.c.status)
+
+endpoint_audit_events = Table(
+    "jarvis_endpoint_audit_events",
+    metadata,
+    Column("event_id", String(36), primary_key=True),
+    Column("endpoint_id", String(36), nullable=False),
+    Column("owner_id", String(255), nullable=False),
+    Column("event_type", String(64), nullable=False),
+    Column("timestamp", Float, nullable=False),
+    Column("payload", Text, nullable=False, default="{}"),
+)
+Index("ix_jarvis_endpoint_audit_owner", endpoint_audit_events.c.owner_id,
+      endpoint_audit_events.c.timestamp)
+
+presentation_revisions = Table(
+    "jarvis_presentation_revisions",
+    metadata,
+    Column("revision_id", String(36), primary_key=True),
+    Column("task_id", String(255), nullable=False),
+    Column("revision", Integer, nullable=False),
+    Column("owner_id", String(255), nullable=False),
+    Column("request_id", String(255), nullable=False),
+    Column("conversation_id", String(255)),
+    Column("command_id", String(255)),
+    Column("execution_id", String(255)),
+    Column("endpoint_id", String(36)),
+    Column("contract_version", String(16), nullable=False),
+    Column("presentation", Text, nullable=False),
+    Column("compatibility", Text, nullable=False, default="{}"),
+    Column("fallback_reason", Text),
+    Column("idempotency_key", String(255), unique=True),
+    Column("created_at", Float, nullable=False),
+    UniqueConstraint("task_id", "revision", name="uq_jarvis_presentation_task_revision"),
+)
+Index("ix_jarvis_presentation_owner_task", presentation_revisions.c.owner_id,
+      presentation_revisions.c.task_id, presentation_revisions.c.revision)
+
 # --------------------------------------------------------------------------- #
 # Engine lifecycle (process-wide singleton)
 # --------------------------------------------------------------------------- #
@@ -255,6 +306,9 @@ def reset_database() -> None:
     ensure_schema()
     with get_engine().begin() as conn:
         conn.execute(delete(kv_store))
+        conn.execute(delete(endpoint_audit_events))
+        conn.execute(delete(endpoints))
+        conn.execute(delete(presentation_revisions))
 
 
 # --------------------------------------------------------------------------- #

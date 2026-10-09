@@ -9,6 +9,7 @@ import type {
   MessageTurnResult,
   ModelCatalog,
   ToolCall,
+  SemanticPresentationContract,
 } from './types';
 
 function newClientMessageId(): string {
@@ -32,6 +33,9 @@ function toMessageTurnResult(data: Record<string, unknown>): MessageTurnResult {
     timestamp: data.timestamp as string | undefined,
     tool_calls: data.tool_calls as ToolCall[] | undefined,
     runtime_command_id: data.runtime_command_id as string | undefined,
+    canonical_task_id: data.canonical_task_id as string | undefined,
+    presentation_revision_id: data.presentation_revision_id as string | undefined,
+    presentation: data.presentation as SemanticPresentationContract | undefined,
   };
 }
 

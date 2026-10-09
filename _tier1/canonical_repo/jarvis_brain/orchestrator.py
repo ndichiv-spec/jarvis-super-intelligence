@@ -130,6 +130,7 @@ class BrainOrchestrator:
         budget: Optional[TaskBudget] = None,
         context_limits: Optional[ContextLimits] = None,
         conversation_id: Optional[str] = None,
+        request_id: Optional[str] = None,
         user_id: str = "anonymous",
         permissions: Optional[set[str]] = None,
         principal: Optional[dict[str, Any]] = None,
@@ -145,6 +146,7 @@ class BrainOrchestrator:
         self.cancel_token = cancel_token
         self._default_budget = budget or TaskBudget()
         self.conversation_id = conversation_id
+        self.request_id = request_id
         self.user_id = user_id
         self.permissions = permissions
         self.principal = principal
@@ -691,6 +693,7 @@ class BrainOrchestrator:
         return ToolContext(
             user_id=self.user_id, permissions=perms or set(),
             principal=self.principal or {}, request_id=str(uuid.uuid4()),
+            correlation_id=self.request_id,
             budgets=None, research_dir=None,
         )
 

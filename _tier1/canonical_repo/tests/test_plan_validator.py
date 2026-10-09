@@ -87,6 +87,7 @@ def test_wrong_arg_type_rejected(validator):
 def test_destructive_capability_needs_human_approval(validator):
     # sandbox_run is destructive -> HUMAN_APPROVAL even in AUTONOMOUS.
     res = validator.validate(_out("sandbox_run").to_dict(), user_id="alice",
+                             permissions={"sandbox:execute"},
                              autonomy=AutonomyLevel.AUTONOMOUS.value)
     assert res.decision == PlanDecision.HUMAN_APPROVAL
     assert "sandbox_run" in res.needs_approval_for
@@ -111,6 +112,7 @@ def test_network_capability_needs_confirmation(validator, monkeypatch):
 def test_offline_mode_blocks_non_offline_cap(validator):
     # sandbox_run is exec + not supports_offline -> PLAN_BLOCKED in OFFLINE.
     res = validator.validate(_out("sandbox_run").to_dict(), user_id="alice",
+                             permissions={"sandbox:execute"},
                              execution_mode=ExecutionMode.OFFLINE.value,
                              autonomy=AutonomyLevel.AUTONOMOUS.value)
     assert res.decision == PlanDecision.PLAN_BLOCKED

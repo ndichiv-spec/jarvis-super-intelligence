@@ -10,6 +10,9 @@ export interface ChatMessage {
   model?: string;
   tool_calls?: ToolCall[];
   sources?: string[];
+  presentation?: SemanticPresentationContract;
+  canonical_task_id?: string;
+  presentation_revision_id?: string;
   confidence?: number;
   skill_used?: string;
   metadata?: Record<string, unknown>;
@@ -69,6 +72,9 @@ export interface ChatResponse {
   tool_calls?: ToolCall[];
   tool_results?: unknown[];
   runtime_command_id?: string;
+  presentation?: SemanticPresentationContract;
+  canonical_task_id?: string;
+  presentation_revision_id?: string;
 }
 
 export interface SessionInfo {
@@ -141,6 +147,9 @@ export interface ChatStreamChunk {
   model?: string;
   resumed?: boolean;
   runtime_command_id?: string;
+  presentation?: SemanticPresentationContract;
+  canonical_task_id?: string;
+  presentation_revision_id?: string;
 }
 
 export interface MessageTurnResult {
@@ -156,6 +165,120 @@ export interface MessageTurnResult {
   timestamp?: string;
   tool_calls?: ToolCall[];
   runtime_command_id?: string;
+  presentation?: SemanticPresentationContract;
+  canonical_task_id?: string;
+  presentation_revision_id?: string;
+}
+
+export type SemanticPresentationComponent =
+  | {
+      id: string;
+      type: 'conversation.markdown';
+      text: string;
+    }
+  | {
+      id: string;
+      type: 'research.source_list';
+      title: string;
+      items: Array<{
+        data_ref: string;
+        title: string;
+        url: string;
+        snippet: string;
+      }>;
+    }
+  | {
+      id: string;
+      type: 'workspace.match_list';
+      title: string;
+      items: Array<{
+        data_ref: string;
+        path: string;
+        line: number;
+        text: string;
+      }>;
+    }
+  | {
+      id: string;
+      type: 'geospatial.point_map';
+      title: string;
+      items: Array<{
+        data_ref: string;
+        latitude: number;
+        longitude: number;
+        label: string;
+        units: {
+          latitude: 'degrees_north';
+          longitude: 'degrees_east';
+        };
+        location_type: 'user_provided';
+      }>;
+    };
+
+/** JSON semantic contract; deliberately contains no framework or executable UI values. */
+export interface SemanticPresentationContract {
+  contract_version: '1.0' | '1.1';
+  presentation_id: string;
+  objective: string;
+  environment: 'conversation' | 'web' | 'map' | 'image';
+  content_hierarchy: string[];
+  focus: string;
+  components: SemanticPresentationComponent[];
+  assistant_presence: { mode: 'inline'; state: 'available' | 'error' };
+  interactions: Array<{
+    id: string;
+    type: 'external_source_navigation';
+    data_ref: string;
+    required_permissions: ['web:read'];
+    user_gesture_required: true;
+  }>;
+  visualizations: [];
+  modalities: Array<'text' | 'links' | 'map'>;
+  accessibility: {
+    reading_order: string[];
+    announce_updates: boolean;
+    non_color_status: boolean;
+  };
+  responsive: { reflow: 'single_column'; minimum_width: string };
+  transitions: {
+    on_unsupported: 'conversation_fallback';
+    on_error: 'retain_observed_text';
+  };
+  errors: string[];
+  task_state?: {
+    status: 'completed' | 'partial' | 'error' | 'unsupported';
+    message: string;
+  };
+  source_provenance?: Array<{
+    data_ref: string;
+    source_type: 'public_web' | 'authorized_workspace' | 'user_provided_coordinates';
+    observed_at: string;
+  }>;
+  media_refs?: [];
+  user_preferences?: null;
+  view_state?: {
+    focus: string;
+    selected_data_ref: string | null;
+  };
+  fallback: { type: 'conversation.markdown'; text: string };
+  correlation: {
+    request_id: string | null;
+    session_id: string | null;
+    conversation_id: string | null;
+    command_id: string | null;
+    execution_id: string | null;
+  };
+  data_refs: Array<{
+    id: string;
+    kind: 'public_source' | 'workspace_result' | 'user_provided_coordinates';
+  }>;
+  renderer_requirements: {
+    contract_version: '1.0' | '1.1';
+    supported_contract_versions?: ['1.0', '1.1'];
+    required_components: string[];
+    required_modalities?: Array<'text' | 'links' | 'map'>;
+    fallback_components: ['conversation.markdown'];
+  };
 }
 
 export const CHAT_MODELS = [

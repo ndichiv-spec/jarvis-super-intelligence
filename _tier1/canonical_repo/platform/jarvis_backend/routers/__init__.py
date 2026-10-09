@@ -19,6 +19,7 @@ from . import connectors
 from . import control_plane
 from . import curriculum
 from . import developer
+from . import endpoints
 from . import experiments
 from . import extensions
 from . import global_knowledge
@@ -57,6 +58,7 @@ __all__ = [
     "control_plane",
     "curriculum",
     "developer",
+    "endpoints",
     "experiments",
     "extensions",
     "global_knowledge",

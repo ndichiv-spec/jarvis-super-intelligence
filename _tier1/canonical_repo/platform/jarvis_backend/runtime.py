@@ -14,12 +14,14 @@ from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import delete, insert, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from .db import (
     ensure_schema,
     get_engine,
+    presentation_revisions,
     runtime_event_sequences,
     runtime_events,
     runtime_executions,
@@ -148,6 +150,10 @@ class InvalidPlanStepTransitionError(ValueError):
     pass
 
 
+class PresentationRevisionConflictError(ValueError):
+    pass
+
+
 class JarvisRuntime:
     """Authoritative persistence boundary for execution lifecycle state."""
 
@@ -200,6 +206,151 @@ class JarvisRuntime:
                 )
             ).mappings().first()
         return self._decode_execution(dict(row)) if row else None
+
+    def create_presentation_revision(
+        self,
+        *,
+        task_id: str,
+        owner_id: str,
+        request_id: str,
+        presentation: dict[str, Any],
+        expected_revision: int,
+        idempotency_key: str,
+        conversation_id: str | None = None,
+        command_id: str | None = None,
+        execution_id: str | None = None,
+        endpoint_id: str | None = None,
+        compatibility: dict[str, Any] | None = None,
+        fallback_reason: str | None = None,
+    ) -> dict[str, Any]:
+        """Persist one owner-bound, idempotent presentation revision."""
+        ensure_schema()
+        if not task_id or not owner_id or not request_id:
+            raise ValueError("task_id, owner_id, and request_id are required")
+        if not idempotency_key or len(idempotency_key) > 255:
+            raise ValueError("a valid idempotency_key is required")
+        if not isinstance(presentation, dict):
+            raise ValueError("presentation must be an object")
+        contract_version = presentation.get("contract_version")
+        if contract_version not in {"1.0", "1.1"}:
+            raise ValueError("unsupported presentation contract version")
+        now = time.time()
+        revision_id = str(uuid.uuid4())
+        created = None
+        try:
+            with get_engine().begin() as connection:
+                repeated = connection.execute(
+                    select(presentation_revisions).where(
+                        presentation_revisions.c.idempotency_key
+                        == idempotency_key
+                    )
+                ).mappings().first()
+                if repeated:
+                    if repeated["owner_id"] != owner_id or repeated["task_id"] != task_id:
+                        raise PermissionError("idempotency key belongs to another task")
+                    return self._decode_presentation_revision(repeated)
+
+                task_rows = connection.execute(
+                    select(
+                        presentation_revisions.c.owner_id,
+                        presentation_revisions.c.revision,
+                    ).where(presentation_revisions.c.task_id == task_id)
+                ).all()
+                if any(row.owner_id != owner_id for row in task_rows):
+                    raise PermissionError("task does not belong to the authenticated owner")
+                current_revision = max(
+                    (row.revision for row in task_rows),
+                    default=0,
+                )
+                if current_revision != expected_revision:
+                    raise PresentationRevisionConflictError(
+                        f"expected revision {expected_revision}, found {current_revision}"
+                    )
+                values = {
+                    "revision_id": revision_id,
+                    "task_id": task_id,
+                    "revision": current_revision + 1,
+                    "owner_id": owner_id,
+                    "request_id": request_id,
+                    "conversation_id": conversation_id,
+                    "command_id": command_id,
+                    "execution_id": execution_id,
+                    "endpoint_id": endpoint_id,
+                    "contract_version": contract_version,
+                    "presentation": json.dumps(
+                        presentation, ensure_ascii=False, default=str,
+                    ),
+                    "compatibility": json.dumps(
+                        compatibility or {}, ensure_ascii=False, default=str,
+                    ),
+                    "fallback_reason": fallback_reason,
+                    "idempotency_key": idempotency_key,
+                    "created_at": now,
+                }
+                connection.execute(
+                    insert(presentation_revisions).values(**values)
+                )
+                created = {
+                    **values,
+                    "presentation": presentation,
+                    "compatibility": compatibility or {},
+                }
+                if command_id:
+                    self._append_event_in_transaction(
+                        connection,
+                        command_id=command_id,
+                        event_type="presentation.revision.created",
+                        payload={
+                            "task_id": task_id,
+                            "revision_id": revision_id,
+                            "revision": current_revision + 1,
+                            "endpoint_id": endpoint_id,
+                            "contract_version": contract_version,
+                            "fallback_reason": fallback_reason,
+                        },
+                        execution_id=execution_id,
+                    )
+        except IntegrityError as exc:
+            raise PresentationRevisionConflictError(
+                "presentation revision changed concurrently; reload and retry"
+            ) from exc
+
+        return created
+
+    def get_presentation_revision(
+        self, revision_id: str, *, owner_id: str,
+    ) -> dict[str, Any] | None:
+        ensure_schema()
+        with get_engine().connect() as connection:
+            row = connection.execute(
+                select(presentation_revisions).where(
+                    presentation_revisions.c.revision_id == revision_id,
+                    presentation_revisions.c.owner_id == owner_id,
+                )
+            ).mappings().first()
+        return self._decode_presentation_revision(row) if row else None
+
+    def list_presentation_revisions(
+        self, task_id: str, *, owner_id: str,
+    ) -> list[dict[str, Any]]:
+        ensure_schema()
+        with get_engine().connect() as connection:
+            rows = connection.execute(
+                select(presentation_revisions)
+                .where(
+                    presentation_revisions.c.task_id == task_id,
+                    presentation_revisions.c.owner_id == owner_id,
+                )
+                .order_by(presentation_revisions.c.revision)
+            ).mappings()
+            return [self._decode_presentation_revision(row) for row in rows]
+
+    @staticmethod
+    def _decode_presentation_revision(row: Any) -> dict[str, Any]:
+        revision = dict(row)
+        revision["presentation"] = json.loads(revision["presentation"])
+        revision["compatibility"] = json.loads(revision["compatibility"])
+        return revision
 
     def get_execution_by_idempotency_key(
         self, idempotency_key: str,
@@ -653,38 +804,59 @@ class JarvisRuntime:
         status: str | None = None,
     ) -> dict[str, Any]:
         ensure_schema()
+        with get_engine().begin() as connection:
+            return self._append_event_in_transaction(
+                connection,
+                command_id=command_id,
+                event_type=event_type,
+                payload=payload,
+                execution_id=execution_id,
+                step_id=step_id,
+                status=status,
+            )
+
+    @staticmethod
+    def _append_event_in_transaction(
+        connection: Any,
+        *,
+        command_id: str,
+        event_type: str,
+        payload: dict[str, Any] | None = None,
+        execution_id: str | None = None,
+        step_id: str | None = None,
+        status: str | None = None,
+    ) -> dict[str, Any]:
         event_id = str(uuid.uuid4())
         now = time.time()
-        with get_engine().begin() as connection:
-            dialect = connection.dialect.name
-            sequence_insert = (
-                sqlite_insert(runtime_event_sequences)
-                if dialect == "sqlite"
-                else pg_insert(runtime_event_sequences)
+        dialect = connection.dialect.name
+        sequence_insert = (
+            sqlite_insert(runtime_event_sequences)
+            if dialect == "sqlite"
+            else pg_insert(runtime_event_sequences)
+        )
+        sequence_statement = sequence_insert.values(
+            command_id=command_id, last_sequence=1
+        ).on_conflict_do_update(
+            index_elements=[runtime_event_sequences.c.command_id],
+            set_={
+                "last_sequence": runtime_event_sequences.c.last_sequence + 1
+            },
+        ).returning(runtime_event_sequences.c.last_sequence)
+        sequence = connection.execute(sequence_statement).scalar_one()
+        safe_payload = payload or {}
+        connection.execute(
+            insert(runtime_events).values(
+                event_id=event_id,
+                command_id=command_id,
+                execution_id=execution_id,
+                step_id=step_id,
+                sequence=sequence,
+                timestamp=now,
+                type=event_type,
+                status=status,
+                payload=json.dumps(safe_payload, ensure_ascii=False, default=str),
             )
-            sequence_statement = sequence_insert.values(
-                command_id=command_id, last_sequence=1
-            ).on_conflict_do_update(
-                index_elements=[runtime_event_sequences.c.command_id],
-                set_={
-                    "last_sequence": runtime_event_sequences.c.last_sequence + 1
-                },
-            ).returning(runtime_event_sequences.c.last_sequence)
-            sequence = connection.execute(sequence_statement).scalar_one()
-            safe_payload = payload or {}
-            connection.execute(
-                insert(runtime_events).values(
-                    event_id=event_id,
-                    command_id=command_id,
-                    execution_id=execution_id,
-                    step_id=step_id,
-                    sequence=sequence,
-                    timestamp=now,
-                    type=event_type,
-                    status=status,
-                    payload=json.dumps(safe_payload, ensure_ascii=False, default=str),
-                )
-            )
+        )
         return {
             "event_id": event_id,
             "command_id": command_id,

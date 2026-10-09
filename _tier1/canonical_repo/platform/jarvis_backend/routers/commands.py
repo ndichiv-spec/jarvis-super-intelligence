@@ -569,10 +569,11 @@ async def _execute_command(command_id: str, user: dict[str, Any], autonomy: str)
         from ..world_resolver import (
             ExecutionSelection,
             WorldResolverAdapter,
+            observed_result_count,
             resolve_execution_surface,
-            resolve_presentation,
             resolve_world_intent,
         )
+        from ..presentation_contract import build_execution_presentation
 
         command = _commands().get(command_id)
         if command is None:
@@ -719,6 +720,7 @@ async def _execute_command(command_id: str, user: dict[str, Any], autonomy: str)
             PlanValidator(registry),
             budget=TaskBudget(max_execution_time=300, max_cost=1.0),
             conversation_id=command.get("conversation_id"),
+            request_id=command.get("request_id"),
             user_id=user_id,
             permissions=permissions,
             principal=user,
@@ -737,9 +739,8 @@ async def _execute_command(command_id: str, user: dict[str, Any], autonomy: str)
                 timeout=300,
             )
             if world_intent is not None:
-                resolved_capability = (
-                    _commands()[command_id].get("selected_capability_id")
-                )
+                world_command = _commands()[command_id]
+                resolved_capability = world_command.get("selected_capability_id")
                 search_evidence = [
                     item for item in result.evidence
                     if item.get("name") == resolved_capability
@@ -752,18 +753,53 @@ async def _execute_command(command_id: str, user: dict[str, Any], autonomy: str)
                     if isinstance(artifact, dict)
                 ]
                 if search_evidence:
+                    presentation_message = (
+                        f"Observed {len(artifacts)} public source(s) for "
+                        f"{world_intent.operation}."
+                        if world_intent.operation in {"web.search", "media.discovery"}
+                        else "Observed results from the authorized workspace search."
+                    )
+                elif world_command.get("resolution_status") != "selected":
+                    presentation_message = (
+                        f"No compatible authorized capability was available for "
+                        f"{world_intent.operation}. "
+                        f"{world_command.get('resolution_reason') or ''}"
+                    ).strip()
+                else:
+                    presentation_message = (
+                        f"The selected execution surface did not return a successful "
+                        f"result for {world_intent.operation}. No result is claimed."
+                    )
+                presentation = build_execution_presentation(
+                    operation=world_intent.operation,
+                    success=bool(search_evidence),
+                    message=presentation_message,
+                    artifacts=artifacts,
+                    tool_result=str(search_evidence[0].get("result") or "")
+                    if search_evidence else "",
+                    request_id=world_command.get("request_id"),
+                    session_id=world_command.get("conversation_id"),
+                    conversation_id=world_command.get("conversation_id"),
+                    command_id=command_id,
+                    execution_id=execution_id,
+                )
+                if search_evidence:
                     _append_event(
                         command_id,
                         "world.result.observed",
                         capability_id=resolved_capability,
                         operation=world_intent.operation,
-                        result_count=len(artifacts),
+                        result_count=observed_result_count(
+                            world_intent, search_evidence, artifacts,
+                        ),
                     )
                 _append_event(
                     command_id,
                     "presentation.updated",
-                    presentation=resolve_presentation(world_intent, artifacts),
-                    result_count=len(artifacts),
+                    presentation=presentation,
+                    result_count=observed_result_count(
+                        world_intent, search_evidence, artifacts,
+                    ),
                 )
         store = get_store("commands")
         current = store.load()[command_id]
@@ -779,6 +815,10 @@ async def _execute_command(command_id: str, user: dict[str, Any], autonomy: str)
             "confidence_state": result.confidence_state.value,
             "completion_condition_met": result.completion_condition_met,
             "cost": result.cost,
+            **(
+                {"presentation": presentation}
+                if world_intent is not None else {}
+            ),
         }
         current["errors"] = (
             [_safe_value(result.summary)]

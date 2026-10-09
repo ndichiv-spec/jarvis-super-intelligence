@@ -176,6 +176,7 @@ data: Dict[str, Store] = {}
 STORES = {
     "users": dict,
     "sessions": dict,
+    "endpoints": dict,
     "refresh_tokens": dict,
     "oauth_identities": dict,
     "api_keys": dict,

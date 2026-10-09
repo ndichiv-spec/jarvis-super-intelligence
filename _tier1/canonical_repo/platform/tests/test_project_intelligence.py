@@ -244,8 +244,10 @@ def test_project_map_cites_real_files(registry: ToolRegistry, ctx) -> None:
                                       {"include_placeholders": False}, ctx))
     data = json.loads(res.result)
     backend = data["project_map"]["BACKEND"]["key_files"]
-    assert any("jarvis_api.py" in f for f in backend), \
-        "BACKEND map must cite the real API entrypoint"
+    assert any(
+        "jarvis_backend" in f.lower() and f.lower().endswith("main.py")
+        for f in backend
+    ), "BACKEND map must cite the real backend entrypoint"
 
 
 def test_test_status_is_truthful(registry: ToolRegistry, ctx) -> None:
