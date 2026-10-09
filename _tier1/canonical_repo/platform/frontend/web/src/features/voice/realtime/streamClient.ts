@@ -1,4 +1,4 @@
-import { DEFAULT_VOICE_ENGINE_CONFIG, type VoiceEngineConfig, type VoiceEngineState, type VoiceEngineEvent, type TTSChunk, stateToTokenClass } from './types';
+import { DEFAULT_VOICE_ENGINE_CONFIG, type VoiceEngineConfig, type VoiceEngineState, type VoiceEngineEvent, type TTSChunk } from './types';
 
 export class VoiceStreamClient {
   readonly state: VoiceEngineState = 'idle';
@@ -23,7 +23,7 @@ export class VoiceStreamClient {
 
   onEvent(cb: (e: VoiceEngineEvent) => void): void { this.eventCbs.push(cb); }
   onceEvent(cb: (e: VoiceEngineEvent) => void): void { this.onceCbs.push(cb); }
-  private emit(e: VoiceEngineEvent): void {
+  notify(e: VoiceEngineEvent): void {
     for (const c of this.eventCbs) c(e);
     for (const c of this.onceCbs) c(e);
     this.onceCbs = [];
@@ -37,7 +37,7 @@ export class VoiceStreamClient {
         ws.onopen = () => {
           this.connected = true;
           this.reconnectAttempts = 0;
-          this.emit({ type: 'stateChanged', state: 'connecting' });
+          this.notify({ type: 'stateChanged', state: 'connecting' });
           resolve();
         };
         ws.onmessage = (ev) => this._onMessage(ev.data);
@@ -87,10 +87,10 @@ export class VoiceStreamClient {
       const msg = JSON.parse(raw);
       switch (msg.type) {
         case 'stt_text':
-          this.emit({ type: 'sttDone', text: msg.text, confidence: msg.confidence ?? 0 });
+          this.notify({ type: 'sttDone', text: msg.text, confidence: msg.confidence ?? 0 });
           break;
         case 'thinking':
-          this.emit({ type: 'stateChanged', state: 'thinking' });
+          this.notify({ type: 'stateChanged', state: 'thinking' });
           break;
         case 'tts_audio':
           this._enqueueTTS({ text: '', audio: new Uint8Array(msg.audio), done: false });
@@ -102,10 +102,10 @@ export class VoiceStreamClient {
           this._enqueueTTS({ text: '', done: true });
           break;
         case 'state':
-          this.emit({ type: 'stateChanged', state: msg.state });
+          this.notify({ type: 'stateChanged', state: msg.state });
           break;
         case 'error':
-          this.emit({ type: 'stateChanged', state: 'error' });
+          this.notify({ type: 'stateChanged', state: 'error' });
           break;
       }
     } catch { /* ignore malformed */ }

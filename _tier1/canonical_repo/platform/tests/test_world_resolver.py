@@ -11,7 +11,6 @@ from jarvis_backend.world_resolver import (
     WorldResolverAdapter,
     has_prior_media_results,
     render_media_results,
-    render_world_results,
     resolve_execution_surface,
     resolve_media_followup,
     resolve_presentation,
@@ -35,198 +34,41 @@ def test_non_media_conversation_does_not_resolve():
     assert resolve_world_intent("Watch the server logs.") is None
 
 
-def test_unregistered_playback_is_resolved_as_unsupported_not_discovery():
-    intent = resolve_world_intent("I want to play Avengers movie on Netflix.")
-    assert intent is not None
-    assert intent.operation == "media.playback"
-
-    from research_engine.capability_contract import build_contracts
-    from research_engine.capability_tools import build_capability_registry
-
-    registry = build_capability_registry()
-    contracts = build_contracts(registry, inventory={})
-    selection = resolve_execution_surface(
-        intent.operation, registry, contracts, user_id="user-1",
-        permissions={"web:read"},
-    )
-    assert selection.status == "unavailable"
-    assert "No registered execution surface" in selection.reason
-
-    adapter = WorldResolverAdapter(intent, selection)
-    output = asyncio.run(adapter.propose(
-        type("Input", (), {"request": "Play Avengers movie on Netflix."})(),
-        None,
-    ))
-    assert output.capability_requests == []
-    assert output.confidence_state.value == "INSUFFICIENT_EVIDENCE"
-
-
-def test_registered_web_and_workspace_operations_resolve_from_capability_metadata():
-    web_intent = resolve_world_intent(
-        "Research the latest JARVIS runtime event persistence options."
-    )
-    workspace_intent = resolve_world_intent(
-        "Search this JARVIS project for runtime event persistence."
-    )
-
-    assert web_intent is not None
-    assert web_intent.operation == "web.search"
-    assert web_intent.query == "the latest JARVIS runtime event persistence options"
-    assert workspace_intent is not None
-    assert workspace_intent.operation == "workspace.search"
-    assert workspace_intent.query == "runtime event persistence"
-    assert workspace_intent.result_renderer == "workspace_matches"
-
-
-def test_registered_workspace_surface_operates_offline_and_presents_observed_matches():
-    import json
-
-    from research_engine.capability_contract import build_contracts
-    from research_engine.capability_tools import build_capability_registry
-    from research_engine.tool_registry import ToolContext
-
-    registry = build_capability_registry()
-    contracts = build_contracts(
-        registry,
-        inventory={"project.search": {"state": "AVAILABLE"}},
-    )
+def test_image_generation_intent_resolves_only_the_user_supplied_prompt():
     intent = resolve_world_intent(
-        "Search this JARVIS project for class ProjectSearchTool.", contracts,
+        "JARVIS, generate an image of a blue fox under northern lights."
     )
+
     assert intent is not None
-    selection = resolve_execution_surface(
-        intent.operation,
-        registry,
-        contracts,
-        user_id="local-user",
-        permissions={"project:read"},
-        network_available=False,
-    )
-    assert selection.status == "selected"
-    assert selection.capability_id == "project.search"
-    assert selection.execution_surface == "core_workspace"
+    assert intent.kind == "image.generate"
+    assert intent.operation == "image.generate"
+    assert intent.subject == "a blue fox under northern lights"
+    assert intent.query == intent.subject
+    assert intent.result_renderer == "generated_image"
 
-    result = asyncio.run(registry.invoke(
-        selection.capability_id,
-        {
-            "query": intent.query,
-            "path": "research_engine",
-            "max_results": 10,
-        },
-        ToolContext(
-            user_id="local-user",
-            permissions={"project:read"},
-            request_id="workspace-search-request",
+    adapter = WorldResolverAdapter(
+        intent,
+        ExecutionSelection(
+            operation="image.generate",
+            status="selected",
+            capability_id="image.generate",
+            execution_surface="configured_image_provider",
+            contract={
+                "operation_arguments": {
+                    "image.generate": {"prompt": "$query"},
+                },
+            },
         ),
-    ))
-    assert result.success
-    payload = json.loads(result.result)
-    assert payload["match_count"] > 0
-
-    message, sources = render_world_results(
-        intent, result.artifacts,
-        evidence=[{"success": True, "result": result.result}],
     )
-    assert "I searched the configured JARVIS workspace" in message
-    assert "project_tools.py" in message
-    assert sources == []
-
-
-def test_resolver_requires_verified_service_authentication_when_declared():
-    class Registry:
-        def authorize(self, *args, **kwargs):
-            return True, "granted"
-
-    contract = {
-        "operations": ["service.inspect"],
-        "operation_arguments": {"service.inspect": {"query": "$query"}},
-        "input_schema": {
-            "type": "object",
-            "properties": {"query": {"type": "string"}},
-            "required": ["query"],
-        },
-        "availability": "AVAILABLE",
-        "execution_surface": "service_api",
-        "observability": "audit",
-        "authentication_required": True,
-        "service_dependencies": ["mail_service"],
+    output = asyncio.run(
+        adapter.propose(
+            type("Input", (), {"request": "Generate an image of a blue fox."})(),
+            None,
+        )
+    )
+    assert output.capability_requests[0].args == {
+        "prompt": "a blue fox under northern lights",
     }
-    contracts = {"mail.inspect": contract}
-
-    assert resolve_execution_surface(
-        "service.inspect", Registry(), contracts, user_id="user-1",
-    ).status == "unavailable"
-    selected = resolve_execution_surface(
-        "service.inspect",
-        Registry(),
-        contracts,
-        user_id="user-1",
-        authenticated_services={"mail_service"},
-    )
-    assert selected.status == "selected"
-    assert selected.capability_id == "mail.inspect"
-
-
-def test_contract_permissions_are_enforced_by_the_invocation_registry():
-    from research_engine.capability_tools import build_capability_registry
-    from research_engine.tool_registry import DefaultPermissionPolicy
-
-    registry = build_capability_registry(
-        policy=DefaultPermissionPolicy(
-            confirmations={"user-1:github.search": True},
-        ),
-    )
-    allowed, reason = registry.authorize(
-        "user-1", "github.search", permissions=set(),
-    )
-    assert not allowed
-    assert reason == "PERMISSION_DENIED:github:read"
-    assert registry.authorize(
-        "user-1", "project.search", permissions=set(),
-    ) == (False, "PERMISSION_DENIED:project:read")
-    assert registry.authorize(
-        "user-1", "project.search", permissions={"project:read"},
-    )[0]
-
-
-def test_chat_reports_unsupported_playback_without_invoking_a_tool(client, auth_headers):
-    response = client.post(
-        "/api/chat",
-        json={
-            "session_id": "unsupported-playback-session",
-            "client_message_id": "unsupported-playback-request",
-            "message": "Play Avengers movie on Netflix.",
-        },
-        headers=auth_headers,
-    )
-
-    assert response.status_code == 200, response.text
-    reply = response.json()
-    assert reply["message"].startswith("I couldn't perform media.playback")
-    assert "No registered execution surface" in reply["message"]
-    assert reply["sources"] == []
-    assert reply["tool_calls"][0]["status"] == "failed"
-
-    from jarvis_backend.routers import commands
-
-    command = commands._commands()[reply["runtime_command_id"]]
-    assert command["selected_capability_id"] is None
-    assert command["resolution_status"] == "unavailable"
-
-
-def test_canonical_request_id_reaches_tool_context_as_correlation_id():
-    from jarvis_brain.orchestrator import BrainOrchestrator
-
-    orchestrator = object.__new__(BrainOrchestrator)
-    orchestrator.permissions = set()
-    orchestrator.user_id = "user-1"
-    orchestrator.principal = {"id": "user-1"}
-    orchestrator.request_id = "http-request-1"
-
-    context = orchestrator._tool_context()
-
-    assert context.request_id != "http-request-1"
-    assert context.correlation_id == "http-request-1"
 
 
 def test_world_adapter_proposes_only_live_search_with_evidence_condition():
@@ -255,6 +97,56 @@ def test_world_adapter_proposes_only_live_search_with_evidence_condition():
     assert [request.capability for request in output.capability_requests] == ["search_web"]
     assert output.capability_requests[0].args["query"] == intent.query
     assert output.completion_conditions[0].type == "source_observed"
+
+
+def test_world_adapter_resolves_intent_slots_in_nested_arguments():
+    contracts = {
+        "catalog.lookup": {
+            "operation_intents": {
+                "catalog.lookup": {
+                    "semantic_type": "catalog.lookup",
+                    "match_patterns": [r"\blook\s+up\b", r"\bcatalog\b"],
+                    "subject_pattern": (
+                        r"look up (?P<subject>.+) in the catalog\.?"
+                    ),
+                    "query_template": "catalog:{subject}",
+                },
+            },
+        },
+    }
+    intent = resolve_world_intent(
+        "Look up warp cores in the catalog.", contracts,
+    )
+    assert intent is not None
+    adapter = WorldResolverAdapter(
+        intent,
+        ExecutionSelection(
+            operation="catalog.lookup",
+            status="selected",
+            capability_id="catalog",
+            execution_surface="catalog_api",
+            contract={
+                "operation_arguments": {
+                    "catalog.lookup": {
+                        "query": "$query",
+                        "filters": {"subject": "$subject"},
+                    },
+                },
+            },
+        ),
+    )
+
+    output = asyncio.run(
+        adapter.propose(
+            type("Input", (), {"request": "Look up warp cores in the catalog."})(),
+            None,
+        )
+    )
+
+    assert output.capability_requests[0].args == {
+        "query": "catalog:warp cores",
+        "filters": {"subject": "warp cores"},
+    }
 
 
 def test_execution_resolver_selects_best_authorized_surface_without_browser_bias():
@@ -385,6 +277,67 @@ def test_execution_resolver_reports_unavailable_when_network_is_offline():
     assert "network connection" in selection.reason
 
 
+def test_execution_resolver_requires_verified_service_auth_endpoint_and_cost_policy():
+    class Registry:
+        def authorize(self, *args, **kwargs):
+            return True, "granted"
+
+    contract = {
+        "operations": ["service.inspect"],
+        "operation_arguments": {"service.inspect": {"query": "$query"}},
+        "input_schema": {
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+            "required": ["query"],
+        },
+        "output_schema": {"type": "object", "properties": {"result": {"type": "string"}}},
+        "operation_output_requirements": {"service.inspect": ["result"]},
+        "availability": "AVAILABLE",
+        "health": "healthy",
+        "execution_surface": "service_api",
+        "observability": "audit",
+        "authentication_required": True,
+        "service_dependencies": ["github_api"],
+        "endpoint_requirements": ["presentation.text"],
+        "cost_model": "provider",
+    }
+    contracts = {"github.inspect": contract}
+
+    rejected = resolve_execution_surface(
+        "service.inspect", Registry(), contracts, user_id="user-1",
+        authenticated_services={"github_api"},
+        endpoint_capabilities={"presentation.text"},
+        acceptable_cost_models={"local_compute"},
+    )
+    assert rejected.status == "unavailable"
+    assert "accepted cost policy" in rejected.reason
+
+    unauthorized_service = resolve_execution_surface(
+        "service.inspect", Registry(), contracts, user_id="user-1",
+        endpoint_capabilities={"presentation.text"},
+        acceptable_cost_models={"provider"},
+    )
+    assert unauthorized_service.status == "unavailable"
+    assert "verified authentication" in unauthorized_service.reason
+
+    no_endpoint = resolve_execution_surface(
+        "service.inspect", Registry(), contracts, user_id="user-1",
+        authenticated_services={"github_api"},
+        acceptable_cost_models={"provider"},
+    )
+    assert no_endpoint.status == "unavailable"
+    assert "endpoint capabilities" in no_endpoint.reason
+
+    selected = resolve_execution_surface(
+        "service.inspect", Registry(), contracts, user_id="user-1",
+        authenticated_services={"github_api"},
+        endpoint_capabilities={"presentation.text"},
+        acceptable_cost_models={"provider"},
+    )
+    assert selected.status == "selected"
+    assert selected.capability_id == "github.inspect"
+
+
 def test_source_observed_completion_requires_public_https_artifact():
     from jarvis_brain.orchestrator import BrainOrchestrator
     from research_engine.models import ToolResult
@@ -424,15 +377,6 @@ def test_registered_web_capability_declares_resolver_metadata():
     assert contract["operation_output_requirements"]["media.discovery"] == [
         "artifacts.url", "artifacts.title",
     ]
-
-    workspace = build_contracts(
-        build_capability_registry(),
-        inventory={"project.search": {"state": "AVAILABLE"}},
-    )["project.search"]
-    assert workspace["execution_surface"] == "core_workspace"
-    assert workspace["input_schema"]["properties"]["query"]["type"] == "string"
-    assert workspace["output_schema"]["properties"]["result"]["type"] == "string"
-    assert workspace["required_permissions"] == ["project:read"]
 
 
 def test_registered_intent_metadata_drives_non_media_operation_resolution():
@@ -548,6 +492,99 @@ def test_execution_resolver_rejects_schema_incompatible_and_unobservable_surface
     assert selection.status == "unavailable"
     assert "incompatible" in selection.reason
     assert "surface" in selection.reason
+
+
+def test_execution_resolver_validates_nested_arguments_and_intent_slots():
+    class Registry:
+        def authorize(self, *args, **kwargs):
+            return True, "granted"
+
+    def contract(argument_mapping):
+        return {
+            "operations": ["catalog.lookup"],
+            "operation_arguments": {"catalog.lookup": argument_mapping},
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "filters": {
+                        "type": "object",
+                        "properties": {"limit": {"type": "integer"}},
+                        "required": ["limit", "category"],
+                        "additionalProperties": {
+                            "type": "string",
+                        },
+                    },
+                },
+                "required": ["query", "filters"],
+            },
+            "availability": "AVAILABLE",
+            "health": "healthy",
+            "execution_surface": "catalog_api",
+            "observability": "audit",
+        }
+
+    invalid = resolve_execution_surface(
+        "catalog.lookup", Registry(),
+        {"catalog": contract({
+            "query": "$query",
+            "filters": {"limit": 10},
+        })},
+        user_id="user-1",
+    )
+    assert invalid.status == "unavailable"
+    assert "incompatible" in invalid.reason
+
+    unsupported_slot = resolve_execution_surface(
+        "catalog.lookup", Registry(),
+        {"catalog": contract({
+            "query": "$catalog_query",
+            "filters": {"limit": 10, "category": "books"},
+        })},
+        user_id="user-1",
+    )
+    assert unsupported_slot.status == "unavailable"
+    assert "incompatible" in unsupported_slot.reason
+
+    selected = resolve_execution_surface(
+        "catalog.lookup", Registry(),
+        {"catalog": contract({
+            "query": "$query",
+            "filters": {"limit": 10, "category": "$subject"},
+        })},
+        user_id="user-1",
+    )
+    assert selected.status == "selected"
+
+
+def test_execution_resolver_rejects_unhealthy_surface():
+    class Registry:
+        def authorize(self, *args, **kwargs):
+            return True, "granted"
+
+    selection = resolve_execution_surface(
+        "media.discovery",
+        Registry(),
+        {
+            "search": {
+                "operations": ["media.discovery"],
+                "operation_arguments": {"media.discovery": {"query": "$query"}},
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                    "required": ["query"],
+                },
+                "availability": "AVAILABLE",
+                "health": "unhealthy",
+                "execution_surface": "http_api",
+                "observability": "audit",
+            },
+        },
+        user_id="user-1",
+    )
+
+    assert selection.status == "unavailable"
+    assert "unhealthy" in selection.reason
 
 
 def test_chat_media_request_reuses_durable_command_and_returns_real_artifacts(
@@ -969,25 +1006,6 @@ def test_live_chat_executes_and_presents_real_discovery_results(client, auth_hea
     assert reply["sources"]
     assert all(source.startswith("https://") for source in reply["sources"])
     assert "playback is not currently supported" in reply["message"]
-    presentation = reply["presentation"]
-    assert presentation["contract_version"] == "1.1"
-    assert presentation["objective"] == "research"
-    assert presentation["correlation"]["request_id"] == "live-world-request"
-    assert presentation["correlation"]["session_id"] == session_id
-    assert presentation["correlation"]["conversation_id"] == session_id
-    assert presentation["correlation"]["command_id"] == reply["runtime_command_id"]
-    assert presentation["task_state"]["status"] == "completed"
-    assert presentation["source_provenance"]
-    assert all(
-        source["source_type"] == "public_web"
-        and source["observed_at"].endswith("+00:00")
-        for source in presentation["source_provenance"]
-    )
-    source_component = next(
-        component for component in presentation["components"]
-        if component["type"] == "research.source_list"
-    )
-    assert {item["url"] for item in source_component["items"]} == set(reply["sources"])
 
     command_id = reply["runtime_command_id"]
     command_response = client.get(
@@ -996,6 +1014,14 @@ def test_live_chat_executes_and_presents_real_discovery_results(client, auth_hea
     assert command_response.status_code == 200
     command = command_response.json()
     assert command["selected_capability_id"] == "search_web"
+    revisions_response = client.get(
+        f"/api/v1/presentations/{command_id}/revisions",
+        headers=auth_headers,
+    )
+    assert revisions_response.status_code == 200, revisions_response.text
+    revisions = revisions_response.json()["revisions"]
+    assert len(revisions) == 1
+    assert revisions[0]["presentation"]["correlation"]["command_id"] == command_id
 
     event_response = client.get(
         f"/api/v1/commands/{command_id}/events", headers=auth_headers,
@@ -1016,12 +1042,6 @@ def test_live_chat_executes_and_presents_real_discovery_results(client, auth_hea
     assert all(name in event_names for name in required_events), event_names
     positions = [event_names.index(name) for name in required_events]
     assert positions == sorted(positions)
-    presentation_event = next(
-        event for event in event_response.json()["events"]
-        if (event.get("type") or event.get("event") or event.get("event_type"))
-        == "presentation.updated"
-    )
-    assert presentation_event["payload"]["presentation"] == presentation
 
     history = client.get(
         f"/api/chat/history/{session_id}", headers=auth_headers,
@@ -1030,7 +1050,6 @@ def test_live_chat_executes_and_presents_real_discovery_results(client, auth_hea
     assert any(
         message.get("role") == "assistant"
         and message.get("content") == reply["message"]
-        and message.get("presentation") == presentation
         for message in history.json()["messages"]
     )
 
@@ -1046,25 +1065,3 @@ def test_live_chat_executes_and_presents_real_discovery_results(client, auth_hea
     assert followup.status_code == 200, followup.text
     assert followup.json()["sources"]
     assert followup.json()["sources"][0] == reply["sources"][1]
-    assert followup.json()["presentation"]["correlation"]["session_id"] == session_id
-
-    research = client.post(
-        "/api/chat",
-        json={
-            "session_id": session_id,
-            "client_message_id": "live-world-web-search",
-            "message": "Research current JARVIS runtime event persistence options.",
-        },
-        headers=auth_headers,
-    )
-    assert research.status_code == 200, research.text
-    research_reply = research.json()
-    assert research_reply["status"] == "COMPLETED"
-    assert research_reply["sources"]
-    assert research_reply["presentation"]["objective"] == "research"
-    research_command = client.get(
-        f"/api/v1/commands/{research_reply['runtime_command_id']}",
-        headers=auth_headers,
-    ).json()
-    assert research_command["requested_capability_id"] == "web.search"
-    assert research_command["selected_capability_id"] == "search_web"

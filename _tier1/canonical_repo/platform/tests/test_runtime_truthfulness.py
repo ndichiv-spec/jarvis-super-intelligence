@@ -146,16 +146,18 @@ async def test_provider_catalog_requires_verified_inference(
 @pytest.mark.asyncio
 async def test_voice_endpoints_do_not_claim_unavailable_audio_processing(monkeypatch):
     from jarvis_backend.routers import voice
+    from fastapi import HTTPException
 
     monkeypatch.setattr(voice, "_TTS_AVAILABLE", False)
-    speech = await voice.speak(voice.SpeakIn(text="test"))
-    listening = await voice.listen(voice.ListenIn())
+    monkeypatch.setattr(voice, "_openai_audio_key", lambda: None)
+    with pytest.raises(HTTPException) as speech_error:
+        await voice.speak(voice.SpeakIn(text="test"))
+    with pytest.raises(HTTPException) as listen_error:
+        await voice.listen(voice.ListenIn())
     status = await voice.voice_status()
 
-    assert speech["success"] is False
-    assert speech["status"] == "NOT_IMPLEMENTED"
-    assert listening["success"] is False
-    assert listening["status"] == "NOT_IMPLEMENTED"
+    assert speech_error.value.status_code == 503
+    assert listen_error.value.status_code == 501
     assert status["status"] == "DEGRADED"
     assert status["audio_streaming_available"] is False
 

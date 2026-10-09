@@ -165,3 +165,72 @@ test('web renderer rejects map coordinates outside geographic bounds', () => {
   assert.equal(result.kind, 'fallback');
   assert.equal(result.reason, 'Unsupported map coordinate.');
 });
+
+test('web renderer validates and accepts owner-bound generated image references', () => {
+  const imageContract = structuredClone(representativeContract);
+  const imageRef = 'media:generated-fixture';
+  const expiresAt = Math.floor(Date.now() / 1000) + 600;
+  const signature = 'a'.repeat(64);
+  imageContract.environment = 'image';
+  imageContract.objective = 'conversation';
+  imageContract.content_hierarchy = ['summary', 'images'];
+  imageContract.focus = 'images';
+  imageContract.components = [
+    {
+      id: 'summary',
+      type: 'conversation.markdown',
+      text: 'Generated one image.',
+    },
+    {
+      id: 'images',
+      type: 'media.image_gallery',
+      title: 'Generated images',
+      items: [{
+        data_ref: imageRef,
+        media_ref: imageRef,
+        alt: 'A blue fox',
+        provider: 'openai',
+        model: 'dall-e-3',
+        content_type: 'image/png',
+        width: 1024,
+        height: 1024,
+      }],
+    },
+  ];
+  imageContract.interactions = [];
+  imageContract.modalities = ['text', 'image'];
+  imageContract.source_provenance = [{
+    data_ref: imageRef,
+    source_type: 'generated_image',
+    observed_at: new Date().toISOString(),
+  }];
+  imageContract.media_refs = [{
+    id: imageRef,
+    url: `/api/v1/media/${encodeURIComponent(imageRef)}?expires=${expiresAt}&signature=${signature}`,
+    content_type: 'image/png',
+    expires_at: expiresAt,
+  }];
+  imageContract.data_refs = [{ id: imageRef, kind: 'generated_media' }];
+  imageContract.view_state = { focus: 'images', selected_data_ref: null };
+  imageContract.task_state = {
+    status: 'completed',
+    message: 'Generated one image.',
+  };
+  imageContract.renderer_requirements.required_components = [
+    'conversation.markdown',
+    'media.image_gallery',
+  ];
+  imageContract.renderer_requirements.required_modalities = ['text', 'image'];
+  imageContract.fallback.text = 'Generated one image.';
+
+  assert.equal(interpretPresentation(imageContract).kind, 'contract');
+  const textOnly = {
+    ...WEB_RENDERER_CAPABILITIES,
+    components: ['conversation.markdown'],
+    modalities: ['text'],
+  };
+  assert.equal(interpretPresentation(imageContract, textOnly).kind, 'fallback');
+
+  imageContract.media_refs[0].url = 'https://attacker.invalid/image.png';
+  assert.equal(interpretPresentation(imageContract).kind, 'fallback');
+});

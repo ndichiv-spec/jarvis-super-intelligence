@@ -16,6 +16,7 @@ SUPPORTED_COMPONENTS = {
     "research.source_list",
     "workspace.match_list",
     "geospatial.point_map",
+    "media.image_gallery",
 }
 MAX_COMPONENTS = 8
 MAX_ITEMS = 20
@@ -91,6 +92,118 @@ def build_conversation_presentation(
             "fallback_components": ["conversation.markdown"],
         },
     }, authorized_data_refs=set())
+
+
+def build_image_presentation(
+    images: list[dict[str, Any]],
+    *,
+    request_id: str | None = None,
+    session_id: str | None = None,
+    conversation_id: str | None = None,
+    command_id: str | None = None,
+    execution_id: str | None = None,
+) -> dict[str, Any]:
+    """Build an image contract from authorized, expiring media references."""
+    safe_images = [image for image in images if isinstance(image, dict)][:MAX_ITEMS]
+    if not safe_images:
+        raise PresentationContractError("image presentation requires stored media")
+    refs: list[dict[str, str]] = []
+    media_refs: list[dict[str, Any]] = []
+    provenance: list[dict[str, str]] = []
+    items: list[dict[str, str]] = []
+    observed_at = datetime.now(timezone.utc).isoformat()
+    for image in safe_images:
+        media_id = image.get("media_ref")
+        media_url = image.get("url")
+        content_type = image.get("content_type")
+        expires_at = image.get("expires_at")
+        if (
+            not isinstance(media_id, str)
+            or not _REFERENCE_ID.fullmatch(media_id)
+            or not _safe_media_reference_url(media_url, media_id, expires_at)
+            or content_type not in {"image/png", "image/jpeg", "image/webp"}
+            or type(expires_at) is not int
+        ):
+            raise PresentationContractError("image output has an invalid media reference")
+        refs.append({"id": media_id, "kind": "generated_media"})
+        media_refs.append({
+            "id": media_id,
+            "url": media_url,
+            "content_type": content_type,
+            "expires_at": expires_at,
+        })
+        provenance.append({
+            "data_ref": media_id,
+            "source_type": "generated_image",
+            "observed_at": observed_at,
+        })
+        items.append({
+            "data_ref": media_id,
+            "media_ref": media_id,
+            "alt": _safe_text(str(image.get("prompt") or "Generated image"), 300),
+            "provider": _safe_text(str(image.get("provider") or ""), 100),
+            "model": _safe_text(str(image.get("model") or ""), 100),
+            "content_type": content_type,
+            "width": image.get("width"),
+            "height": image.get("height"),
+        })
+    response = f"Generated {len(items)} image(s) using the configured image provider."
+    correlation_request_id = request_id or str(uuid.uuid4())
+    return validate_presentation_contract({
+        "contract_version": CONTRACT_VERSION,
+        "presentation_id": str(uuid.uuid4()),
+        "objective": "conversation",
+        "environment": "image",
+        "content_hierarchy": ["response", "images"],
+        "focus": "images",
+        "components": [
+            {"id": "response", "type": "conversation.markdown", "text": response},
+            {
+                "id": "images",
+                "type": "media.image_gallery",
+                "title": "Generated images",
+                "items": items,
+            },
+        ],
+        "assistant_presence": {"mode": "inline", "state": "available"},
+        "interactions": [],
+        "visualizations": [],
+        "modalities": ["text", "image"],
+        "accessibility": {
+            "reading_order": ["response", "images"],
+            "announce_updates": True,
+            "non_color_status": True,
+        },
+        "responsive": {"reflow": "single_column", "minimum_width": "content"},
+        "transitions": {
+            "on_unsupported": "conversation_fallback",
+            "on_error": "retain_observed_text",
+        },
+        "errors": [],
+        "task_state": {"status": "completed", "message": response},
+        "source_provenance": provenance,
+        "media_refs": media_refs,
+        "user_preferences": None,
+        "view_state": {"focus": "images", "selected_data_ref": None},
+        "fallback": {"type": "conversation.markdown", "text": response},
+        "correlation": {
+            "request_id": correlation_request_id,
+            "session_id": session_id,
+            "conversation_id": conversation_id or session_id,
+            "command_id": command_id,
+            "execution_id": execution_id,
+        },
+        "data_refs": refs,
+        "renderer_requirements": {
+            "contract_version": CONTRACT_VERSION,
+            "supported_contract_versions": sorted(SUPPORTED_CONTRACT_VERSIONS),
+            "required_components": [
+                "conversation.markdown", "media.image_gallery",
+            ],
+            "required_modalities": ["text", "image"],
+            "fallback_components": ["conversation.markdown"],
+        },
+    }, authorized_data_refs={item["id"] for item in refs})
 
 
 def build_execution_presentation(
@@ -443,7 +556,7 @@ def validate_presentation_contract(
                         or _contains_secret(item.get("text", ""))
                     ):
                         raise PresentationContractError("invalid workspace result reference")
-                else:
+                elif component_type == "geospatial.point_map":
                     _check_keys(item, {
                         "data_ref", "latitude", "longitude", "label",
                         "units", "location_type",
@@ -465,6 +578,31 @@ def validate_presentation_contract(
                         raise PresentationContractError(
                             "invalid user-provided map coordinate"
                         )
+                else:
+                    _check_keys(item, {
+                        "data_ref", "media_ref", "alt", "provider", "model",
+                        "content_type", "width", "height",
+                    })
+                    if (
+                        not isinstance(item.get("media_ref"), str)
+                        or not _REFERENCE_ID.fullmatch(item["media_ref"])
+                        or item.get("data_ref") != item.get("media_ref")
+                        or any(
+                            not isinstance(item.get(key), str)
+                            or len(item[key]) > limit
+                            or _contains_secret(item[key])
+                            for key, limit in (
+                                ("alt", 300), ("provider", 100), ("model", 100),
+                            )
+                        )
+                        or item.get("content_type")
+                        not in {"image/png", "image/jpeg", "image/webp"}
+                        or type(item.get("width")) is not int
+                        or not 1 <= item["width"] <= 4096
+                        or type(item.get("height")) is not int
+                        or not 1 <= item["height"] <= 4096
+                    ):
+                        raise PresentationContractError("invalid generated image reference")
                 reference = item.get("data_ref")
                 if not isinstance(reference, str) or not _REFERENCE_ID.fullmatch(reference):
                     raise PresentationContractError("invalid presentation data reference")
@@ -489,7 +627,7 @@ def validate_presentation_contract(
             or reference["id"] not in allowed_refs
             or reference.get("kind") not in {
                 "public_source", "workspace_result",
-                "user_provided_coordinates",
+                "user_provided_coordinates", "generated_media",
             }
         ):
             raise PresentationContractError("unauthorized presentation data reference")
@@ -558,7 +696,7 @@ def validate_presentation_contract(
     if (
         not isinstance(modalities, list)
         or not modalities
-        or any(item not in {"text", "links", "map"} for item in modalities)
+        or any(item not in {"text", "links", "map", "image"} for item in modalities)
     ):
         raise PresentationContractError("unsupported presentation modality")
     if (
@@ -636,7 +774,7 @@ def validate_presentation_contract(
             and (
                 not isinstance(requirements.get("required_modalities"), list)
                 or not requirements["required_modalities"]
-                or any(value not in {"text", "links", "map"}
+                or any(value not in {"text", "links", "map", "image"}
                        for value in requirements["required_modalities"])
             )
         )
@@ -683,7 +821,7 @@ def _validate_v1_1_fields(
             or item.get("data_ref") in provenance_refs
             or item.get("source_type") not in {
                 "public_web", "authorized_workspace",
-                "user_provided_coordinates",
+                "user_provided_coordinates", "generated_image",
             }
             or (
                 item["source_type"] == "public_web"
@@ -697,6 +835,10 @@ def _validate_v1_1_fields(
                 item["source_type"] == "user_provided_coordinates"
                 and ref_kinds.get(item["data_ref"])
                 != "user_provided_coordinates"
+            )
+            or (
+                item["source_type"] == "generated_image"
+                and ref_kinds.get(item["data_ref"]) != "generated_media"
             )
             or not isinstance(item.get("observed_at"), str)
         ):
@@ -719,10 +861,38 @@ def _validate_v1_1_fields(
             "every referenced result must retain source provenance"
         )
 
-    if contract.get("media_refs") != []:
-        raise PresentationContractError(
-            "media references require an authorized media service"
-        )
+    media_refs = contract.get("media_refs")
+    if not isinstance(media_refs, list) or len(media_refs) > MAX_ITEMS:
+        raise PresentationContractError("invalid media reference list")
+    media_ids: set[str] = set()
+    for media_ref in media_refs:
+        if (
+            not isinstance(media_ref, dict)
+            or set(media_ref) != {"id", "url", "content_type", "expires_at"}
+            or not isinstance(media_ref.get("id"), str)
+            or media_ref["id"] in media_ids
+            or ref_kinds.get(media_ref["id"]) != "generated_media"
+            or not _safe_media_reference_url(
+                media_ref.get("url"),
+                media_ref["id"],
+                media_ref.get("expires_at"),
+            )
+            or media_ref.get("content_type")
+            not in {"image/png", "image/jpeg", "image/webp"}
+            or type(media_ref.get("expires_at")) is not int
+            or media_ref["expires_at"] <= 0
+        ):
+            raise PresentationContractError(
+                "invalid or unauthorized media reference; media service authorization is required"
+            )
+        media_ids.add(media_ref["id"])
+    generated_refs = {
+        reference_id
+        for reference_id, kind in ref_kinds.items()
+        if kind == "generated_media"
+    }
+    if generated_refs != media_ids:
+        raise PresentationContractError("generated media provenance is incomplete")
     if contract.get("user_preferences") is not None:
         raise PresentationContractError(
             "user presentation preferences are not configured"
@@ -798,6 +968,35 @@ def _contains_secret(value: str) -> bool:
 
     scrubbed, redacted = scrub_secrets(value)
     return redacted or scrubbed != value
+
+
+def _safe_media_reference_url(
+    value: Any,
+    media_id: str,
+    expires_at: Any = None,
+) -> bool:
+    """Allow only signed, same-origin links produced by the media endpoint."""
+    if not isinstance(value, str) or len(value) > 1024:
+        return False
+    try:
+        parsed = urlsplit(value)
+        query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        expires = query.get("expires")
+        signature = query.get("signature")
+        return (
+            not parsed.scheme
+            and not parsed.netloc
+            and parsed.path == f"/api/v1/media/{media_id}"
+            and not parsed.fragment
+            and set(query) == {"expires", "signature"}
+            and expires is not None
+            and expires.isdecimal()
+            and (expires_at is None or int(expires) == expires_at)
+            and isinstance(signature, str)
+            and re.fullmatch(r"[a-f0-9]{64}", signature) is not None
+        )
+    except (ValueError, TypeError):
+        return False
 
 
 def _public_https_url(value: Any) -> str | None:
@@ -885,6 +1084,7 @@ def adapt_presentation_for_endpoint(
         "research.source_list": "presentation.links",
         "workspace.match_list": "presentation.text",
         "geospatial.point_map": "presentation.map",
+        "media.image_gallery": "presentation.image",
     }
     required_components = {
         component["type"] for component in validated["components"]

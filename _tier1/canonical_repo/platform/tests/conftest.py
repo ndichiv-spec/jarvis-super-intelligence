@@ -143,7 +143,7 @@ def cleanup_test_db():
     """
     test_db_paths = (
         Path("./test_jarvis.db"),
-        Path(__file__).resolve().parent / "_test_jarvis.db",
+        _TEST_DB_PATH,
     )
     for db_path in test_db_paths:
         try:
@@ -212,7 +212,10 @@ for _path in (_ROOT, _ROOT.parent):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 
-_TEST_DB_PATH = _ROOT / "tests" / "_test_jarvis.db"
+_TEST_DB_PATH = Path(os.environ.get(
+    "JARVIS_TEST_DB_PATH",
+    str(_ROOT / "tests" / "_test_jarvis.db"),
+)).resolve()
 
 
 def _remove_test_db() -> None:

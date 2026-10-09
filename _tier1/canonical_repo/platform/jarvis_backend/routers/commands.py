@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import hashlib
+import json
 import os
 import time
 import uuid
@@ -70,6 +71,8 @@ class CommandCreate(BaseModel):
     goal: str = Field(min_length=1, max_length=12_000)
     conversation_id: Optional[str] = Field(default=None, max_length=128)
     request_id: Optional[str] = Field(default=None, max_length=128)
+    endpoint_id: Optional[str] = Field(default=None, max_length=64)
+    acceptable_cost_models: Optional[list[str]] = Field(default=None, max_length=32)
     autonomy: str = Field(default="SUPERVISED", pattern="^(ASSISTED|SUPERVISED)$")
 
 
@@ -87,6 +90,37 @@ def _owner_id(user: dict[str, Any]) -> str:
 
 def _effective_autonomy(command: dict[str, Any]) -> str:
     return str(command.get("execution_autonomy") or command.get("autonomy") or "SUPERVISED")
+
+
+def _authenticated_services(user_id: str) -> set[str]:
+    """Return service dependencies backed by this owner's verified OAuth state."""
+    from ..connectors.oauth import connection_metadata
+
+    oauth_services = {
+        "github_api": "github",
+        "gmail_api": "gmail",
+        "outlook_api": "outlook",
+    }
+    authenticated = set()
+    for service, connector in oauth_services.items():
+        metadata = connection_metadata(connector, user_id)
+        if metadata.get("connected") is True and metadata.get("status") == "Connected":
+            authenticated.add(service)
+    return authenticated
+
+
+def _connected_endpoint_capabilities(command: dict[str, Any]) -> set[str]:
+    endpoint_id = command.get("endpoint_id")
+    if not endpoint_id:
+        return set()
+    from ..endpoint_registry import EndpointRegistry
+
+    endpoint = EndpointRegistry().get_endpoint(
+        str(endpoint_id), str(command.get("user_id") or ""),
+    )
+    if endpoint["status"] != "connected":
+        return set()
+    return set(endpoint.get("validated_capabilities") or ())
 
 
 def _owned_command(command_id: str, user: dict[str, Any]) -> dict[str, Any]:
@@ -573,7 +607,10 @@ async def _execute_command(command_id: str, user: dict[str, Any], autonomy: str)
             resolve_execution_surface,
             resolve_world_intent,
         )
-        from ..presentation_contract import build_execution_presentation
+        from ..presentation_contract import (
+            build_execution_presentation,
+            build_image_presentation,
+        )
 
         command = _commands().get(command_id)
         if command is None:
@@ -613,6 +650,13 @@ async def _execute_command(command_id: str, user: dict[str, Any], autonomy: str)
                 user_id=user_id,
                 permissions=permissions,
                 principal=user,
+                endpoint_capabilities=_connected_endpoint_capabilities(command),
+                authenticated_services=_authenticated_services(user_id),
+                acceptable_cost_models=(
+                    set(command["acceptable_cost_models"])
+                    if command.get("acceptable_cost_models") is not None
+                    else None
+                ),
             )
             command = _commands()[command_id]
             command["capability_id"] = selection.capability_id
@@ -752,7 +796,42 @@ async def _execute_command(command_id: str, user: dict[str, Any], autonomy: str)
                     for artifact in item.get("artifacts", [])
                     if isinstance(artifact, dict)
                 ]
-                if search_evidence:
+                if world_intent.operation == "image.generate" and search_evidence:
+                    try:
+                        image_payload = json.loads(
+                            str(search_evidence[0].get("result") or "")
+                        )
+                    except (TypeError, ValueError):
+                        image_payload = {}
+                    stored_refs = image_payload.get("media_refs", [])
+                    from ..media_storage import issue_generated_image_reference
+
+                    images = (
+                        [
+                            issue_generated_image_reference(
+                                asset_id=item["media_ref"],
+                                owner_id=user_id,
+                            )
+                            for item in stored_refs
+                            if isinstance(item, dict)
+                            and isinstance(item.get("media_ref"), str)
+                        ]
+                        if isinstance(stored_refs, list)
+                        else []
+                    )
+                    images = [image for image in images if image is not None]
+                    if images and len(images) == len(stored_refs):
+                        presentation_message = (
+                            f"Generated {len(images)} image(s) using the configured "
+                            "image provider."
+                        )
+                    else:
+                        presentation_message = (
+                            "The image provider returned output, but its owner-bound "
+                            "media reference could not be revalidated. No image is presented."
+                        )
+                        search_evidence = []
+                elif search_evidence:
                     presentation_message = (
                         f"Observed {len(artifacts)} public source(s) for "
                         f"{world_intent.operation}."
@@ -770,19 +849,84 @@ async def _execute_command(command_id: str, user: dict[str, Any], autonomy: str)
                         f"The selected execution surface did not return a successful "
                         f"result for {world_intent.operation}. No result is claimed."
                     )
-                presentation = build_execution_presentation(
-                    operation=world_intent.operation,
-                    success=bool(search_evidence),
-                    message=presentation_message,
-                    artifacts=artifacts,
-                    tool_result=str(search_evidence[0].get("result") or "")
-                    if search_evidence else "",
-                    request_id=world_command.get("request_id"),
-                    session_id=world_command.get("conversation_id"),
+                if (
+                    world_intent.operation == "image.generate"
+                    and search_evidence
+                    and images
+                ):
+                    presentation = build_image_presentation(
+                        images,
+                        request_id=world_command.get("request_id"),
+                        session_id=world_command.get("conversation_id"),
+                        conversation_id=world_command.get("conversation_id"),
+                        command_id=command_id,
+                        execution_id=execution_id,
+                    )
+                else:
+                    presentation = build_execution_presentation(
+                        operation=world_intent.operation,
+                        success=bool(search_evidence),
+                        message=presentation_message,
+                        artifacts=artifacts,
+                        tool_result=str(search_evidence[0].get("result") or "")
+                        if search_evidence else "",
+                        request_id=world_command.get("request_id"),
+                        session_id=world_command.get("conversation_id"),
+                        conversation_id=world_command.get("conversation_id"),
+                        command_id=command_id,
+                        execution_id=execution_id,
+                    )
+                compatibility = {
+                    "decision": "canonical_contract",
+                    "endpoint_id": world_command.get("endpoint_id"),
+                }
+                fallback_reason = None
+                presentation_endpoint_id = world_command.get("endpoint_id")
+                if presentation_endpoint_id:
+                    from ..endpoint_registry import EndpointRegistry
+                    from ..presentation_contract import adapt_presentation_for_endpoint
+
+                    try:
+                        endpoint = EndpointRegistry().get_endpoint(
+                            str(presentation_endpoint_id), user_id,
+                        )
+                    except KeyError:
+                        endpoint = None
+                    if endpoint is not None and endpoint["status"] == "connected":
+                        authorized_data_refs = {
+                            item["id"]
+                            for item in presentation.get("data_refs", [])
+                            if isinstance(item, dict)
+                            and isinstance(item.get("id"), str)
+                        }
+                        presentation, compatibility = adapt_presentation_for_endpoint(
+                            presentation,
+                            endpoint,
+                            authorized_data_refs=authorized_data_refs,
+                        )
+                        fallback_reason = compatibility.get("fallback_reason")
+                    else:
+                        fallback_reason = "selected_endpoint_unavailable"
+                        compatibility = {
+                            "decision": "canonical_text_fallback",
+                            "endpoint_id": presentation_endpoint_id,
+                            "fallback_reason": fallback_reason,
+                        }
+                persisted_revision = jarvis_runtime.create_presentation_revision(
+                    task_id=command_id,
+                    owner_id=user_id,
+                    request_id=str(world_command.get("request_id") or command_id),
                     conversation_id=world_command.get("conversation_id"),
                     command_id=command_id,
                     execution_id=execution_id,
+                    endpoint_id=presentation_endpoint_id,
+                    presentation=presentation,
+                    expected_revision=0,
+                    idempotency_key=f"{command_id}:presentation:initial",
+                    compatibility=compatibility,
+                    fallback_reason=fallback_reason,
                 )
+                presentation = persisted_revision["presentation"]
                 if search_evidence:
                     _append_event(
                         command_id,
@@ -1012,6 +1156,20 @@ async def _create_command(body: CommandCreate, user: dict[str, Any]) -> dict[str
     if not goal:
         raise HTTPException(status_code=400, detail="goal must not be blank")
     owner_id = _owner_id(user)
+    if body.endpoint_id:
+        from ..endpoint_registry import EndpointRegistry
+
+        try:
+            endpoint = EndpointRegistry().get_endpoint(body.endpoint_id, owner_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Endpoint not found") from exc
+        except PermissionError as exc:
+            raise HTTPException(status_code=404, detail="Endpoint not found") from exc
+        if endpoint["status"] != "connected":
+            raise HTTPException(
+                status_code=409,
+                detail="The selected endpoint must be connected before command execution.",
+            )
     idempotency_key = (
         hashlib.sha256(f"{owner_id}:{body.request_id}".encode("utf-8")).hexdigest()
         if body.request_id else None
@@ -1049,7 +1207,9 @@ async def _create_command(body: CommandCreate, user: dict[str, Any]) -> dict[str
     command = {
         "command_id": command_id,
         "conversation_id": body.conversation_id,
-        "request_id": body.request_id,
+        "request_id": body.request_id or command_id,
+        "endpoint_id": body.endpoint_id,
+        "acceptable_cost_models": body.acceptable_cost_models,
         "user_id": _owner_id(user),
         "goal": goal,
         "execution_kind": "world_resolver" if world_request else "brain",

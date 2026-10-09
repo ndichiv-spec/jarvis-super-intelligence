@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { getVoiceEngine, destroyVoiceEngine, type VoiceEngineState } from './voiceEngine';
-import type { AudioFrame, TTSChunk } from './types';
+import { getVoiceEngine, destroyVoiceEngine } from './voiceEngine';
+import type { VoiceEngineState } from './types';
 
 interface RealtimeVoiceState {
   voiceEngine: ReturnType<typeof getVoiceEngine> | null;
@@ -58,7 +58,7 @@ export const useRealtimeVoiceStore = create<RealtimeVoiceState>((set, get) => ({
       set({ voiceState: s, listening: s === 'listening', speaking: s === 'speaking', thinking: s === 'thinking', processing: s === 'processing', error: s === 'error' ? 'Engine error' : null });
     });
     engine.onTranscript((t) => set({ transcript: t }));
-    engine.onStreamData((d) => set({ barData: new Float32Array(48) }));
+    engine.onStreamData(() => set({ barData: new Float32Array(48) }));
     set({ voiceEngine: engine, micAvailable: true, speakersAvailable: true });
   },
 
@@ -87,5 +87,5 @@ export const useRealtimeVoiceStore = create<RealtimeVoiceState>((set, get) => ({
   setSpeakersAvailable: (v) => set({ speakersAvailable: v }),
   setBarData: (d) => set({ barData: d }),
   setProfile: (n) => set({ profileName: n }),
-  setAudioFrames: (_c) => {},
+  setAudioFrames: () => {},
 }));

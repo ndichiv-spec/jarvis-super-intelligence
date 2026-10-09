@@ -1,4 +1,6 @@
 import json
+import time
+import uuid
 from pathlib import Path
 
 import pytest
@@ -8,6 +10,7 @@ from jarvis_backend.presentation_contract import (
     PresentationContractError,
     build_conversation_presentation,
     build_execution_presentation,
+    build_image_presentation,
     render_presentation_text,
     validate_presentation_contract,
 )
@@ -108,6 +111,52 @@ def test_media_reference_is_rejected_without_authorized_media_service(
             representative_contract,
             authorized_data_refs={"execution:fixture-execution:artifact:0"},
         )
+
+
+def test_image_presentation_requires_signed_local_media_and_preserves_correlation():
+    asset_id = str(uuid.uuid4())
+    expires_at = int(time.time()) + 600
+    image = {
+        "media_ref": asset_id,
+        "url": (
+            f"/api/v1/media/{asset_id}?expires={expires_at}&"
+            f"signature={'a' * 64}"
+        ),
+        "expires_at": expires_at,
+        "content_type": "image/png",
+        "prompt": "A blue fox",
+        "provider": "openai",
+        "model": "dall-e-3",
+        "width": 1024,
+        "height": 1024,
+    }
+
+    contract = build_image_presentation(
+        [image],
+        request_id="request-1",
+        session_id="conversation-1",
+        command_id="command-1",
+        execution_id="execution-1",
+    )
+
+    assert contract["contract_version"] == "1.1"
+    assert contract["data_refs"] == [{
+        "id": asset_id,
+        "kind": "generated_media",
+    }]
+    assert contract["correlation"] == {
+        "request_id": "request-1",
+        "session_id": "conversation-1",
+        "conversation_id": "conversation-1",
+        "command_id": "command-1",
+        "execution_id": "execution-1",
+    }
+
+    with pytest.raises(PresentationContractError, match="invalid media reference"):
+        build_image_presentation([{
+            **image,
+            "url": "https://attacker.invalid/image.png",
+        }])
 
 
 def test_interaction_contract_cannot_grant_execution_or_widen_permissions(

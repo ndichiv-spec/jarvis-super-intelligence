@@ -1,30 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { AlertCircle, CheckCircle2, Download, ExternalLink, Image as ImageIcon, Loader2, Sparkles, Wand2 } from "lucide-react";
-import { jarvisAPI, type ProviderFeatureStatus } from "@/lib/api";
-
-interface GeneratedImage {
-  url?: string;
-  base64?: string;
-  prompt: string;
-  model: string;
-  width: number;
-  height: number;
-}
-
-interface ImageGenerationResponse {
-  success?: boolean;
-  images?: GeneratedImage[];
-  count?: number;
-  detail?: string;
-}
+import { AlertCircle, CheckCircle2, ExternalLink, Image as ImageIcon, Loader2, Sparkles, Wand2 } from "lucide-react";
+import {
+  jarvisAPI,
+  type GeneratedImage,
+  type ProviderFeatureStatus,
+} from "@/lib/api";
 
 type ProviderOption = {
   value: string;
@@ -71,7 +60,7 @@ export default function ImageGenerationPage() {
 
   useEffect(() => {
     let active = true;
-    void jarvisAPI.getProviderSettings()
+    void jarvisAPI.getImageProviderStatus()
       .then((response) => {
         if (!active) return;
         setProviderStatus(response.providers);
@@ -109,33 +98,24 @@ export default function ImageGenerationPage() {
     setGenerationError("");
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/v1/image/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt,
-          provider,
-          size,
-          quality,
-          style,
-          negative_prompt: negativePrompt || null,
-          num_images: numImages,
-        }),
+      const data = await jarvisAPI.generateImage({
+        prompt,
+        provider,
+        size,
+        quality,
+        style,
+        negative_prompt: negativePrompt || null,
+        num_images: numImages,
       });
 
-      const data = await response.json() as ImageGenerationResponse;
-      if (!response.ok) {
-        throw new Error(data.detail || `Image generation failed (HTTP ${response.status})`);
-      }
-
       const generatedImages = Array.isArray(data.images)
-        ? data.images.filter((image) => image && (image.base64 || image.url))
+        ? data.images.filter((image) => image && image.url)
         : [];
       if (data.success && generatedImages.length > 0) {
         setImages(generatedImages);
-        toast.success(`Generated ${data.count ?? generatedImages.length} image(s)`);
+        toast.success(`Generated ${data.count} image(s)`);
       } else {
-        const message = data.detail || "The provider returned no generated images.";
+        const message = "The provider returned no generated images.";
         setGenerationError(message);
         toast.error(message);
       }
@@ -172,16 +152,9 @@ export default function ImageGenerationPage() {
   };
 
   const downloadImage = (image: GeneratedImage) => {
-    if (image.base64) {
-      const link = document.createElement("a");
-      link.href = `data:image/png;base64,${image.base64}`;
-      link.download = `jarvis-image-${crypto.randomUUID()}.png`;
-      link.click();
-      return;
-    }
-
     if (image.url) {
-      window.open(image.url, "_blank", "noopener,noreferrer");
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
+      window.open(`${apiBase}${image.url}`, "_blank", "noopener,noreferrer");
     }
   };
 
@@ -262,6 +235,11 @@ export default function ImageGenerationPage() {
                 </li>
               ))}
             </ul>
+            {providerStatus[provider]?.availability_reason && (
+              <p role="status" className="text-xs leading-relaxed text-amber-100">
+                {providerStatus[provider].availability_reason}
+              </p>
+            )}
 
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-200">Output size</label>
@@ -392,9 +370,12 @@ export default function ImageGenerationPage() {
                 <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                   {images.map((image, index) => (
                     <article key={`${image.model}-${index}`} className="overflow-hidden rounded-lg border border-white/[0.08] bg-black/20">
-                      <img
-                        src={image.base64 ? `data:image/png;base64,${image.base64}` : image.url}
+                      <Image
+                        src={`${process.env.NEXT_PUBLIC_API_URL || ""}${image.url}`}
                         alt={image.prompt || `Generated image ${index + 1}`}
+                        width={image.width}
+                        height={image.height}
+                        unoptimized
                         loading="lazy"
                         decoding="async"
                         className="max-h-[560px] w-full bg-black/30 object-contain"
@@ -405,9 +386,8 @@ export default function ImageGenerationPage() {
                           <span className="text-xs text-slate-400">{image.width} × {image.height}</span>
                         </div>
                         <Button size="sm" variant="outline" onClick={() => downloadImage(image)}>
-                          {image.base64
-                            ? <><Download aria-hidden="true" className="mr-2 h-4 w-4" /> Download</>
-                            : <><ExternalLink aria-hidden="true" className="mr-2 h-4 w-4" /> Open image</>}
+                          <ExternalLink aria-hidden="true" className="mr-2 h-4 w-4" />
+                          Open image
                         </Button>
                       </div>
                     </article>

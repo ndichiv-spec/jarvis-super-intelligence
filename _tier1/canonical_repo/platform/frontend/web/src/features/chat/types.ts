@@ -130,7 +130,7 @@ export interface ToolDispatchResult {
 }
 
 export interface ChatStreamChunk {
-  type: 'meta' | 'chunk' | 'done' | 'error' | 'typing' | 'complete';
+  type: 'meta' | 'chunk' | 'done' | 'error' | 'typing' | 'complete' | 'status';
   session_id?: string;
   text?: string;
   content?: string;
@@ -213,6 +213,21 @@ export type SemanticPresentationComponent =
         };
         location_type: 'user_provided';
       }>;
+    }
+  | {
+      id: string;
+      type: 'media.image_gallery';
+      title: string;
+      items: Array<{
+        data_ref: string;
+        media_ref: string;
+        alt: string;
+        provider: string;
+        model: string;
+        content_type: 'image/png' | 'image/jpeg' | 'image/webp';
+        width: number;
+        height: number;
+      }>;
     };
 
 /** JSON semantic contract; deliberately contains no framework or executable UI values. */
@@ -233,7 +248,7 @@ export interface SemanticPresentationContract {
     user_gesture_required: true;
   }>;
   visualizations: [];
-  modalities: Array<'text' | 'links' | 'map'>;
+  modalities: Array<'text' | 'links' | 'map' | 'image'>;
   accessibility: {
     reading_order: string[];
     announce_updates: boolean;
@@ -251,10 +266,19 @@ export interface SemanticPresentationContract {
   };
   source_provenance?: Array<{
     data_ref: string;
-    source_type: 'public_web' | 'authorized_workspace' | 'user_provided_coordinates';
+    source_type:
+      | 'public_web'
+      | 'authorized_workspace'
+      | 'user_provided_coordinates'
+      | 'generated_image';
     observed_at: string;
   }>;
-  media_refs?: [];
+  media_refs?: Array<{
+    id: string;
+    url: string;
+    content_type: 'image/png' | 'image/jpeg' | 'image/webp';
+    expires_at: number;
+  }>;
   user_preferences?: null;
   view_state?: {
     focus: string;
@@ -270,13 +294,17 @@ export interface SemanticPresentationContract {
   };
   data_refs: Array<{
     id: string;
-    kind: 'public_source' | 'workspace_result' | 'user_provided_coordinates';
+    kind:
+      | 'public_source'
+      | 'workspace_result'
+      | 'user_provided_coordinates'
+      | 'generated_media';
   }>;
   renderer_requirements: {
     contract_version: '1.0' | '1.1';
     supported_contract_versions?: ['1.0', '1.1'];
     required_components: string[];
-    required_modalities?: Array<'text' | 'links' | 'map'>;
+    required_modalities?: Array<'text' | 'links' | 'map' | 'image'>;
     fallback_components: ['conversation.markdown'];
   };
 }

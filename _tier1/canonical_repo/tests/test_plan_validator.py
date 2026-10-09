@@ -6,6 +6,9 @@ flags are the genuine, environment-honest values.
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import pytest
 
 from jarvis_brain.contract import (
@@ -14,6 +17,10 @@ from jarvis_brain.contract import (
 )
 from jarvis_brain.plan_validator import PlanValidator
 from research_engine.capability_tools import build_capability_registry
+
+PLATFORM_ROOT = Path(__file__).resolve().parents[1] / "platform"
+if str(PLATFORM_ROOT) not in sys.path:
+    sys.path.insert(0, str(PLATFORM_ROOT))
 
 pytestmark = pytest.mark.brain
 
@@ -44,6 +51,9 @@ def _out(cap, cond="evidence_sufficient"):
 
 @pytest.fixture(scope="module")
 def validator():
+    from jarvis_runtime import bootstrap_runtime
+
+    bootstrap_runtime()
     return PlanValidator(build_capability_registry())
 
 
@@ -66,6 +76,25 @@ def test_not_configured_capability_blocked(validator):
     res = validator.validate(_out("github.inspect").to_dict(), user_id="alice")
     assert res.decision == PlanDecision.PLAN_BLOCKED
     assert "github.inspect" in res.denied_capabilities
+
+
+def test_degraded_capability_may_be_attempted_and_verified(validator, monkeypatch):
+    monkeypatch.setattr(
+        validator,
+        "_contracts",
+        lambda: {
+            "static_search": {
+                "availability": "DEGRADED",
+                "supports_offline": True,
+                "required_permissions": [],
+            },
+        },
+    )
+
+    result = validator.validate(_out("static_search").to_dict(), user_id="alice")
+
+    assert result.decision == PlanDecision.ACCEPTED
+    assert result.authorized_capabilities == ["static_search"]
 
 
 # ---- Stage 3: input/output compatibility -----------------------------------

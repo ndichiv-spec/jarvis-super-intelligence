@@ -186,6 +186,14 @@ class ChatService:
         previous = runtime.list_presentation_revisions(
             task_id, owner_id=user_id,
         )
+        if (
+            previous
+            and previous[-1].get("presentation", {}).get("presentation_id")
+            == presentation.get("presentation_id")
+        ):
+            assistant_message["canonical_task_id"] = task_id
+            assistant_message["presentation_revision_id"] = previous[-1]["revision_id"]
+            return
         revision = runtime.create_presentation_revision(
             task_id=task_id,
             owner_id=user_id,
@@ -641,6 +649,7 @@ class ChatService:
                     "status": "running",
                 }],
                 "provider": "world_resolver",
+                "status": "RUNNING",
                 "latency_ms": int((time.monotonic() - started) * 1000),
                 "runtime_command_id": command_id,
             }
@@ -688,6 +697,7 @@ class ChatService:
             "message": message,
             "sources": sources,
             "presentation": presentation,
+            "status": "COMPLETED" if tool_status == "completed" else "FAILED",
             "tool_calls": [{
                 "name": current.get("selected_capability_id") or intent.operation,
                 "operation": intent.operation,
@@ -1004,7 +1014,7 @@ class ChatService:
                 )
             assistant_msg.update({
                 "content": result["message"],
-                "status": COMPLETED,
+                "status": result.get("status", COMPLETED),
                 "model": result.get("model"),
                 "revision": result.get("revision"),
                 "backend": result.get("backend"),
@@ -1146,7 +1156,7 @@ class ChatService:
                     )
                 assistant_msg.update({
                     "content": full_text,
-                    "status": COMPLETED,
+                    "status": world_result.get("status", COMPLETED),
                     "provider": world_result.get("provider"),
                     "latency_ms": world_result.get("latency_ms"),
                     "sources": world_result.get("sources"),
@@ -1168,7 +1178,7 @@ class ChatService:
                     "type": "complete",
                     "session_id": session_id,
                     "content": full_text,
-                    "status": COMPLETED,
+                    "status": world_result.get("status", COMPLETED),
                     "message_id": assistant_id,
                     "sources": world_result.get("sources"),
                     "tool_calls": world_result.get("tool_calls"),

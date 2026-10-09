@@ -4,12 +4,13 @@ const SUPPORTED_COMPONENTS = new Set([
   'research.source_list',
   'workspace.match_list',
   'geospatial.point_map',
+  'media.image_gallery',
 ]);
 
 export const WEB_RENDERER_CAPABILITIES = Object.freeze({
   contract_versions: ['1.0', '1.1'],
   components: [...SUPPORTED_COMPONENTS],
-  modalities: ['text', 'links', 'map'],
+  modalities: ['text', 'links', 'map', 'image'],
 });
 
 export function interpretPresentation(
@@ -28,7 +29,7 @@ export function interpretPresentation(
   }
   const version = value.contract_version;
   if (
-    value.environment !== 'conversation'
+    !['conversation', 'image'].includes(value.environment)
     || !Array.isArray(value.components)
     || !Array.isArray(value.content_hierarchy)
   ) return fallback === null ? null : {
@@ -98,6 +99,7 @@ export function interpretPresentation(
         'public_source',
         'workspace_result',
         'user_provided_coordinates',
+        'generated_media',
       ].includes(reference.kind)
       || references.has(reference.id)
     ) return fallback === null ? null : {
@@ -115,7 +117,6 @@ export function interpretPresentation(
       || typeof value.task_state.message !== 'string'
       || !Array.isArray(value.source_provenance)
       || !Array.isArray(value.media_refs)
-      || value.media_refs.length !== 0
       || value.user_preferences !== null
       || !value.view_state
       || value.view_state.focus !== value.focus
@@ -130,10 +131,23 @@ export function interpretPresentation(
           'public_source',
           'workspace_result',
           'user_provided_coordinates',
+          'generated_media',
         ].includes(item.kind)
         || dataRefs.has(item.id)
       ) return false;
       dataRefs.set(item.id, item.kind);
+    }
+    const mediaRefs = new Map();
+    for (const item of value.media_refs) {
+      if (
+        !item
+        || typeof item.id !== 'string'
+        || dataRefs.get(item.id) !== 'generated_media'
+        || mediaRefs.has(item.id)
+        || !isValidMediaReference(item.url, item.id, item.expires_at)
+        || !['image/png', 'image/jpeg', 'image/webp'].includes(item.content_type)
+      ) return false;
+      mediaRefs.set(item.id, item);
     }
     const seen = new Set();
     for (const source of value.source_provenance) {
@@ -144,6 +158,8 @@ export function interpretPresentation(
           ? 'workspace_result'
           : source.source_type === 'user_provided_coordinates'
             ? 'user_provided_coordinates'
+            : source.source_type === 'generated_image'
+              ? 'generated_media'
           : null;
       if (
         !expectedKind
@@ -156,6 +172,8 @@ export function interpretPresentation(
       seen.add(source.data_ref);
     }
     return seen.size === dataRefs.size
+      && mediaRefs.size === [...dataRefs.values()]
+        .filter((kind) => kind === 'generated_media').length
       && (
         value.view_state.selected_data_ref === null
         || dataRefs.has(value.view_state.selected_data_ref)
@@ -195,7 +213,9 @@ export function interpretPresentation(
         ? 'public_source'
         : component.type === 'workspace.match_list'
           ? 'workspace_result'
-          : 'user_provided_coordinates';
+          : component.type === 'geospatial.point_map'
+            ? 'user_provided_coordinates'
+            : 'generated_media';
       if (
         typeof item.data_ref !== 'string'
         || references.get(item.data_ref) !== expectedKind
@@ -243,9 +263,50 @@ export function interpretPresentation(
         text: fallback,
         reason: 'Unsupported map coordinate.',
       };
+      if (
+        component.type === 'media.image_gallery'
+        && (
+          item.media_ref !== item.data_ref
+          || typeof item.alt !== 'string'
+          || typeof item.provider !== 'string'
+          || typeof item.model !== 'string'
+          || !['image/png', 'image/jpeg', 'image/webp'].includes(item.content_type)
+          || mediaReferenceFor(item.data_ref) === null
+        )
+      ) return fallback === null ? null : {
+        kind: 'fallback',
+        text: fallback,
+        reason: 'Unsupported or expired image reference.',
+      };
     }
   }
+  function mediaReferenceFor(id) {
+    return value.media_refs.find((item) => item.id === id) ?? null;
+  }
   return { kind: 'contract', contract: value };
+}
+
+function isValidMediaReference(value, id, expiresAt) {
+  if (
+    typeof value !== 'string'
+    || typeof expiresAt !== 'number'
+    || !Number.isInteger(expiresAt)
+    || expiresAt <= Math.floor(Date.now() / 1000)
+  ) return false;
+  try {
+    const url = new URL(value, 'https://jarvis.invalid');
+    const keys = [...url.searchParams.keys()];
+    return url.origin === 'https://jarvis.invalid'
+      && url.pathname === `/api/v1/media/${encodeURIComponent(id)}`
+      && url.username === ''
+      && url.password === ''
+      && keys.length === 2
+      && new Set(keys).size === 2
+      && url.searchParams.get('expires') === String(expiresAt)
+      && /^[a-f0-9]{64}$/.test(url.searchParams.get('signature') ?? '');
+  } catch {
+    return false;
+  }
 }
 
 function isPublicHttpsUrl(value) {

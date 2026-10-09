@@ -151,6 +151,29 @@ def test_online_mode_can_offer_network_capabilities() -> None:
     assert r["capabilities"], "online mode should match web capabilities"
 
 
+def test_discovery_shows_configured_but_unverified_image_capability(
+    monkeypatch,
+) -> None:
+    from research_engine import capability_tools
+
+    monkeypatch.setenv("OPENAI_API_KEY", "fixture-key")
+    monkeypatch.delenv("JARVIS_API_KEY_OPENAI", raising=False)
+    monkeypatch.delenv("REPLICATE_API_KEY", raising=False)
+    monkeypatch.delenv("STABILITY_API_KEY", raising=False)
+    monkeypatch.setattr(capability_tools, "live_provider_status", lambda: {})
+
+    result = cc.discover_capabilities(
+        "generate an image of a blue fox",
+        mode="online",
+    )
+    image = next(
+        item for item in result["capabilities"]
+        if item["name"] == "image.generate"
+    )
+
+    assert image["availability"] == "DEGRADED"
+
+
 def test_discovery_never_invents_capabilities(contracts) -> None:
     r = cc.discover_capabilities("do absolutely anything at all",  # noqa: F841
                                  include_unavailable=True)
@@ -220,7 +243,7 @@ def test_capability_manifest_is_complete_and_claims_do_not_prove_operation():
     assert manifest["registration_verified"] is True
     assert manifest["claimed_lifecycle_state"] == "registered"
     for field in (
-        "required_provider", "required_services", "required_hardware",
+        "required_provider", "provider_dependencies", "required_services", "required_hardware",
         "availability", "health", "required_permissions", "approval_policy",
         "data_classification", "network_requirements",
         "supported_presentation_formats", "compatibility_requirements",
@@ -253,3 +276,74 @@ def test_external_manifest_cannot_install_a_tool_or_widen_its_schema():
         cc.register_capability_manifest(
             incompatible, build_capability_registry(),
         )
+
+
+def test_manifest_rejects_malformed_or_remote_schemas():
+    manifest = cc.build_capability_manifest("project.search")
+
+    malformed = dict(manifest)
+    malformed["input_schema"] = {
+        "type": "object",
+        "properties": {"query": {"type": "not-a-json-schema-type"}},
+    }
+    with pytest.raises(ValueError, match="unsupported type"):
+        cc.validate_capability_manifest(malformed)
+
+    remote_schema = dict(manifest)
+    remote_schema["output_schema"] = {
+        "type": "object",
+        "properties": {"result": {"$ref": "https://example.invalid/schema"}},
+    }
+    with pytest.raises(ValueError, match="unsupported schema keywords"):
+        cc.validate_capability_manifest(remote_schema)
+
+
+def test_registration_rejects_manifest_privilege_escalation():
+    from research_engine.capability_tools import build_capability_registry
+
+    registry = build_capability_registry()
+    manifest = cc.build_capability_manifest("image.generate")
+    manifest["risk_level"] = "read"
+    manifest["requires_confirmation"] = False
+    manifest["approval_policy"] = "server_policy"
+
+    with pytest.raises(ValueError, match="risk conflicts"):
+        cc.register_capability_manifest(manifest, registry)
+
+
+def test_image_capability_manifest_uses_network_approval_and_real_tool_schema():
+    from research_engine.capability_tools import (
+        ImageGenerationTool,
+        build_capability_registry,
+    )
+
+    registry = build_capability_registry()
+    contracts = cc.build_contracts(
+        registry,
+        inventory={
+            "image.generate": {
+                "state": "NOT_CONFIGURED",
+                "health": "unknown",
+                "reason": "test provider not configured",
+            },
+        },
+    )
+    manifest = cc.build_capability_manifest(
+        "image.generate",
+        contracts=contracts,
+    )
+    registration = cc.register_capability_manifest(manifest, registry)
+    image_tool = next(
+        item for item in registry.describe()
+        if item["name"] == "image.generate"
+    )
+
+    assert image_tool["risk"] == "network"
+    assert image_tool["requires_confirmation"] is True
+    assert manifest["input_schema"] == ImageGenerationTool.schema
+    assert registration["registration_verified"] is True
+    assert registration["lifecycle_state"] == "registered"
+    assert manifest["required_provider"] is None
+    assert manifest["provider_dependencies"] == [
+        "openai", "replicate", "stability",
+    ]

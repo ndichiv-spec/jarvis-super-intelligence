@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import sys
 import time
+import asyncio
 from pathlib import Path
 from typing import Any, Optional
 
@@ -124,6 +125,113 @@ class ProviderStatusTool(Tool):
                        {"count": len(status)})
         except Exception as exc:  # noqa: BLE001
             return _fail(self.name, ctx, started, f"{type(exc).__name__}: {exc}")
+
+
+class ImageGenerationTool(Tool):
+    """Generate and privately persist images using a configured provider."""
+
+    name = "image.generate"
+    description = (
+        "Generate up to four images from a user-approved prompt with a configured "
+        "image provider, then persist owner-scoped outputs as expiring media references."
+    )
+    schema = {
+        "type": "object",
+        "properties": {
+            "prompt": {"type": "string", "minLength": 1, "maxLength": 4000},
+            "num_images": {"type": "integer", "minimum": 1, "maximum": 4},
+        },
+        "required": ["prompt"],
+        "additionalProperties": False,
+    }
+    risk = RiskLevel.NETWORK
+    requires_confirmation = True
+    timeout_seconds = 120
+
+    async def invoke(self, args: dict[str, Any], ctx: ToolContext) -> ToolResult:
+        started = time.monotonic()
+        prompt = args.get("prompt")
+        if not isinstance(prompt, str) or not prompt.strip():
+            return _fail(self.name, ctx, started, "prompt is required")
+        if len(prompt) > 4000:
+            return _fail(self.name, ctx, started, "prompt exceeds 4000 characters")
+        if ctx.user_id in {"", "anonymous"}:
+            return _fail(self.name, ctx, started, "authenticated owner is required")
+        from .tool_registry import scrub_secrets
+
+        safe_prompt, redacted = scrub_secrets(prompt.strip())
+        if redacted:
+            return _fail(
+                self.name, ctx, started,
+                "prompt contains credential-shaped data; remove it before external generation",
+            )
+        count = args.get("num_images", 1)
+        if type(count) is not int or not 1 <= count <= 4:
+            return _fail(self.name, ctx, started, "num_images must be between 1 and 4")
+
+        try:
+            from fastapi import HTTPException
+            from jarvis_backend.connectors.crypto import ConnectorCryptoError
+            from jarvis_backend.media_storage import MediaReferenceError
+
+            from jarvis_backend.routers.media import generate_image_for_owner
+
+            result = await asyncio.wait_for(
+                generate_image_for_owner(
+                    owner_id=ctx.user_id,
+                    prompt=safe_prompt,
+                    num_images=count,
+                ),
+                timeout=self.timeout_seconds,
+            )
+        except asyncio.CancelledError:
+            raise
+        except TimeoutError:
+            return _fail(self.name, ctx, started, "image provider timed out")
+        except HTTPException as exc:
+            return _fail(self.name, ctx, started, str(exc.detail))
+        except (MediaReferenceError, ConnectorCryptoError):
+            return _fail(
+                self.name, ctx, started,
+                "generated image could not be stored securely",
+            )
+        except OSError:
+            return _fail(
+                self.name, ctx, started,
+                "generated image storage is unavailable",
+            )
+
+        images = result.get("images")
+        if (
+            not isinstance(images, list)
+            or not images
+            or any(
+                not isinstance(image, dict)
+                or not isinstance(image.get("media_ref"), str)
+                or not isinstance(image.get("content_type"), str)
+                for image in images
+            )
+        ):
+            return _fail(
+                self.name, ctx, started,
+                "image provider returned no validated stored media",
+            )
+        output = {
+            "provider": result["provider"],
+            "model": result["model"],
+            "media_refs": [{
+                "media_ref": image["media_ref"],
+                "content_type": image["content_type"],
+            } for image in images],
+        }
+        return ToolResult(
+            tool_id=ctx.request_id,
+            name=self.name,
+            success=True,
+            result=json.dumps(output, ensure_ascii=False),
+            duration_ms=(time.monotonic() - started) * 1000,
+            metrics={"provider": result["provider"], "image_count": len(images)},
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -710,6 +818,30 @@ def capability_inventory() -> dict[str, Any]:
         "risk": "read",
         "source": "providers.control_center.ProviderControlCenter",
         "detail": providers.get("_error") if not prov_ok else None,
+    }
+    from jarvis_backend.routers.media import _image_provider_readiness
+
+    image_providers = _image_provider_readiness()
+    configured_image_providers = [
+        provider for provider, status in image_providers.items()
+        if status["configured"]
+    ]
+    image_is_configured = bool(configured_image_providers)
+    inventory["image.generate"] = {
+        "state": DEGRADED if image_is_configured else NOT_CONFIGURED,
+        "availability": (
+            "configured_unverified" if image_is_configured else "not_configured"
+        ),
+        "health": "unknown",
+        "operational": False,
+        "risk": RiskLevel.NETWORK.value,
+        "source": "configured image provider adapter",
+        "reason": (
+            "provider credential configured; generation has not been verified"
+            if image_is_configured
+            else "Configure OPENAI_API_KEY, REPLICATE_API_KEY, or STABILITY_API_KEY on the server."
+        ),
+        "configured_providers": configured_image_providers,
     }
 
     inventory["sandbox_run"] = {
@@ -1781,7 +1913,7 @@ def build_capability_registry(policy=None):
         registry.register(tool)
     # New capability adapters.
     for tool in (
-        ProviderStatusTool(), ModelStatusTool(), JobStatusTool(),
+        ProviderStatusTool(), ImageGenerationTool(), ModelStatusTool(), JobStatusTool(),
         ArtifactInspectTool(), FilesReadTool(), FilesSearchTool(),
         DockerStatusTool(), GithubInspectTool(), GithubSearchTool(),
         BrainStatusTool(), BrainArtifactsTool(), SilverwingStatusTool(),
@@ -1821,7 +1953,7 @@ def build_capability_registry(policy=None):
 
 
 __all__ = [
-    "ProviderStatusTool", "ModelStatusTool", "JobStatusTool",
+    "ProviderStatusTool", "ImageGenerationTool", "ModelStatusTool", "JobStatusTool",
     "ArtifactInspectTool", "FilesReadTool", "FilesSearchTool",
     "DockerStatusTool", "GithubInspectTool", "GithubSearchTool",
     "BrainStatusTool", "BrainArtifactsTool", "SilverwingStatusTool",

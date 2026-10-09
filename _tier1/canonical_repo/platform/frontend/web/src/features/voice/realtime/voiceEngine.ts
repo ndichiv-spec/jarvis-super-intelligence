@@ -1,5 +1,5 @@
-import { DEFAULT_VOICE_ENGINE_CONFIG, type VoiceEngineConfig, type VoiceEngineState, type AudioFrame, stateToTokenClass } from './types';
-import { AudioEngine, getAudioEngine, destroyAudioEngine } from './audioEngine';
+import { DEFAULT_VOICE_ENGINE_CONFIG, type VoiceEngineConfig, type VoiceEngineState, type AudioFrame } from './types';
+import { AudioEngine, getAudioEngine } from './audioEngine';
 import { VoiceStreamClient } from './streamClient';
 
 let _engine: VoiceEngine | null = null;
@@ -27,7 +27,7 @@ export class VoiceEngine {
   private _reader: ReadableStreamDefaultReader<ArrayBuffer> | null = null;
   private stateCbs: Array<(s: VoiceEngineState) => void> = [];
   private transcriptCbs: Array<(t: string) => void> = [];
-  private streamDataCbs: Array<(d: any) => void> = [];
+  private streamDataCbs: Array<(frame: AudioFrame) => void> = [];
 
   constructor(config?: Partial<VoiceEngineConfig>) {
     this._config = { ...DEFAULT_VOICE_ENGINE_CONFIG, ...config };
@@ -46,10 +46,12 @@ export class VoiceEngine {
 
   onStateChange(cb: (s: VoiceEngineState) => void): void { this.stateCbs.push(cb); }
   onTranscript(cb: (t: string) => void): void { this.transcriptCbs.push(cb); }
-  onStreamData(cb: (d: any) => void): void { this.streamDataCbs.push(cb); }
+  onStreamData(cb: (frame: AudioFrame) => void): void { this.streamDataCbs.push(cb); }
   private emitState(s: VoiceEngineState): void { this._state = s; for (const c of this.stateCbs) c(s); }
   private emitTranscript(t: string): void { for (const c of this.transcriptCbs) c(t); }
-  private emitStreamData(d: any): void { for (const c of this.streamDataCbs) c(d); }
+  private emitStreamData(frame: AudioFrame): void {
+    for (const callback of this.streamDataCbs) callback(frame);
+  }
 
   async start(): Promise<void> {
     this.emitState('connecting');
@@ -83,7 +85,7 @@ export class VoiceEngine {
       if (level > this._config.vadThreshold) {
         this._resetVAD();
         const frame = this.audio.captureFrame();
-        this.stream.emit({ type: 'streamData', frame });
+        this.stream.notify({ type: 'streamData', frame });
         this.emitStreamData(frame);
       } else if (this._state === 'listening') {
         this._scheduleVAD();
@@ -99,7 +101,7 @@ export class VoiceEngine {
   private _scheduleVAD(): void {
     if (this._vadSilenceTimer) return;
     this._vadSilenceTimer = setTimeout(async () => {
-      this.stream.emit({ type: 'streamEnd' });
+      this.stream.notify({ type: 'streamEnd' });
       await this.stop();
     }, this._config.vadSilenceMs);
   }

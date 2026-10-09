@@ -24,6 +24,9 @@ New domains are added by declaring a :class:`DomainPack` and registering
 capabilities into it - no Brain change required.
 """
 from __future__ import annotationsfrom dataclasses import dataclass, fieldfrom typing import Any, Optionalfrom .models import RiskLevelfrom .tool_registry import ToolRegistryCONTRACT_VERSION = "1.1"
+
+import math
+import refrom dataclasses import dataclass, fieldfrom typing import Any, Optionalfrom .models import RiskLevelfrom .tool_registry import ToolRegistryCONTRACT_VERSION = "1.1"
 
 # Operating modes.  A capability declares which modes it can serve so the
 # fabric can degrade honestly instead of pretending a cloud path exists.
@@ -112,6 +115,7 @@ class CapabilityManifest:
     input_schema: dict[str, Any] = field(default_factory=dict)
     output_schema: dict[str, Any] = field(default_factory=dict)
     required_provider: str | None = None
+    provider_dependencies: tuple[str, ...] = ()
     required_services: tuple[str, ...] = ()
     required_hardware: tuple[str, ...] = ()
     required_permissions: tuple[str, ...] = ()
@@ -145,6 +149,7 @@ class CapabilityManifest:
             "input_schema": self.input_schema,
             "output_schema": self.output_schema,
             "required_provider": self.required_provider,
+            "provider_dependencies": list(self.provider_dependencies),
             "required_services": list(self.required_services),
             "required_hardware": list(self.required_hardware),
             "required_permissions": list(self.required_permissions),
@@ -168,6 +173,124 @@ class CapabilityManifest:
         }
 
 
+_SCHEMA_TYPES = {
+    "array", "boolean", "integer", "null", "number", "object", "string",
+}
+_SCHEMA_KEYWORDS = {
+    "$schema", "$id", "$comment", "title", "description", "default",
+    "examples", "deprecated", "readOnly", "writeOnly", "type", "enum",
+    "const", "properties", "required", "additionalProperties",
+    "items", "minProperties", "maxProperties",
+    "minLength", "maxLength", "pattern", "format", "minimum",
+    "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf",
+    "minItems", "maxItems", "uniqueItems", "allOf", "anyOf", "oneOf", "not",
+}
+_SCHEMA_NUMBER_KEYWORDS = {
+    "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf",
+}
+_SCHEMA_INTEGER_KEYWORDS = {
+    "minProperties", "maxProperties",
+    "minLength", "maxLength", "minItems", "maxItems",
+}
+
+
+def _validate_json_schema(schema: Any, path: str, depth: int = 0) -> None:
+    """Validate the local JSON Schema subset used by trusted capability adapters."""
+    if depth > 32 or not isinstance(schema, dict):
+        raise ValueError(f"{path} must be a valid JSON Schema object")
+    unknown = set(schema) - _SCHEMA_KEYWORDS
+    if unknown:
+        raise ValueError(f"{path} contains unsupported schema keywords")
+
+    schema_type = schema.get("type")
+    if "type" in schema:
+        types = schema_type if isinstance(schema_type, list) else [schema_type]
+        if (
+            not types
+            or any(not isinstance(item, str) or item not in _SCHEMA_TYPES for item in types)
+            or len(types) != len(set(types))
+        ):
+            raise ValueError(f"{path}.type contains an unsupported type")
+
+    properties = schema.get("properties", {})
+    if not isinstance(properties, dict) or any(
+        not isinstance(name, str) or not name for name in properties
+    ):
+        raise ValueError(f"{path}.properties must map names to schemas")
+    for name, child in properties.items():
+        _validate_json_schema(child, f"{path}.properties.{name}", depth + 1)
+
+    for key in ("items", "not"):
+        if key in schema:
+            _validate_json_schema(schema[key], f"{path}.{key}", depth + 1)
+    additional = schema.get("additionalProperties")
+    if isinstance(additional, dict):
+        _validate_json_schema(additional, f"{path}.additionalProperties", depth + 1)
+    elif "additionalProperties" in schema and not isinstance(additional, bool):
+        raise ValueError(f"{path}.additionalProperties must be a schema or boolean")
+    for key in ("allOf", "anyOf", "oneOf"):
+        alternatives = schema.get(key)
+        if alternatives is not None:
+            if not isinstance(alternatives, list) or not alternatives:
+                raise ValueError(f"{path}.{key} must contain schemas")
+            for child in alternatives:
+                _validate_json_schema(child, f"{path}.{key}", depth + 1)
+
+    required = schema.get("required", [])
+    if (
+        not isinstance(required, list)
+        or any(not isinstance(name, str) or not name for name in required)
+        or len(required) != len(set(required))
+    ):
+        raise ValueError(f"{path}.required must contain unique property names")
+    for key in ("enum", "examples"):
+        if key in schema and (
+            not isinstance(schema[key], list)
+            or (key == "enum" and not schema[key])
+        ):
+            raise ValueError(f"{path}.{key} must be a non-empty list")
+    for key in ("title", "description", "format", "$schema", "$id", "$comment"):
+        if key in schema and not isinstance(schema[key], str):
+            raise ValueError(f"{path}.{key} must be a string")
+    if "pattern" in schema:
+        try:
+            re.compile(schema["pattern"])
+        except (TypeError, re.error) as exc:
+            raise ValueError(f"{path}.pattern is invalid") from exc
+    for key in _SCHEMA_INTEGER_KEYWORDS:
+        value = schema.get(key)
+        if key in schema and (
+            not isinstance(value, int) or isinstance(value, bool) or value < 0
+        ):
+            raise ValueError(f"{path}.{key} must be a non-negative integer")
+    for key in _SCHEMA_NUMBER_KEYWORDS:
+        value = schema.get(key)
+        if key in schema and (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or not math.isfinite(value)
+        ):
+            raise ValueError(f"{path}.{key} must be a finite number")
+    for lower, upper in (
+        ("minProperties", "maxProperties"),
+        ("minLength", "maxLength"),
+        ("minItems", "maxItems"),
+    ):
+        if lower in schema and upper in schema and schema[lower] > schema[upper]:
+            raise ValueError(f"{path}.{lower} must not exceed {upper}")
+    if "multipleOf" in schema and schema["multipleOf"] <= 0:
+        raise ValueError(f"{path}.multipleOf must be greater than zero")
+    for lower, upper in (
+        ("minimum", "maximum"),
+        ("exclusiveMinimum", "exclusiveMaximum"),
+    ):
+        if lower in schema and upper in schema and schema[lower] > schema[upper]:
+            raise ValueError(f"{path}.{lower} must not exceed {upper}")
+    for key in ("deprecated", "readOnly", "writeOnly", "uniqueItems"):
+        if key in schema and not isinstance(schema[key], bool):
+            raise ValueError(f"{path}.{key} must be a boolean")
+
+
 def validate_capability_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     """Validate a manifest without trusting its claimed lifecycle or health."""
     if not isinstance(manifest, dict):
@@ -175,7 +298,7 @@ def validate_capability_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     required = (
         "id", "name", "description", "domain", "version",
         "supported_operations", "input_schema", "output_schema",
-        "required_provider", "required_services", "required_hardware",
+        "required_provider", "provider_dependencies", "required_services", "required_hardware",
         "required_permissions", "approval_policy", "risk_level",
         "requires_confirmation", "authentication_required",
         "availability", "health",
@@ -198,6 +321,10 @@ def validate_capability_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("manifest identity fields must be non-empty strings")
     if manifest["id"] != manifest["name"]:
         raise ValueError("manifest id must match its registered capability name")
+    if not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,127}", manifest["id"]):
+        raise ValueError("manifest id is not a stable capability identifier")
+    if not re.fullmatch(r"\d+\.\d+(?:\.\d+)?", manifest["version"]):
+        raise ValueError("manifest version must be numeric major.minor[.patch]")
     if manifest["domain"] not in DOMAINS:
         raise ValueError("unsupported capability domain")
     operations = manifest.get("supported_operations") or ()
@@ -205,12 +332,12 @@ def validate_capability_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("capability manifest must declare one or more operations")
     if not all(isinstance(item, str) and item.strip() for item in operations):
         raise ValueError("supported operations must be non-empty strings")
-    if not isinstance(manifest.get("input_schema"), dict):
-        raise ValueError("input_schema must be an object")
-    if not isinstance(manifest.get("output_schema"), dict):
-        raise ValueError("output_schema must be an object")
+    for key in ("input_schema", "output_schema"):
+        _validate_json_schema(manifest.get(key), key)
+        if manifest[key].get("type") != "object":
+            raise ValueError(f"{key} must describe an object")
     list_fields = (
-        "required_services", "required_hardware", "required_permissions",
+        "provider_dependencies", "required_services", "required_hardware", "required_permissions",
         "endpoint_requirements", "supported_presentation_formats",
         "alternatives",
     )
@@ -252,6 +379,7 @@ def validate_capability_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     safe["claimed_lifecycle_state"] = state
     safe["lifecycle_state"] = "discovered"
     safe["required_services"] = list(manifest["required_services"])
+    safe["provider_dependencies"] = list(manifest["provider_dependencies"])
     safe["required_hardware"] = list(manifest["required_hardware"])
     safe["required_permissions"] = list(manifest["required_permissions"])
     safe["endpoint_requirements"] = list(manifest["endpoint_requirements"])
@@ -276,7 +404,11 @@ def _manifest_from_contract(contract: dict[str, Any], lifecycle_state: str = "re
         ),
         "input_schema": contract.get("input_schema") or {},
         "output_schema": contract.get("output_schema") or {},
-        "required_provider": contract.get("provider_dependencies", [None])[0] if contract.get("provider_dependencies") else None,
+        "required_provider": (
+            contract["provider_dependencies"][0]
+            if len(contract.get("provider_dependencies") or ()) == 1 else None
+        ),
+        "provider_dependencies": list(contract.get("provider_dependencies") or ()),
         "required_services": list(contract.get("service_dependencies") or ()),
         "required_hardware": list(contract.get("hardware_dependencies") or ()),
         "required_permissions": list(contract.get("required_permissions") or ()),
@@ -306,7 +438,12 @@ def _manifest_from_contract(contract: dict[str, Any], lifecycle_state: str = "re
     return requested
 
 
-def register_capability_manifest(manifest: dict[str, Any], registry: Any | None = None) -> dict[str, Any]:
+def register_capability_manifest(
+    manifest: dict[str, Any],
+    registry: Any | None = None,
+    *,
+    contracts: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Validate metadata for an already trusted tool; never register executable code."""
     validated = validate_capability_manifest(manifest)
     if registry is not None:
@@ -327,8 +464,34 @@ def register_capability_manifest(manifest: dict[str, Any], registry: Any | None 
             raise ValueError("capability manifest risk conflicts with ToolRegistry")
         if existing.get("requires_confirmation") != validated["requires_confirmation"]:
             raise ValueError("capability manifest approval conflicts with ToolRegistry")
+        canonical_contracts = contracts or build_contracts(registry, inventory={})
+        contract = canonical_contracts.get(validated["id"])
+        if contract is None:
+            raise ValueError("capability manifest has no canonical contract")
+        canonical = validate_capability_manifest(
+            _manifest_from_contract(contract),
+        )
+        contract_fields = (
+            "description", "domain", "version", "supported_operations",
+            "input_schema", "output_schema", "required_provider",
+            "provider_dependencies", "required_services", "required_hardware",
+            "required_permissions", "approval_policy", "risk_level",
+            "requires_confirmation", "authentication_required",
+            "data_classification", "network_requirements",
+            "endpoint_requirements", "supported_presentation_formats",
+            "compatibility_requirements", "timeout_seconds",
+            "cancellation_semantics", "error_semantics", "alternatives",
+            "observability", "provenance_requirements",
+        )
+        for key in contract_fields:
+            if validated[key] != canonical[key]:
+                raise ValueError(f"capability manifest {key} conflicts with registry contract")
         validated["lifecycle_state"] = "registered"
         validated["registration_verified"] = True
+        validated["claimed_availability"] = validated["availability"]
+        validated["claimed_health"] = validated["health"]
+        validated["availability"] = canonical["availability"]
+        validated["health"] = canonical["health"]
     return validated
 
 
@@ -441,7 +604,62 @@ class DomainPack:
 # domain, offline, streaming, background, cost, timeout, retry, services, perms
 # --------------------------------------------------------------------------- #
 _META: dict[str, dict[str, Any]] = {
-    # -- software engineering -------------------------------------------------
+    "image.generate": dict(
+        domain="communication",
+        supports_offline=False,
+        cost_model="provider",
+        timeout=120,
+        retry_policy="none",
+        execution_surface="configured_image_provider",
+        operations=("image.generate",),
+        operation_arguments={
+            "image.generate": {"prompt": "$query"},
+        },
+        operation_intents={
+            "image.generate": {
+                "semantic_type": "image.generate",
+                "result_renderer": "generated_image",
+                "match_patterns": [
+                    r"\b(?:generate|create|draw|make)\b",
+                    r"\b(?:image|picture|illustration|photo)\b",
+                ],
+                "subject_pattern": (
+                    r"^\s*(?:(?:jarvis)[,:]?\s*)?"
+                    r"(?:please\s+)?(?:generate|create|draw|make)\s+"
+                    r"(?:me\s+)?(?:an?\s+)?"
+                    r"(?:image|picture|illustration|photo)\s+"
+                    r"(?:of\s+)?(?P<subject>.+?)[?.!,]*\s*$"
+                ),
+                "query_template": "{subject}",
+                "result_caveat": (
+                    "Generated media is an AI-created result, not a photograph "
+                    "or a verified depiction of a real scene."
+                ),
+                "empty_result_message": (
+                    "The configured image provider did not return a stored image."
+                ),
+                "plan_summary": "Generate and securely store the requested image.",
+                "step_summary": "Call the configured image provider and validate its stored output.",
+                "completion_condition_type": "answer_generated",
+                "completion_expected": "validated stored image reference",
+                "result_count_path": "media_refs",
+            },
+        },
+        intent_confirmation_operations=("image.generate",),
+        operation_output_requirements={"image.generate": ("result",)},
+        output_schema={
+            "type": "object",
+            "properties": {"result": {"type": "string"}},
+            "required": ["result"],
+        },
+        network_requirements="required",
+        data_classification="user_supplied_prompt",
+        provider_dependencies=("openai", "replicate", "stability"),
+        supported_environments=("conversation", "image"),
+        observability="canonical_runtime_events",
+        approval_policy="explicit_user_request",
+    ),
+    # -- software engineering -------------------------------------------------
     "project.inspect": dict(domain="software_engineering", supports_offline=True,
                             cost_model="local_io", timeout=60),
     "project.search": dict(
@@ -1151,7 +1369,7 @@ def build_capability_manifest(
     if contract is None:
         raise KeyError(f"unknown capability {capability_name!r}")
     manifest = _manifest_from_contract(contract, lifecycle_state)
-    return register_capability_manifest(manifest, registry)
+    return register_capability_manifest(manifest, registry, contracts=contracts)
 
 
 def discover_capabilities(
@@ -1162,10 +1380,12 @@ def discover_capabilities(
     include_unavailable: bool = False,
     max_results: int = 25,
 ) -> dict[str, Any]:
-    """Answer "what capabilities are available for this task?".
+    """Discover registered matching capabilities, including degraded candidates.
 
-    Filters by domain relevance, operating mode, availability, risk and
-    dependencies.  Never invents a capability that is not registered.
+    Filters by domain relevance, operating mode, risk and dependencies.
+    Degraded candidates remain visible with their truthful availability state;
+    unavailable capabilities are omitted unless explicitly requested.
+    Never invents a capability that is not registered.
     """
     if contracts is None:
         from .capability_tools import build_capability_registry
@@ -1177,7 +1397,9 @@ def discover_capabilities(
     haystack = (task or "").lower()
     scores: list[tuple[int, str, dict[str, Any]]] = []
     for name, c in contracts.items():
-        if not include_unavailable and c["availability"] != "AVAILABLE":
+        if not include_unavailable and c["availability"] not in {
+            "AVAILABLE", "DEGRADED",
+        }:
             continue
         if mode == OFFLINE and not c["supports_offline"]:
             continue

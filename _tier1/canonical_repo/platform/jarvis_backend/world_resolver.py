@@ -20,6 +20,7 @@ _ORDINALS = {
     "third": 3, "3rd": 3, "fourth": 4, "4th": 4,
     "fifth": 5, "5th": 5,
 }
+_INTENT_ARGUMENTS = {"$query": "query", "$subject": "subject"}
 
 
 @dataclass(frozen=True)
@@ -71,11 +72,16 @@ def resolve_execution_surface(
 ) -> ExecutionSelection:
     """Select an operation-compatible, observable, authorized registered surface."""
     endpoints = endpoint_capabilities or set()
-    candidates = [
-        (name, contract)
-        for name, contract in contracts.items()
-        if operation in contract.get("operations", [])
-    ]
+    candidates = []
+    for name, contract in contracts.items():
+        if not isinstance(contract, dict):
+            continue
+        supported_operations = contract.get("operations")
+        if (
+            isinstance(supported_operations, (list, tuple))
+            and operation in supported_operations
+        ):
+            candidates.append((name, contract))
     if not candidates:
         return ExecutionSelection(
             operation, "unavailable",
@@ -85,9 +91,11 @@ def resolve_execution_surface(
     ranked: list[tuple[tuple[Any, ...], str, dict[str, Any]]] = []
     rejected: list[str] = []
     for name, contract in candidates:
-        operation_arguments = (
-            contract.get("operation_arguments") or {}
-        ).get(operation)
+        argument_mappings = contract.get("operation_arguments") or {}
+        if not isinstance(argument_mappings, dict):
+            rejected.append(f"{name} has invalid operation argument mappings")
+            continue
+        operation_arguments = argument_mappings.get(operation)
         if not isinstance(operation_arguments, dict) or not operation_arguments:
             rejected.append(f"{name} has no input mapping for {operation}")
             continue
@@ -97,9 +105,20 @@ def resolve_execution_surface(
             rejected.append(f"{name} input mapping is incompatible with its schema")
             continue
         output_schema = contract.get("output_schema") or {}
-        required_output = (
+        output_requirements = (
             contract.get("operation_output_requirements") or {}
-        ).get(operation, ())
+        )
+        if not isinstance(output_schema, dict) or not isinstance(
+            output_requirements, dict
+        ):
+            rejected.append(f"{name} has invalid output schema metadata")
+            continue
+        required_output = output_requirements.get(operation, ())
+        if not isinstance(required_output, (list, tuple)) or any(
+            not isinstance(path, str) for path in required_output
+        ):
+            rejected.append(f"{name} has invalid output evidence requirements")
+            continue
         if any(not _schema_contains_path(output_schema, path) for path in required_output):
             rejected.append(f"{name} output schema cannot provide required evidence")
             continue
@@ -114,7 +133,7 @@ def resolve_execution_surface(
             rejected.append(contract.get("availability_reason") or f"{name} is {availability.lower()}")
             continue
         health = str(contract.get("health", "unknown")).lower()
-        if health == "unavailable":
+        if health not in {"healthy", "unknown", "degraded"}:
             rejected.append(f"{name} is unhealthy")
             continue
         if (
@@ -266,7 +285,9 @@ def resolve_world_intent(
                 completion_condition_type=intent_spec.get("completion_condition_type"),
                 completion_expected=str(intent_spec.get("completion_expected") or ""),
                 selectable_results=bool(intent_spec.get("selectable_results", False)),
-                result_renderer=str(intent_spec.get("result_renderer") or "public_links"),
+                result_renderer=str(
+                    intent_spec.get("result_renderer") or "public_links"
+                ),
                 result_count_path=intent_spec.get("result_count_path"),
             )
     return None
@@ -276,42 +297,109 @@ def _input_mapping_compatible(
     mapping: dict[str, Any], schema: dict[str, Any],
 ) -> bool:
     """Check static operation argument mappings against a JSON-schema subset."""
+    if not isinstance(mapping, dict) or not isinstance(schema, dict):
+        return False
     if schema.get("type") not in (None, "object"):
         return False
     properties = schema.get("properties") or {}
     required = schema.get("required") or ()
+    if (
+        not isinstance(properties, dict)
+        or not isinstance(required, (list, tuple))
+        or any(not isinstance(key, str) for key in required)
+    ):
+        return False
     if not set(required).issubset(mapping):
         return False
     for key, value in mapping.items():
-        property_schema = properties.get(key)
+        property_schema = properties.get(key, schema.get("additionalProperties"))
         if not isinstance(property_schema, dict):
             return False
-        expected = property_schema.get("type")
-        if isinstance(value, str) and value.startswith("$"):
-            if expected not in (None, "string"):
-                return False
-        elif expected == "string" and not isinstance(value, str):
+        if not _mapping_value_compatible(value, property_schema):
             return False
-        elif expected == "integer" and (not isinstance(value, int) or isinstance(value, bool)):
+    return True
+
+
+def _mapping_value_compatible(value: Any, schema: dict[str, Any]) -> bool:
+    """Validate static argument mappings recursively; intent slots are strings."""
+    expected = schema.get("type")
+    expected_types = expected if isinstance(expected, list) else [expected]
+    type_checks = {
+        "object": lambda item: isinstance(item, dict),
+        "array": lambda item: isinstance(item, list),
+        "string": lambda item: isinstance(item, str),
+        "boolean": lambda item: isinstance(item, bool),
+        "integer": lambda item: isinstance(item, int) and not isinstance(item, bool),
+        "number": lambda item: (
+            isinstance(item, (int, float)) and not isinstance(item, bool)
+        ),
+        "null": lambda item: item is None,
+    }
+    if expected is not None and (
+        not isinstance(expected_types, list)
+        or not expected_types
+        or any(
+            not isinstance(item, str) or item not in type_checks
+            for item in expected_types
+        )
+    ):
+        return False
+    if isinstance(value, str) and value.startswith("$"):
+        return (
+            value in _INTENT_ARGUMENTS
+            and (expected is None or "string" in expected_types)
+            and "enum" not in schema
+            and "const" not in schema
+        )
+
+    if "const" in schema and value != schema["const"]:
+        return False
+    if "enum" in schema:
+        choices = schema["enum"]
+        if not isinstance(choices, list) or value not in choices:
             return False
-        elif expected == "number" and (
-            not isinstance(value, (int, float)) or isinstance(value, bool)
+
+    if expected is not None and not any(
+        type_checks.get(item, lambda _: False)(value) for item in expected_types
+    ):
+        return False
+
+    if isinstance(value, dict):
+        properties = schema.get("properties") or {}
+        required = schema.get("required") or ()
+        if (
+            not isinstance(properties, dict)
+            or not isinstance(required, (list, tuple))
+            or any(not isinstance(key, str) for key in required)
         ):
             return False
-        elif expected == "boolean" and not isinstance(value, bool):
+        if not set(required).issubset(value):
             return False
-        elif expected == "object" and not isinstance(value, dict):
-            return False
-        elif expected == "array" and not isinstance(value, list):
-            return False
+        for key, item in value.items():
+            item_schema = properties.get(key, schema.get("additionalProperties"))
+            if item_schema is False or not isinstance(item_schema, dict):
+                return False
+            if not _mapping_value_compatible(item, item_schema):
+                return False
+    elif isinstance(value, list):
+        item_schema = schema.get("items")
+        if item_schema is not None:
+            if not isinstance(item_schema, dict) or any(
+                not _mapping_value_compatible(item, item_schema) for item in value
+            ):
+                return False
     return True
 
 
 def _schema_contains_path(schema: dict[str, Any], path: str) -> bool:
     current = schema
     for part in path.split("."):
+        if not isinstance(current, dict):
+            return False
         if current.get("type") == "array":
             current = current.get("items") or {}
+            if not isinstance(current, dict):
+                return False
         properties = current.get("properties") or {}
         if part not in properties:
             return False
@@ -465,6 +553,25 @@ def render_world_results(
         return _render_workspace_matches(intent, evidence or []), []
     if not lines and intent.result_renderer == "geospatial_point_map":
         return _render_coordinate_result(intent, evidence or []), []
+    if not lines and intent.result_renderer == "generated_image":
+        for item in evidence or []:
+            if not item.get("success"):
+                continue
+            try:
+                payload = json.loads(str(item.get("result") or ""))
+            except (TypeError, ValueError):
+                continue
+            media_refs = payload.get("media_refs") if isinstance(payload, dict) else None
+            if isinstance(media_refs, list) and media_refs and all(
+                isinstance(reference, dict)
+                and isinstance(reference.get("media_ref"), str)
+                for reference in media_refs
+            ):
+                return (
+                    f"Generated {len(media_refs)} image(s) using the configured "
+                    "image provider."
+                ), []
+        return intent.empty_result_message, []
     if not lines:
         return intent.empty_result_message, []
 
@@ -494,16 +601,21 @@ def _render_coordinate_result(
         or payload.get("result_available") is not True
         or type(payload.get("latitude")) not in (int, float)
         or type(payload.get("longitude")) not in (int, float)
+        or not -90 <= payload["latitude"] <= 90
+        or not -180 <= payload["longitude"] <= 180
     ):
         return "The supplied coordinates could not be validated; no map is shown."
     return (
-        f"I validated the user-provided coordinates "
+        "I validated the user-provided coordinates "
         f"({payload['latitude']:.5f}, {payload['longitude']:.5f}). "
         "This map is not a live device location."
     )
 
 
-def _render_workspace_matches(intent: WorldIntent, evidence: list[dict[str, Any]]) -> str:
+def _render_workspace_matches(
+    intent: WorldIntent,
+    evidence: list[dict[str, Any]],
+) -> str:
     """Render only the bounded, workspace-confined matches returned by the tool."""
     raw = next(
         (str(item.get("result") or "") for item in evidence if item.get("result")),
@@ -515,15 +627,13 @@ def _render_workspace_matches(intent: WorldIntent, evidence: list[dict[str, Any]
         return "The workspace search completed, but its result could not be parsed safely."
     if not isinstance(payload, dict):
         return "The workspace search completed, but returned an unsupported result shape."
-
     count = payload.get("match_count")
     matches = payload.get("matches")
-    if type(count) is not int or not isinstance(matches, list):
+    if type(count) is not int or count < 0 or not isinstance(matches, list):
         return "The workspace search completed, but returned incomplete match data."
     subject = re.sub(r"[\r\n`*]+", " ", intent.subject).strip()
     if count == 0:
         return f"I searched the configured JARVIS workspace for **{subject}** and found no matches."
-
     lines = []
     for match in matches[:10]:
         if not isinstance(match, dict):
@@ -535,7 +645,7 @@ def _render_workspace_matches(intent: WorldIntent, evidence: list[dict[str, Any]
             continue
         rendered = f"- `{path}:{line}`"
         if text:
-            rendered += f" — `{text[:240]}`"
+            rendered += f" - `{text[:240]}`"
         lines.append(rendered)
     if not lines:
         return (
@@ -572,6 +682,8 @@ def observed_result_count(
                 value = value[part]
             if type(value) is int and value >= 0:
                 return value
+            if isinstance(value, list):
+                return len(value)
     return len(artifacts)
 
 
@@ -653,10 +765,7 @@ class WorldResolverAdapter:
         operation_arguments = (
             (selection.contract or {}).get("operation_arguments") or {}
         ).get(self.intent.operation) or {}
-        args = {
-            key: self.intent.query if value == "$query" else value
-            for key, value in operation_arguments.items()
-        }
+        args = _resolve_intent_arguments(operation_arguments, self.intent)
         if not args and "query" in (
             ((selection.contract or {}).get("input_schema") or {})
             .get("properties", {})
@@ -700,6 +809,19 @@ class WorldResolverAdapter:
             },
             summary="Resolve the request using the selected discovery surface.",
         )
+
+
+def _resolve_intent_arguments(value: Any, intent: WorldIntent) -> Any:
+    if isinstance(value, str) and value in _INTENT_ARGUMENTS:
+        return getattr(intent, _INTENT_ARGUMENTS[value])
+    if isinstance(value, dict):
+        return {
+            key: _resolve_intent_arguments(item, intent)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_resolve_intent_arguments(item, intent) for item in value]
+    return value
 
 
 __all__ = [

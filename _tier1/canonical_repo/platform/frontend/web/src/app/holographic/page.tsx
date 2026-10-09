@@ -549,7 +549,7 @@ export default function HolographicUI() {
                   Checking...
                 </div>
               ) : holographicState?.ai ? (
-                holographicState.ai.healthy ? (
+                holographicState.ai.silverwing.healthy ? (
                   <div className="flex items-center gap-1 text-xs text-green-400">
                     <CheckCircle className="h-3 w-3" />
                     <span>{holographicState.ai.provider || "silverwing"}</span>

@@ -9,9 +9,7 @@ import type {
   BrowserEvent,
   ToolDispatchResult,
 } from './types';
-import type { AgentTask } from '@/features/agents/types';
 import chatApi from './api';
-import wsClient from '@/lib/websocket-client';
 import API_ENDPOINTS from '@/config/api';
 
 const DRAFT_STORAGE_KEY = 'jarvis-chat-drafts';
@@ -37,6 +35,22 @@ function saveDraftMap(drafts: Record<string, string>) {
   }
 }
 
+function streamMessageStatus(status?: string): NonNullable<ChatMessage['status']> {
+  switch (status) {
+    case 'QUEUED':
+    case 'STREAMING':
+    case 'COMPLETED':
+    case 'FAILED':
+    case 'CANCELLED':
+    case 'THINKING':
+    case 'STREAM_INTERRUPTED':
+    case 'DRAFT':
+      return status;
+    default:
+      return 'COMPLETED';
+  }
+}
+
 interface ChatState {
   messages: ChatMessage[];
   sessions: SessionInfo[];
@@ -55,6 +69,7 @@ interface ChatState {
   browserEventHistory: BrowserEvent[];
   _browserSubscribers: Set<(event: BrowserEvent) => void>;
   _drafts: Record<string, string>;
+  _chatUnsubscribe: (() => void) | null;
 
   checkConnection: () => Promise<boolean>;
   sendMessage: (content: string) => Promise<void>;
@@ -105,6 +120,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   browserEventHistory: [],
   _browserSubscribers: new Set(),
   _drafts: {},
+  _chatUnsubscribe: null,
 
   checkConnection: async () => {
     try {
@@ -161,7 +177,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   editAndResend: async (sessionId: string, messageId: string, newContent: string) => {
     try {
-      const result = await chatApi.editAndResend(sessionId, messageId, {
+      await chatApi.editAndResend(sessionId, messageId, {
         new_content: newContent,
       });
       // Update the user message content locally and append a fresh assistant
@@ -250,8 +266,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }));
 
       // Clear draft on success
-      if (get().currentSessionId) {
-        get().clearDraft(get().currentSessionId);
+      const currentSessionId = get().currentSessionId;
+      if (currentSessionId) {
+        get().clearDraft(currentSessionId);
       }
 
       get().loadSessions();
@@ -335,15 +352,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
                           ? { presentation_revision_id: chunk.presentation_revision_id }
                           : {}),
                       },
-                      status: chunk.status || 'COMPLETED',
+                      status: streamMessageStatus(chunk.status),
                     }
                   : msg
               ),
             };
           });
           // Clear draft on successful completion
-          if (chunk.type === 'complete' && get().currentSessionId) {
-            get().clearDraft(get().currentSessionId);
+          const currentSessionId = get().currentSessionId;
+          if (chunk.type === 'complete' && currentSessionId) {
+            get().clearDraft(currentSessionId);
           }
           get().loadSessions();
         } else if (chunk.type === 'error') {
@@ -358,8 +376,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 : msg
             ),
           }));
-          if (get().currentSessionId) {
-            get().clearDraft(get().currentSessionId);
+          const currentSessionId = get().currentSessionId;
+          if (currentSessionId) {
+            get().clearDraft(currentSessionId);
           }
         }
       },
@@ -465,6 +484,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   /// Subscribe to browser events on init so chat context stays in sync.
   initChat: async () => {
     try {
+      if (get()._chatUnsubscribe) return;
       const { useBrowserStore } = await import('@/features/browser/store');
       const unsubscribe = useBrowserStore.getState().subscribeToChat((event) => {
         get().publishBrowserEvent(event as Omit<BrowserEvent, 'timestamp'> & { type: string });
@@ -474,8 +494,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       });
       // Store the unsubscribe fn so it can be cleaned up later
-      (get() as any)._chatUnsubscribe = unsubscribe;
-      set({ browserContext: useBrowserStore.getState().getBrowserContextSummary() });
+      set({
+        _chatUnsubscribe: unsubscribe,
+        browserContext: useBrowserStore.getState().getBrowserContextSummary(),
+      });
     } catch {
       // Browser store not available yet — events will connect later
     }
@@ -571,7 +593,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       // ── Mission integration tools ──────────────────────────────────────────
       // ... additional tool handlers can be added here
-    } catch (error) {
+    } catch {
       return { success: false, error: 'Failed to execute browser tool' };
     }
 

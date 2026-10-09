@@ -349,6 +349,35 @@ export interface ProviderFeatureStatus {
   summary: string;
   features: string[];
   configured: boolean;
+  availability?: 'configured_unverified' | 'not_configured';
+  availability_reason?: string | null;
+}
+
+export interface GeneratedImage {
+  media_ref: string;
+  url: string;
+  prompt: string;
+  model: string;
+  provider: string;
+  content_type: string;
+  width: number;
+  height: number;
+  created_at: number;
+  provenance: {
+    provider: string;
+    model: string;
+    generated_at: number;
+    prompt_sha256: string;
+  };
+}
+
+export interface ImageGenerationResponse {
+  success: boolean;
+  images: GeneratedImage[];
+  count: number;
+  provider: string;
+  model: string;
+  media_refs: string[];
 }
 
 export interface ProviderSettingsResponse {
@@ -726,6 +755,27 @@ class JarvisAPI {
 
   async getProviderSettings(): Promise<ProviderSettingsResponse> {
     return this.request('/api/v1/system/provider-settings');
+  }
+
+  async getImageProviderStatus(): Promise<{
+    providers: Record<string, ProviderFeatureStatus>;
+  }> {
+    return this.request('/api/v1/image/providers');
+  }
+
+  async generateImage(input: {
+    prompt: string;
+    provider: string;
+    size: string;
+    quality: string;
+    style: string;
+    negative_prompt: string | null;
+    num_images: number;
+  }): Promise<ImageGenerationResponse> {
+    return this.request('/api/v1/image/generate', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }, 1);
   }
 
   async updateProviderSettings(data: Partial<ProviderSettings>): Promise<ProviderSettingsResponse> {

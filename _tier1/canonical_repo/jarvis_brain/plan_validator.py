@@ -141,7 +141,7 @@ class PlanValidator:
             # Stage 2b: availability (real capability existence check)
             contract = contracts.get(cap)
             avail = contract.get("availability", "UNKNOWN") if contract else "UNKNOWN"
-            if avail != "AVAILABLE":
+            if avail not in {"AVAILABLE", "DEGRADED"}:
                 issues.append(PlanIssue(stage, "block",
                                         f"capability {cap!r} unavailable ({avail})", cap))
                 blocked.append(cap)

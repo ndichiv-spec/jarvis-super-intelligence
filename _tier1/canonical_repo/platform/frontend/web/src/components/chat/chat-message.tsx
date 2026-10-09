@@ -1,6 +1,7 @@
 'use client';
 
 import { Bot, UserRound } from 'lucide-react';
+import Image from 'next/image';
 import ReactMarkdown from 'react-markdown';
 import { useEffect, useRef, useState } from 'react';
 import remarkGfm from 'remark-gfm';
@@ -184,6 +185,39 @@ function SemanticPresentationView({
                 longitude={point.longitude}
                 label={point.label}
               />
+            </section>
+          );
+        }
+        if (component.type === 'media.image_gallery') {
+          const mediaRefs = new Map(
+            (contract.media_refs ?? []).map((reference) => [reference.id, reference]),
+          );
+          return (
+            <section key={component.id} aria-labelledby={`${component.id}-title`}>
+              <h3 id={`${component.id}-title`} className="mb-1 font-medium text-slate-200">
+                {component.title}
+              </h3>
+              <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {component.items.map((item) => {
+                  const media = mediaRefs.get(item.media_ref);
+                  if (!media) return null;
+                  return (
+                    <li key={item.data_ref} className="min-w-0">
+                      <Image
+                        src={media.url}
+                        alt={item.alt}
+                        width={item.width}
+                        height={item.height}
+                        unoptimized
+                        className="h-auto max-h-[32rem] w-auto max-w-full rounded-lg border border-white/10"
+                      />
+                      <p className="mt-1 text-xs text-slate-400">
+                        Generated with {item.provider} · {item.model}
+                      </p>
+                    </li>
+                  );
+                })}
+              </ul>
             </section>
           );
         }
