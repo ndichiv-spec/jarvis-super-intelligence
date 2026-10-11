@@ -72,12 +72,12 @@ def connector_class(kind: str) -> Optional[type]:
     return _CONNECTORS.get(kind)
 
 
-def list_connectors() -> list:
+def list_connectors(user_id: str) -> list:
     from jarvis_backend.connectors import registry as reg
 
     out = []
     for kind in _CONNECTORS:
-        raw = reg.load(kind)
+        raw = reg.load(kind, user_id=user_id)
         cls = _CONNECTORS[kind]
         is_oauth = kind in ("gmail", "outlook")
         oauth_user_id = (raw or {}).get("oauth_user_id")
@@ -118,7 +118,7 @@ async def execute_connector_action(
     user_id: Optional[str] = None,
     meta: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Run ``action`` on connector ``kind`` with the provided parameters.
+    """Run ``action`` on a caller-owned connector with the provided parameters.
 
     Returns a result dict with ``ok``; never raises for policy failures (they
     are surfaced honestly in ``error`` so the AI can tell the user what is
@@ -127,8 +127,14 @@ async def execute_connector_action(
     cls = connector_class(kind)
     if cls is None:
         return {"ok": False, "error": f"unknown connector kind: {kind}"}
+    if not user_id:
+        return {
+            "ok": False,
+            "connector": kind,
+            "error": "authenticated user identity is required to execute connector actions",
+        }
 
-    raw = registry.load(kind)
+    raw = registry.load(kind, user_id=user_id)
     if raw is None:
         return {
             "ok": False,

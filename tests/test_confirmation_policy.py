@@ -102,9 +102,20 @@ async def test_unconfigured_connector_honest_refusal():
     assert "results" not in res and "sent" not in res
 
 
+async def test_authenticated_lookup_never_falls_back_to_legacy_global_config():
+    registry.save({"kind": "gmail", "provider": "gmail", "enabled": True,
+                   "capabilities": ["read", "send"]})
+    res = await dispatch.execute_connector_action(
+        "gmail", "gmail.send", {"to": ["a@b.com"], "subject": "s", "body": "b"},
+        user_id="u1")
+    assert res["ok"] is False
+    assert "not configured" in res["error"].lower()
+
+
 async def test_unknown_action_honest_refusal():
     _configure_gmail()
-    res = await dispatch.execute_connector_action("gmail", "gmail.nope", {"confirm": True})
+    res = await dispatch.execute_connector_action(
+        "gmail", "gmail.nope", {"confirm": True}, user_id="u1")
     assert res["ok"] is False and "unknown action" in res["error"].lower()
 
 

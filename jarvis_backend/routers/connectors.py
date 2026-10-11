@@ -75,6 +75,13 @@ def _require_admin(user: Dict[str, Any]) -> Dict[str, Any]:
     raise HTTPException(status_code=403, detail="Admin access required for connector management")
 
 
+def _user_id(user: Dict[str, Any]) -> str:
+    user_id = user.get("id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authenticated identity is missing")
+    return str(user_id)
+
+
 def _oauth_result_redirect(result: str, kind: str) -> RedirectResponse:
     app_url = os.environ.get("JARVIS_APP_URL", "http://127.0.0.1:3000").rstrip("/")
     query = urlencode({"oauth_error": result, "provider": kind})
@@ -158,7 +165,7 @@ def _clean_patch(existing: Dict[str, Any], patch: ConnectorPatchIn) -> Dict[str,
 @router.get("")
 async def get_connectors(user: Dict[str, Any] = Depends(get_current_user)):
     _require_admin(user)
-    connectors = list_connectors()
+    connectors = list_connectors(user_id=_user_id(user))
     configured = [c for c in connectors if c.get("configured")]
     return {"connectors": connectors, "count": len(configured)}
 
@@ -169,7 +176,7 @@ async def connector_activity(
     user: Dict[str, Any] = Depends(get_current_user),
 ):
     _require_admin(user)
-    entries = registry.read_audit(limit)
+    entries = registry.read_audit(limit, user_id=_user_id(user))
     return {"entries": entries, "total": len(entries)}
 
 
@@ -179,7 +186,7 @@ async def get_connector(kind: str, user: Dict[str, Any] = Depends(get_current_us
     cls = connector_class(kind)
     if cls is None:
         raise HTTPException(status_code=404, detail=f"Unknown connector kind: {kind}")
-    raw = registry.load(kind)
+    raw = registry.load(kind, user_id=_user_id(user))
     if raw is None:
         raise HTTPException(status_code=404, detail=f"Connector '{kind}' is not configured")
     return {
@@ -246,9 +253,11 @@ async def oauth_disconnect(kind: str, user: Dict[str, Any] = Depends(get_current
     if not user_id:
         raise HTTPException(status_code=401, detail="Authenticated identity is missing")
 
-    raw = registry.load(kind)
+    raw = registry.load(kind, user_id=user_id)
     removed_token = oauth_store.delete_tokens(kind, user_id)
-    removed_config = bool(raw and raw.get("oauth_user_id") == user_id and registry.delete(kind))
+    removed_config = bool(
+        raw and raw.get("oauth_user_id") == user_id and registry.delete(kind, user_id=user_id)
+    )
     if not removed_token and not removed_config:
         raise HTTPException(status_code=404, detail="No OAuth connection found for this account")
 
@@ -326,6 +335,7 @@ async def oauth_callback(kind: str, code: str = "", state: str = "",
     config = {
         "kind": kind,
         "provider": kind,
+        "owner_user_id": uid,
         "oauth_user_id": uid,
         "scopes": cfg.get("scope", ""),
         "account": tokens.get("account"),
@@ -388,7 +398,7 @@ async def test_connector(kind: str, body: ConnectorIn, user: Dict[str, Any] = De
             # Re-test the already-configured connector instead. registry.load()
             # decrypts the stored fernet: secret server-side, so the real
             # password never leaves the API boundary.
-            stored = registry.load(kind)
+            stored = registry.load(kind, user_id=_user_id(user))
             if stored and stored.get("imap_host") and stored.get("imap_user") and stored.get("password"):
                 config.update({
                     "imap_host": str(stored.get("imap_host", "")).strip(),
@@ -408,7 +418,7 @@ async def test_connector(kind: str, body: ConnectorIn, user: Dict[str, Any] = De
     instance = cls(config)
     result = instance.test()
     result["at"] = now_iso()
-    existing = registry.load(kind)
+    existing = registry.load(kind, user_id=_user_id(user))
     if existing is not None:
         existing["last_tested_at"] = now_iso()
         existing["last_test_ok"] = bool(result.get("ok"))
@@ -432,6 +442,7 @@ async def create_connector(kind: str, body: ConnectorIn, user: Dict[str, Any] = 
         possible = cls.possible_capabilities if cls else []
         config = {
             "kind": kind,
+            "owner_user_id": _user_id(user),
             "provider": body.provider,
             "imap_host": body.imap_host.strip(),
             "imap_port": body.imap_port,
@@ -450,19 +461,23 @@ async def create_connector(kind: str, body: ConnectorIn, user: Dict[str, Any] = 
     else:
         config = {
             "kind": kind,
+            "owner_user_id": _user_id(user),
             "provider": body.provider,
             "enabled": body.enabled,
             "created_at": now_iso(),
             "updated_at": now_iso(),
         }
     registry.save(config)
-    return {"ok": True, "config": registry.public_config(registry.load(kind))}
+    return {
+        "ok": True,
+        "config": registry.public_config(registry.load(kind, user_id=_user_id(user))),
+    }
 
 
 @router.patch("/{kind}")
 async def update_connector(kind: str, body: ConnectorPatchIn, user: Dict[str, Any] = Depends(get_current_user)):
     _require_admin(user)
-    existing = registry.load(kind)
+    existing = registry.load(kind, user_id=_user_id(user))
     if existing is None:
         raise HTTPException(status_code=404, detail=f"Connector '{kind}' is not configured")
     updated = _clean_patch(existing, body)
@@ -470,7 +485,10 @@ async def update_connector(kind: str, body: ConnectorPatchIn, user: Dict[str, An
         raise HTTPException(status_code=400, detail="A password is required")
     updated["updated_at"] = now_iso()
     registry.save(updated)
-    return {"ok": True, "config": registry.public_config(registry.load(kind))}
+    return {
+        "ok": True,
+        "config": registry.public_config(registry.load(kind, user_id=_user_id(user))),
+    }
 
 
 def patch_has_password(body: ConnectorPatchIn) -> bool:
@@ -480,7 +498,7 @@ def patch_has_password(body: ConnectorPatchIn) -> bool:
 @router.delete("/{kind}")
 async def delete_connector(kind: str, user: Dict[str, Any] = Depends(get_current_user)):
     _require_admin(user)
-    removed = registry.delete(kind)
+    removed = registry.delete(kind, user_id=_user_id(user))
     if not removed:
         raise HTTPException(status_code=404, detail=f"Connector '{kind}' is not configured")
     return {"ok": True, "removed": kind}
@@ -493,7 +511,7 @@ async def run_connector_action(kind: str, body: ActionIn, user: Dict[str, Any] =
         action=body.action,
         params=body.params,
         actor="user",
-        user_id=user.get("id"),
+        user_id=_user_id(user),
     )
     result.setdefault("authenticated_as", user.get("username"))
     return result

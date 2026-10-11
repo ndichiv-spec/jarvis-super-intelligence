@@ -11,8 +11,20 @@ def test_oauth_disconnect_removes_only_local_credentials(monkeypatch):
     deleted = []
     audit_events = []
     monkeypatch.setattr(connectors, "_require_admin", lambda user: user)
-    monkeypatch.setattr(registry, "load", lambda kind: {"oauth_user_id": "another-user"})
-    monkeypatch.setattr(registry, "delete", lambda kind: deleted.append(kind) or True)
+    monkeypatch.setattr(
+        registry,
+        "load",
+        lambda kind, user_id=None: (
+            {"oauth_user_id": "another-user"}
+            if kind == "gmail" and user_id == "user-1"
+            else None
+        ),
+    )
+    monkeypatch.setattr(
+        registry,
+        "delete",
+        lambda kind, user_id=None: deleted.append((kind, user_id)) or True,
+    )
     monkeypatch.setattr(oauth, "delete_tokens", lambda kind, user_id: user_id == "user-1")
     monkeypatch.setattr(oauth, "audit_record", lambda **event: audit_events.append(event))
 

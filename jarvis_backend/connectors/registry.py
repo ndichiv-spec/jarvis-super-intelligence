@@ -1,12 +1,14 @@
 """Connector configuration registry (persistent + keyed secrets).
 
-Configs live in ``jarvis_data/connectors/<kind>.json``.  Secret fields are
-encrypted at rest (see crypto) and only ever leave the API masked.  A masked
-value sent back in an update is treated as "keep", never as a real secret.
+Configs live in owner-scoped files in ``jarvis_data/connectors``. Secret
+fields are encrypted at rest (see crypto) and only ever leave the API masked.
+A masked value sent back in an update is treated as "keep", never as a real
+secret.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import threading
@@ -30,19 +32,32 @@ class ConnectorNotFound(Exception):
     """No connector of this kind has been configured yet."""
 
 
-def _path(kind: str) -> Path:
-    return CONNECTORS_DIR / f"{kind}.json"
+def _owner_id(config: Dict[str, Any]) -> Optional[str]:
+    owner_id = config.get("owner_user_id") or config.get("oauth_user_id")
+    if owner_id is None:
+        return None
+    return str(owner_id)
 
 
-def load(kind: str) -> Optional[Dict[str, Any]]:
-    """Return the raw config with secrets decrypted (or None if unset)."""
-    p = _path(kind)
+def _path(kind: str, user_id: Optional[str] = None) -> Path:
+    if user_id is None:
+        return CONNECTORS_DIR / f"{kind}.json"
+    owner_key = hashlib.sha256(str(user_id).encode("utf-8")).hexdigest()
+    return CONNECTORS_DIR / f"{kind}-{owner_key}.json"
+
+
+def load(kind: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Load one user's connector config without falling back across owners."""
+    p = _path(kind, user_id)
     if not p.exists():
         return None
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
     except Exception as exc:  # noqa: BLE001
         raise ConnectorCryptoError(f"connector config unreadable for {kind}: {exc}") from exc
+    owner_id = _owner_id(data)
+    if user_id is not None and owner_id != str(user_id):
+        return None
     for field, value in list(data.items()):
         if field in SECRET_FIELDS and isinstance(value, str) and value.startswith("fernet:"):
             try:
@@ -55,6 +70,12 @@ def load(kind: str) -> Optional[Dict[str, Any]]:
 def save(config: Dict[str, Any]) -> Dict[str, Any]:
     """Persist a config (encrypting secret fields).  Returns the stored copy."""
     stored = dict(config)
+    owner_id = _owner_id(stored)
+    oauth_user_id = stored.get("oauth_user_id")
+    if oauth_user_id is not None and owner_id != str(oauth_user_id):
+        raise ValueError("OAuth connector owner must match oauth_user_id")
+    if owner_id is not None:
+        stored["owner_user_id"] = owner_id
     for field in SECRET_FIELDS:
         if field in stored and isinstance(stored.get(field), str) and stored.get(field) != MASK:
             if not stored[field]:
@@ -63,14 +84,15 @@ def save(config: Dict[str, Any]) -> Dict[str, Any]:
                 stored[field] = encrypt_secret(stored[field])
     CONNECTORS_DIR.mkdir(parents=True, exist_ok=True)
     with _lock:
-        tmp = _path(config.get("kind", "email")).with_suffix(".json.tmp")
+        target = _path(config.get("kind", "email"), owner_id)
+        tmp = target.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(stored, indent=2, default=str), encoding="utf-8")
-        os.replace(tmp, _path(config.get("kind", "email")))
+        os.replace(tmp, target)
     return stored
 
 
-def delete(kind: str) -> bool:
-    p = _path(kind)
+def delete(kind: str, user_id: Optional[str] = None) -> bool:
+    p = _path(kind, user_id)
     if not p.exists():
         return False
     with _lock:
@@ -83,6 +105,8 @@ def public_config(raw: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     if raw is None:
         return None
     out = dict(raw)
+    out.pop("owner_user_id", None)
+    out.pop("oauth_user_id", None)
     for field in SECRET_FIELDS:
         if field in out:
             present = bool(out[field])
@@ -102,14 +126,18 @@ def audit(record: Dict[str, Any]) -> None:
         pass
 
 
-def read_audit(limit: int = 50) -> list:
+def read_audit(limit: int = 50, user_id: Optional[str] = None) -> list:
     if not AUDIT_FILE.exists():
         return []
-    lines = AUDIT_FILE.read_text(encoding="utf-8").splitlines()
     rows = []
-    for line in lines[-max(1, limit):]:
+    for line in reversed(AUDIT_FILE.read_text(encoding="utf-8").splitlines()):
         try:
-            rows.append(json.loads(line))
+            record = json.loads(line)
         except Exception:  # noqa: BLE001
             continue
-    return rows[::-1]
+        if user_id is not None and str(record.get("user_id") or "") != str(user_id):
+            continue
+        rows.append(record)
+        if len(rows) >= max(1, limit):
+            break
+    return rows

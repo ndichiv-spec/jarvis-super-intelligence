@@ -103,11 +103,8 @@ async def create_api_key(body: ApiKeyCreateIn, user: Dict[str, Any] = Depends(ge
 async def developer_status(user: Dict[str, Any] = Depends(get_current_user)):
     data = get_store("ai_access").load()
     accesses = data.get("accesses", {})
-    try:
-        from jarvis_backend.connectors import dispatch as conn_dispatch
-        connectors = conn_dispatch.list_connectors()
-    except Exception:
-        connectors = []
+    from jarvis_backend.connectors import dispatch as conn_dispatch
+    connectors = conn_dispatch.list_connectors(user_id=str(user.get("id") or ""))
     return {
         "user": user.get("username"),
         "ai_access": accesses,

@@ -890,7 +890,7 @@ async def system_readiness(user: Dict[str, Any] = Depends(_require_auth)):
         "href": "/dashboard/settings",
     })
 
-    for connector in list_connectors():
+    for connector in list_connectors(user_id=str(user.get("id") or "")):
         connection_status = connector.get("connection_status")
         configured = bool(connector.get("configured"))
         active = configured and connector.get("enabled") and connection_status == "Connected"

@@ -70,7 +70,8 @@ async def test_send_without_capability_refused():
     registry.save({"kind": "gmail", "provider": "gmail", "oauth_user_id": "u1",
                    "capabilities": ["read"], "enabled": True})
     res = await dispatch.execute_connector_action(
-        "gmail", "gmail.send", {"to": ["a@b.com"], "subject": "s", "body": "b"})
+        "gmail", "gmail.send", {"to": ["a@b.com"], "subject": "s", "body": "b"},
+        user_id="u1")
     assert res["ok"] is False
     assert "send" in res["error"] and "capability" in res["error"].lower()
 

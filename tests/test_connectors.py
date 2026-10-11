@@ -56,6 +56,7 @@ def iso_dirs(tmp_path, monkeypatch):
 def _config(fakes, **overrides):
     cfg = {
         "kind": "email",
+        "owner_user_id": "test-owner",
         "provider": "Fake",
         "enabled": True,
         "imap_host": "127.0.0.1",
@@ -77,7 +78,13 @@ def _run(kind, action, params=None, actor="test", user_id=None):
     from jarvis_backend.connectors.dispatch import execute_connector_action
 
     return asyncio.run(
-        execute_connector_action(kind, action, params or {}, actor=actor, user_id=user_id)
+        execute_connector_action(
+            kind,
+            action,
+            params or {},
+            actor=actor,
+            user_id=user_id or "test-owner",
+        )
     )
 
 
@@ -110,9 +117,9 @@ def test_secret_round_trips_and_is_never_plaintext_on_disk(iso_dirs, mail_fakes)
 
     cfg = _config(mail_fakes)
     registry.save(cfg)
-    loaded = registry.load("email")
+    loaded = registry.load("email", user_id="test-owner")
     assert loaded["password"] == "app-password-123"
-    disk = (iso_dirs[0] / "email.json").read_text(encoding="utf-8")
+    disk = next(iso_dirs[0].glob("email-*.json")).read_text(encoding="utf-8")
     assert "app-password-123" not in disk
     assert "fernet:" in disk
 
@@ -121,9 +128,10 @@ def test_public_config_masks_secret(iso_dirs, mail_fakes):
     from jarvis_backend.connectors import registry
 
     registry.save(_config(mail_fakes))
-    pub = registry.public_config(registry.load("email"))
+    pub = registry.public_config(registry.load("email", user_id="test-owner"))
     assert pub["password"] == registry.MASK
     assert pub["password_set"] is True
+    assert "owner_user_id" not in pub
 
     pub_none = registry.public_config(None)
     assert pub_none is None
@@ -146,6 +154,48 @@ def test_disabled_connector_refuses(iso_dirs, mail_fakes):
     result = _run("email", "email.folders", {})
     assert result["ok"] is False
     assert "disabled" in result["error"].lower()
+
+
+def test_connector_config_and_execution_are_owner_scoped(iso_dirs, mail_fakes):
+    from jarvis_backend.connectors import registry
+
+    registry.save(_config(mail_fakes, owner_user_id="owner-1"))
+
+    assert registry.load("email", user_id="owner-1") is not None
+    assert registry.load("email", user_id="owner-2") is None
+    denied = _run("email", "email.folders", user_id="owner-2")
+    assert denied["ok"] is False
+    assert "not configured" in denied["error"].lower()
+
+    allowed = _run("email", "email.folders", user_id="owner-1")
+    assert allowed["ok"] is True
+
+    with pytest.raises(ValueError, match="owner must match oauth_user_id"):
+        registry.save({
+            "kind": "gmail",
+            "owner_user_id": "owner-1",
+            "oauth_user_id": "owner-2",
+        })
+
+
+def test_connector_audit_history_is_owner_scoped(iso_dirs):
+    from jarvis_backend.connectors import registry
+
+    registry.audit({"user_id": "owner-1", "action": "read"})
+    registry.audit({"user_id": "owner-2", "action": "send"})
+
+    assert [event["action"] for event in registry.read_audit(user_id="owner-1")] == ["read"]
+    assert [event["action"] for event in registry.read_audit(user_id="owner-2")] == ["send"]
+
+
+def test_connector_execution_requires_authenticated_owner(iso_dirs, mail_fakes):
+    from jarvis_backend.connectors import registry
+    from jarvis_backend.connectors.dispatch import execute_connector_action
+
+    registry.save(_config(mail_fakes))
+    result = asyncio.run(execute_connector_action("email", "email.folders", {}))
+    assert result["ok"] is False
+    assert "authenticated user identity is required" in result["error"].lower()
 
 
 def test_capability_gate_refuses_send(iso_dirs, mail_fakes):
@@ -338,6 +388,44 @@ def test_connector_lifecycle_via_api(client, iso_dirs, mail_fakes):
     removed = client.delete("/api/v1/connectors/email", headers=headers)
     assert removed.status_code == 200
     assert client.get("/api/v1/connectors", headers=headers).json()["count"] == 0
+
+
+def test_connector_api_is_scoped_to_authenticated_owner(client, iso_dirs, mail_fakes):
+    owner_headers = _admin_headers()
+    created = client.post(
+        "/api/v1/connectors/email",
+        json=_config(mail_fakes),
+        headers=owner_headers,
+    )
+    assert created.status_code == 200, created.text
+
+    other_headers = _admin_headers()
+    other_listing = client.get("/api/v1/connectors", headers=other_headers)
+    assert other_listing.status_code == 200
+    assert other_listing.json()["count"] == 0
+    assert client.get("/api/v1/connectors/email", headers=other_headers).status_code == 404
+
+    denied = client.post(
+        "/api/v1/connectors/email/actions",
+        json={"action": "email.folders", "params": {}},
+        headers=other_headers,
+    )
+    assert denied.status_code == 200
+    assert denied.json()["ok"] is False
+    assert "not configured" in denied.json()["error"].lower()
+
+    executed = client.post(
+        "/api/v1/connectors/email/actions",
+        json={"action": "email.folders", "params": {}},
+        headers=owner_headers,
+    )
+    assert executed.status_code == 200
+    assert executed.json()["ok"] is True
+
+    owner_activity = client.get("/api/v1/connectors/activity", headers=owner_headers)
+    other_activity = client.get("/api/v1/connectors/activity", headers=other_headers)
+    assert owner_activity.json()["total"] == 1
+    assert other_activity.json()["total"] == 0
 
 
 def test_agent_act_email_refuses_when_unconfigured(client, iso_dirs, auth_headers):

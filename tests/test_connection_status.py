@@ -41,21 +41,20 @@ def test_list_includes_gmail_and_outlook(client, admin_headers):
 
 
 def test_list_reports_authorization_required_when_unconnected(client, admin_headers):
-    registry.save({"kind": "gmail", "provider": "gmail", "oauth_user_id": "u1",
+    registry.save({"kind": "gmail", "provider": "gmail", "oauth_user_id": "test-admin",
                    "capabilities": ["read"], "enabled": True})
     r = client.get("/api/v1/connectors", headers=admin_headers)
     assert r.status_code == 200
     gmail = next(c for c in r.json()["connectors"] if c["kind"] == "gmail")
     assert gmail["configured"] is True
     assert gmail["connection_status"] == "Authorization required"
-    # oauth_user_id is not a secret field, so it is surfaced as-is (not a token);
-    # the actual bearer lives only in the encrypted SQL vault, never here.
-    assert "oauth_user_id" not in gmail.get("config", {}) or gmail["config"].get("oauth_user_id") == "u1"
+    # The OAuth owner id and bearer are private server-side connector metadata.
+    assert "oauth_user_id" not in gmail.get("config", {})
     assert gmail.get("account") is None
 
 
 def test_get_connector_reports_connection_status(client, admin_headers):
-    registry.save({"kind": "gmail", "provider": "gmail", "oauth_user_id": "u1",
+    registry.save({"kind": "gmail", "provider": "gmail", "oauth_user_id": "test-admin",
                    "capabilities": ["read", "summarize", "draft", "send"], "enabled": True})
     r = client.get("/api/v1/connectors/gmail", headers=admin_headers)
     assert r.status_code == 200
