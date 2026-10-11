@@ -4,13 +4,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  MessageSquare, Brain, BarChart3, Settings, Cpu, Database, Globe,
-  Mail, Puzzle, Mic, Image, Eye, Box, Network, Search,
-  Bell, Lock, Key, GitBranch, Target, Gauge,
-  FileText, Palette, Wrench, FlaskConical, Satellite,
-  Shield, ShieldCheck, Users, Layers, Crown, Terminal,
-  Workflow, MonitorPlay, Code2, Library, Activity,
-  ArrowUpCircle, Sparkles, BookOpen, X, Plus,
+  MessageSquare, Brain, Settings, Cpu, Globe,
+  Mail, Puzzle, Mic, Image as ImageIcon, Search,
+  Key, Shield, ShieldCheck, Terminal,
+  Workflow, Code2, Library, Activity,
+  BookOpen, X, Plus,
 } from 'lucide-react';
 import { Sidebar } from './sidebar';
 import { Header } from './header';
@@ -167,7 +165,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [router, commandOpen, toggleBrowserPanel]);
+  }, [router, commandOpen, toggleBrowserPanel, activityPanelOpen, setWorkspace]);
 
   // Mobile responsiveness
   useEffect(() => {
@@ -220,29 +218,20 @@ export function DashboardShell({ children }: DashboardShellProps) {
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
           <CommandGroup heading="AI Core">
-            <CommandItem onSelect={() => runCommand(() => { newSession(); router.push('/dashboard'); })}>
-              <MessageSquare className="mr-2 h-4 w-4" /> Neural Chat
+            <CommandItem onSelect={() => runCommand(() => { newSession(); router.push('/chat'); })}>
+              <MessageSquare className="mr-2 h-4 w-4" /> Assistant
             </CommandItem>
             <CommandItem onSelect={() => runCommand(() => router.push('/dashboard/agents'))}>
               <Brain className="mr-2 h-4 w-4" /> Agent Orchestration
-            </CommandItem>
-            <CommandItem onSelect={() => runCommand(() => router.push('/omega'))}>
-              <Layers className="mr-2 h-4 w-4" /> OMEGA Control
-            </CommandItem>
-            <CommandItem onSelect={() => runCommand(() => router.push('/supreme'))}>
-              <Crown className="mr-2 h-4 w-4" /> Supreme Intelligence
             </CommandItem>
             <CommandItem onSelect={() => runCommand(() => router.push('/voice'))}>
               <Mic className="mr-2 h-4 w-4" /> Voice Interface
             </CommandItem>
             <CommandItem onSelect={() => runCommand(() => router.push('/image-generation'))}>
-              <Image className="mr-2 h-4 w-4" /> Image Generation
+              <ImageIcon className="mr-2 h-4 w-4" /> Image Generation
             </CommandItem>
           </CommandGroup>
           <CommandGroup heading="Workspace">
-            <CommandItem onSelect={() => runCommand(() => router.push('/desktop'))}>
-              <MonitorPlay className="mr-2 h-4 w-4" /> Virtual Desktop
-            </CommandItem>
             <CommandItem onSelect={() => runCommand(() => router.push('/dashboard/embedded-browser'))}>
               <Globe className="mr-2 h-4 w-4" /> Embedded Browser
             </CommandItem>
@@ -254,9 +243,6 @@ export function DashboardShell({ children }: DashboardShellProps) {
             </CommandItem>
             <CommandItem onSelect={() => runCommand(() => router.push('/workflows'))}>
               <Workflow className="mr-2 h-4 w-4" /> Workflows
-            </CommandItem>
-            <CommandItem onSelect={() => runCommand(() => router.push('/holographic'))}>
-              <Sparkles className="mr-2 h-4 w-4" /> Holographic
             </CommandItem>
             <CommandItem onSelect={() => runCommand(() => router.push('/dashboard/self-reliant'))}>
               <Code2 className="mr-2 h-4 w-4" /> Self-Reliant IDE
@@ -298,9 +284,6 @@ export function DashboardShell({ children }: DashboardShellProps) {
             <CommandItem onSelect={() => runCommand(() => router.push('/dashboard/admin'))}>
               <ShieldCheck className="mr-2 h-4 w-4" /> Admin Console
             </CommandItem>
-            <CommandItem onSelect={() => runCommand(() => router.push('/upgrade'))}>
-              <ArrowUpCircle className="mr-2 h-4 w-4" /> Self-Upgrade
-            </CommandItem>
             <CommandItem onSelect={() => runCommand(() => router.push('/dashboard/api-keys'))}>
               <Key className="mr-2 h-4 w-4" /> API Keys
             </CommandItem>
@@ -309,7 +292,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
             </CommandItem>
           </CommandGroup>
           <CommandGroup heading="Quick Actions">
-            <CommandItem onSelect={() => runCommand(() => { newSession(); router.push('/dashboard'); })}>
+            <CommandItem onSelect={() => runCommand(() => { newSession(); router.push('/chat'); })}>
               <MessageSquare className="mr-2 h-4 w-4" /> New Chat Session
             </CommandItem>
             <CommandItem onSelect={() => runCommand(() => router.push('/dashboard/monitoring'))}>

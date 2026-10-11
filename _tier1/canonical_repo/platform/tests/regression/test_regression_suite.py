@@ -55,7 +55,7 @@ class TestRegressionSuite:
         if os.path.exists("pytest.ini"):
             config = configparser.ConfigParser()
             config.read("pytest.ini")
-            mode = config.get("tool:pytest", "asyncio_mode", fallback="")
+            mode = config.get("pytest", "asyncio_mode", fallback="")
             assert mode == "auto", "pytest.ini must set asyncio_mode = auto"
         elif os.path.exists("pyproject.toml"):
             import tomllib

@@ -5,6 +5,11 @@ import subprocess
 
 import pytest
 
+pytest.importorskip(
+    "digital_clock",
+    reason="Legacy workspace connector module is not part of the canonical platform.",
+)
+
 import digital_clock
 
 

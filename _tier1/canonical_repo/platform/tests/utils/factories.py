@@ -84,21 +84,20 @@ class PluginManifestFactory:
                version: str = "1.0.0",
                **overrides):
         from infrastructure.plugins.types import (
-            PluginManifest, PluginPermission, PluginHook,
+            PluginManifest, PluginPermission, PluginHook, PluginVersion,
         )
         return PluginManifest(
             id=plugin_id,
             name=name,
-            version=version,
+            version=PluginVersion.parse(version),
             description=overrides.pop("description", "A test plugin"),
             author=overrides.pop("author", "Test Author"),
             permissions=overrides.pop("permissions", [
-                PluginPermission.KNOWLEDGE_READ,
                 PluginPermission.MEMORY_READ,
             ]),
             hooks=overrides.pop("hooks", [
-                PluginHook.CHAT_BEFORE_RESPOND,
-                PluginHook.KNOWLEDGE_BEFORE_RETRIEVE,
+                PluginHook.CHAT_BEFORE_RESPONSE,
+                PluginHook.MEMORY_AFTER_RETRIEVE,
             ]),
             **overrides,
         )

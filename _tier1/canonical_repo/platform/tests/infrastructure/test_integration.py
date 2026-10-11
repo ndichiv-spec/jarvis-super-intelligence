@@ -1,52 +1,112 @@
 """Integration tests for cross-subsystem infrastructure workflows."""
 
 from __future__ import annotations
+
+import os
+
 import pytest
-import asyncio
 
 
 class TestConfigAndVaultIntegration:
     def test_config_loader_accepts_vault_values(self):
         from infrastructure.config import ConfigLoader
-        from infrastructure.vault import SecretsManager
+        from infrastructure.vault.manager import SecretBackend, SecretsManager
+
+        class TestBackend(SecretBackend):
+            def name(self):
+                return "test"
+
+            def get(self, key):
+                return "sk-test123" if key == "api_key" else None
+
+            def list_keys(self):
+                return ["api_key"]
+
+            def health(self):
+                return True
+
         loader = ConfigLoader()
-        vault = SecretsManager()
-        vault.set("api_key", "sk-test123")
-        loader.load_from_dict({"api_key": vault.get("api_key")})
+        vault = SecretsManager(backends=[TestBackend()])
+        loader.add_source(
+            "vault",
+            priority=10,
+            loader=lambda: {"api_key": vault.get("api_key")},
+        )
+        loader.load()
         assert loader.get("api_key") == "sk-test123"
 
     def test_env_var_overrides_vault(self):
         from infrastructure.config import ConfigLoader
         from tests.utils.helpers import temp_env_vars
+
         loader = ConfigLoader()
-        loader.load_from_dict({"api_key": "from_config"})
+        loader.add_source(
+            "config",
+            priority=20,
+            loader=lambda: {"api_key": "from_config"},
+        )
+        loader.load()
         with temp_env_vars({"JARVIS_API_KEY": "from_env"}):
-            loader.load_from_env(prefix="JARVIS_")
+            loader.add_source(
+                "environment",
+                priority=10,
+                loader=lambda: {"api_key": os.environ["JARVIS_API_KEY"]},
+            )
+            loader.load()
             assert loader.get("api_key") == "from_env"
 
 
 class TestHealthAndStartupIntegration:
-    def test_health_checker_exposes_startup_status(self):
-        from infrastructure.health import HealthChecker
-        from infrastructure.startup import StartupValidator
+    @pytest.mark.asyncio
+    async def test_health_checker_exposes_startup_status(self):
+        from infrastructure.health import (
+            ComponentStatus,
+            HealthCheck,
+            HealthChecker,
+            HealthComponent,
+        )
+        from infrastructure.startup import CheckResult, StartupCheck, StartupValidator
+
+        async def startup_check():
+            return CheckResult(name="startup", passed=True)
+
+        async def healthy_check():
+            return HealthComponent(name="startup", status=ComponentStatus.HEALTHY)
+
         checker = HealthChecker()
         validator = StartupValidator()
-        checker.register("startup")
-        result = validator.validate()
-        if result["passed"]:
-            checker.report_healthy("startup")
-        else:
-            checker.report_unhealthy("startup", error="Startup checks failed")
-        status = checker.get_status()
-        assert "startup" in status["components"]
+        validator.register(StartupCheck(
+            name="startup",
+            check_fn=startup_check,
+        ))
+        result = await validator.run()
+        assert validator.report(result)["can_start"] is True
 
-    def test_component_healthy_after_validator_passes(self):
-        from infrastructure.health import HealthChecker
+        checker.register(HealthCheck(
+            name="startup",
+            check_fn=healthy_check,
+        ))
+        status = await checker.get_status()
+        assert status.components["startup"].status is ComponentStatus.HEALTHY
+
+    @pytest.mark.asyncio
+    async def test_component_healthy_after_validator_passes(self):
+        from infrastructure.health import (
+            ComponentStatus,
+            HealthChecker,
+            HealthComponent,
+        )
+
+        async def healthy_config_check():
+            return HealthComponent(name="config", status=ComponentStatus.HEALTHY)
+
         checker = HealthChecker()
-        checker.register("config", required=True)
-        checker.report_healthy("config")
-        status = checker.get_status()
-        assert status["healthy"] is True
+        checker.register_func(
+            "config",
+            healthy_config_check,
+        )
+        status = await checker.get_status()
+        assert status.status is ComponentStatus.HEALTHY
 
 
 class TestSecurityAndRateLimitIntegration:
@@ -73,34 +133,34 @@ class TestSecurityAndRateLimitIntegration:
 
 class TestErrorAndObservabilityIntegration:
     def test_error_tracker_feeds_metrics(self):
-        from infrastructure.errors import ErrorTracker, ErrorEvent
+        from infrastructure.errors import ErrorEvent, ErrorTracker
         from infrastructure.observability import MetricsCollector
         tracker = ErrorTracker()
         metrics = MetricsCollector()
         error_count = metrics.counter("errors")
-        tracker.add_exporter(lambda event: error_count.inc())
+        tracker.add_exporter(lambda _event: error_count.inc())
         tracker.track(ErrorEvent(code="e1", subsystem="core"))
         assert error_count.value == 1
         tracker.track(ErrorEvent(code="e2", subsystem="plugins"))
         assert error_count.value == 2
 
     def test_errors_increment_counter_via_metrics(self):
-        from infrastructure.errors import ErrorTracker, ErrorEvent
+        from infrastructure.errors import ErrorEvent, ErrorTracker
         from infrastructure.observability import MetricsCollector
         tracker = ErrorTracker()
         metrics = MetricsCollector()
         counter = metrics.counter("test_errors")
-        tracker.add_exporter(lambda e: counter.inc())
-        for _ in range(3):
-            tracker.track(ErrorEvent(code="x", subsystem="test"))
+        tracker.add_exporter(lambda _event: counter.inc())
+        for index in range(3):
+            tracker.track(ErrorEvent(code=f"x-{index}", subsystem="test"))
         assert counter.value == 3
 
 
 class TestResilienceAndErrorIntegration:
     @pytest.mark.asyncio
     async def test_circuit_breaker_records_errors(self):
+        from infrastructure.errors import ErrorEvent, ErrorTracker
         from infrastructure.resilience import CircuitBreaker
-        from infrastructure.errors import ErrorTracker, ErrorEvent
         breaker = CircuitBreaker(name="integration-test", failure_threshold=2, recovery_timeout=60)
         tracker = ErrorTracker()
         async def fail():
@@ -116,7 +176,6 @@ class TestResilienceAndErrorIntegration:
 
     @pytest.mark.asyncio
     async def test_retry_with_fallback_integration(self):
-        from infrastructure.resilience import retry, RetryStrategy
         from infrastructure.resilience.fallback import FallbackChain, FallbackProvider
         call_count = 0
         async def flaky_primary():
@@ -139,8 +198,8 @@ class TestResilienceAndErrorIntegration:
 class TestFullObservabilityPipeline:
     @pytest.mark.asyncio
     async def test_trace_metrics_and_errors(self):
-        from infrastructure.observability import Tracer, MetricsCollector
-        from infrastructure.errors import ErrorTracker, ErrorEvent
+        from infrastructure.errors import ErrorEvent, ErrorTracker
+        from infrastructure.observability import MetricsCollector, Tracer
         tracer = Tracer(service_name="integration")
         metrics = MetricsCollector()
         tracker = ErrorTracker()
@@ -159,11 +218,16 @@ class TestFullObservabilityPipeline:
 
 class TestKnowledgeAndStoreIntegration:
     def test_document_ingest_and_search(self):
-        from infrastructure.knowledge import KnowledgeStore, KnowledgeIngestor, ChunkConfig
+        from infrastructure.knowledge import ChunkConfig, KnowledgeIngestor, KnowledgeStore
         from infrastructure.knowledge.types import ChunkingStrategy, KnowledgeStatus, SearchQuery
         store = KnowledgeStore()
         ingestor = KnowledgeIngestor(
-            ChunkConfig(chunk_size=50, min_chunk_size=10, strategy=ChunkingStrategy.FIXED_SIZE)
+            ChunkConfig(
+                chunk_size=50,
+                chunk_overlap=0,
+                min_chunk_size=10,
+                strategy=ChunkingStrategy.FIXED_SIZE,
+            )
         )
         content = "Machine learning is transforming artificial intelligence research."
         doc = store.create_document(content, status=KnowledgeStatus.ACTIVE)
@@ -177,7 +241,7 @@ class TestKnowledgeAndStoreIntegration:
         assert results[0].score > 0
 
     def test_document_lifecycle(self):
-        from infrastructure.knowledge import KnowledgeStore, LearningController, LearningConfig
+        from infrastructure.knowledge import KnowledgeStore, LearningConfig, LearningController
         from infrastructure.knowledge.types import KnowledgeSource, KnowledgeStatus
         store = KnowledgeStore()
         controller = LearningController(store, LearningConfig(require_approval=True))
@@ -194,12 +258,21 @@ class TestKnowledgeAndStoreIntegration:
     @pytest.mark.asyncio
     async def test_rag_pipeline_with_store(self):
         from infrastructure.knowledge import (
-            KnowledgeStore, KnowledgeRetriever, KnowledgeIngestor, ChunkConfig, RAGPipeline,
+            ChunkConfig,
+            KnowledgeIngestor,
+            KnowledgeRetriever,
+            KnowledgeStore,
+            RAGPipeline,
         )
         from infrastructure.knowledge.types import ChunkingStrategy, KnowledgeStatus
         store = KnowledgeStore()
         ingestor = KnowledgeIngestor(
-            ChunkConfig(chunk_size=50, min_chunk_size=10, strategy=ChunkingStrategy.FIXED_SIZE)
+            ChunkConfig(
+                chunk_size=50,
+                chunk_overlap=0,
+                min_chunk_size=10,
+                strategy=ChunkingStrategy.FIXED_SIZE,
+            )
         )
         doc = store.create_document(
             "Python is a versatile programming language.", status=KnowledgeStatus.ACTIVE,
@@ -210,6 +283,6 @@ class TestKnowledgeAndStoreIntegration:
             store.add_chunk(c)
         retriever = KnowledgeRetriever(store)
         pipeline = RAGPipeline(retriever)
-        result = await pipeline.generate("Tell me about Python")
+        result = await pipeline.generate("Python versatile programming language")
         assert result.answer
         assert len(result.context.chunks) > 0

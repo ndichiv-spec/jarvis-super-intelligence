@@ -84,6 +84,7 @@ async def health_status():
     return {
         "status": core_status,
         "alive": True,
+        "timestamp": now_iso(),
         **deployment_metadata(),
         "uptime_seconds": _uptime(),
         "system": _system_summary(),
@@ -96,6 +97,7 @@ async def health_status():
     }
 
 
+@router.get("/api/v1/health/metrics", include_in_schema=False)
 @router.get("/api/v1/metrics")
 async def metrics_endpoint():
     """Live system + request metrics (requests, latency, errors, memory)."""
@@ -117,6 +119,7 @@ async def metrics_endpoint():
 # PART A — platform control-plane entrypoints (no /v1 prefix)
 # ------------------------------------------------------------------ #
 
+@router.get("/api/v1/health/live", include_in_schema=False)
 @router.get("/health/live")
 async def health_live():
     """Liveness only — is the process alive?"""
@@ -238,6 +241,7 @@ async def _readiness_snapshot() -> dict:
     }
 
 
+@router.get("/api/v1/health/ready", include_in_schema=False)
 @router.get("/health/ready")
 async def health_ready(response: Response):
     snapshot = await _readiness_snapshot()
@@ -248,8 +252,8 @@ async def health_ready(response: Response):
 
 @router.get("/metrics", include_in_schema=False)
 async def prometheus_metrics():
-    from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
     from fastapi.responses import Response as MetricsResponse
+    from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
     return MetricsResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
@@ -338,7 +342,7 @@ async def api_providers():
             "model": brain.get("model"),
             "endpoint": brain_ep,
             "backend": brain.get("backend"),
-            "provider": brain.get("provider"),
+            "backend_provider": brain.get("provider"),
             "latency_ms": brain.get("latency_ms"),
             "models": [_os.environ.get("JARVIS_BRAIN_MODEL")] if brain.get("model") else [],
         })

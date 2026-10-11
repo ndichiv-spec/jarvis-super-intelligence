@@ -219,6 +219,7 @@ def build_execution_presentation(
     command_id: str | None,
     execution_id: str | None,
     requested_modality: str | None = None,
+    task_status: str | None = None,
 ) -> dict[str, Any]:
     """Plan presentation only from the actual result and approved primitives."""
     refs: list[dict[str, str]] = []
@@ -237,7 +238,9 @@ def build_execution_presentation(
             f"{requested_modality} presentation is unavailable; showing text instead."
         ).strip()
 
-    if success and operation in {"web.search", "media.discovery"}:
+    if success and operation in {
+        "web.search", "media.discovery", "research.compare",
+    }:
         objective = "research"
         sources = []
         if execution_id:
@@ -252,7 +255,11 @@ def build_execution_presentation(
                 source_provenance.append({
                     "data_ref": reference_id,
                     "source_type": "public_web",
-                    "observed_at": datetime.now(timezone.utc).isoformat(),
+                    "observed_at": (
+                        str(artifact.get("retrieved_at"))
+                        if isinstance(artifact.get("retrieved_at"), str)
+                        else datetime.now(timezone.utc).isoformat()
+                    ),
                 })
                 interactions.append({
                     "id": f"open-source-{index}",
@@ -271,7 +278,11 @@ def build_execution_presentation(
             components.append({
                 "id": "sources",
                 "type": "research.source_list",
-                "title": "Observed sources",
+                "title": (
+                    "Observed public search results"
+                    if operation == "research.compare"
+                    else "Observed sources"
+                ),
                 "items": sources,
             })
             modalities.append("links")
@@ -385,10 +396,12 @@ def build_execution_presentation(
 
     modalities = list(dict.fromkeys(modalities))
     allowed_refs = {item["id"] for item in refs}
-    task_status = (
+    resolved_task_status = task_status or (
         "completed" if success else
         "unsupported" if operation == "media.playback" else "error"
     )
+    if resolved_task_status not in {"completed", "partial", "error", "unsupported"}:
+        raise PresentationContractError("invalid execution presentation task status")
     focus = objective_hierarchy[0]
     return validate_presentation_contract({
         "contract_version": CONTRACT_VERSION,
@@ -417,7 +430,7 @@ def build_execution_presentation(
         },
         "errors": errors,
         "task_state": {
-            "status": task_status,
+            "status": resolved_task_status,
             "message": safe_message or "No operation result was observed.",
         },
         "source_provenance": source_provenance,
@@ -1003,17 +1016,11 @@ def _public_https_url(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
     try:
+        from .world_resolver import _is_public_https_url
+
         parsed = urlsplit(value)
-        host = (parsed.hostname or "").rstrip(".").lower()
         if (
-            parsed.scheme != "https"
-            or not host
-            or parsed.username
-            or parsed.password
-            or parsed.port not in (None, 443)
-            or re.search(r"[\s<>\"'`\\]", value)
-            or host == "localhost"
-            or host.endswith((".localhost", ".local", ".internal"))
+            not _is_public_https_url(value)
             or any(
                 re.search(r"(?:token|secret|password|credential|auth|session|signature|^key$|^sig$)",
                           key, re.IGNORECASE)

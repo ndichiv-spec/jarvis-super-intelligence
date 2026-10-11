@@ -120,17 +120,6 @@ const APP_ICONS: Record<string, React.ElementType> = {
   default: Grid3X3,
 };
 
-const FALLBACK_APPS: AppItem[] = [
-  { name: "Notepad", command: "notepad" },
-  { name: "Browser", command: "browser" },
-  { name: "Terminal", command: "cmd" },
-  { name: "File Explorer", command: "explorer" },
-  { name: "Calculator", command: "calculator" },
-  { name: "Photos", command: "photos" },
-  { name: "Music Player", command: "music" },
-  { name: "Video Player", command: "video" },
-];
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function formatUptime(seconds: number): string {
@@ -631,20 +620,24 @@ function ProcessManager() {
 function AppLauncher() {
   const [apps, setApps] = useState<AppItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [launching, setLaunching] = useState<string | null>(null);
 
   const fetchApps = useCallback(async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const data = await jarvisAPI.getCommonApps();
       const appList = (data.apps || data.common_apps || data) as AppItem[];
-      if (Array.isArray(appList) && appList.length > 0) {
-        setApps(appList);
+      if (!Array.isArray(appList)) {
+        setApps([]);
+        setLoadError("The applications endpoint returned an invalid response.");
       } else {
-        setApps(FALLBACK_APPS);
+        setApps(appList);
       }
-    } catch {
-      setApps(FALLBACK_APPS);
+    } catch (error) {
+      setApps([]);
+      setLoadError(error instanceof Error ? error.message : "Unknown error");
     } finally {
       setIsLoading(false);
     }
@@ -677,6 +670,14 @@ function AppLauncher() {
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold">Applications</h3>
+      {loadError ? (
+        <div role="alert" className="space-y-3 rounded-lg border border-destructive/30 p-4 text-sm">
+          <p>Applications are unavailable: {loadError}</p>
+          <Button variant="outline" size="sm" onClick={() => void fetchApps()}>Retry</Button>
+        </div>
+      ) : apps.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No applications were returned by the backend.</p>
+      ) : (
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
         {apps.map((app, i) => {
           const Icon = getAppIcon(app.command);
@@ -719,6 +720,7 @@ function AppLauncher() {
           );
         })}
       </div>
+      )}
     </div>
   );
 }

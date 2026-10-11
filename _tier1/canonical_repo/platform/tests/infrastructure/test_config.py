@@ -1,9 +1,10 @@
 """Tests for infrastructure.config — ConfigLoader and sub-settings."""
 
 from __future__ import annotations
+
 import pytest
-from tests.utils.helpers import temp_env_vars
-from infrastructure.config.loader import ConfigLoader, ConfigRule, ConfigValidationError
+
+from infrastructure.config.loader import ConfigRule, ConfigValidationError
 
 
 class TestConfigLoader:
@@ -15,11 +16,11 @@ class TestConfigLoader:
         config = config_loader.load()
         assert config["key"] == "val"
 
-    def test_source_lower_priority_overrides(self, config_loader):
+    def test_higher_priority_source_overrides(self, config_loader):
         config_loader.add_source("high", priority=10, loader=lambda: {"key": "high_val"})
         config_loader.add_source("low", priority=20, loader=lambda: {"key": "low_val"})
         config = config_loader.load()
-        assert config["key"] == "low_val"
+        assert config["key"] == "high_val"
 
     def test_rule_required_missing_raises(self, config_loader):
         config_loader.add_rule(ConfigRule(key="required_key", required=True, description="Must exist"))
@@ -110,4 +111,3 @@ class TestServerSettings:
         s = ServerSettings()
         assert s.port == 8000
         assert s.debug is False
-

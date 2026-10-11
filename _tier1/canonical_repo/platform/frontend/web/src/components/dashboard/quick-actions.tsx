@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   MessageSquare, Activity, BarChart3,
-  MonitorPlay,
+  Globe,
 } from 'lucide-react';
 
 interface QuickAction {
@@ -16,7 +16,7 @@ interface QuickAction {
 }
 
 const ACTIONS: QuickAction[] = [
-  { label: 'Open Browser', href: '/desktop', icon: MonitorPlay, description: 'Embedded browser', color: 'from-blue-500 to-cyan-400' },
+  { label: 'Open Browser', href: '/dashboard/embedded-browser', icon: Globe, description: 'Embedded browser', color: 'from-blue-500 to-cyan-400' },
   { label: 'Open IDE', href: '/dashboard/self-reliant', icon: Activity, description: 'Self-Reliant IDE', color: 'from-purple-500 to-pink-400' },
   { label: 'Start Chat', href: '/dashboard', icon: MessageSquare, description: 'Neural conversation', color: 'from-emerald-500 to-teal-400' },
   { label: 'View Monitor', href: '/dashboard/monitoring', icon: BarChart3, description: 'System monitoring', color: 'from-amber-500 to-orange-400' },

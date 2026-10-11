@@ -9,8 +9,8 @@ Every error type carries:
   - Optional original exception for traceback preservation
 """
 
-from typing import Optional, Dict, Any
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -19,13 +19,15 @@ class JarvisError(Exception):
     message: str = "An unexpected error occurred"
     code: str = "internal_error"
     subsystem: str = "core"
-    details: Optional[Dict[str, Any]] = None
-    original: Optional[Exception] = None
+    details: dict[str, Any] | None = None
+    original: Exception | None = None
 
     def __post_init__(self):
+        if self.details is None:
+            self.details = {}
         super().__init__(self.message)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "error": True,
             "code": self.code,
@@ -41,7 +43,7 @@ class JarvisError(Exception):
 # ── Configuration ──────────────────────────────────────────
 
 class ConfigurationError(JarvisError):
-    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, message: str, details: dict[str, Any] | None = None):
         super().__init__(message=message, code="configuration_error",
                          subsystem="config", details=details)
 
@@ -49,35 +51,52 @@ class ConfigurationError(JarvisError):
 # ── Security ───────────────────────────────────────────────
 
 class SecurityError(JarvisError):
-    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, message: str, details: dict[str, Any] | None = None):
         super().__init__(message=message, code="security_error",
                          subsystem="security", details=details)
 
 
 class AuthenticationError(SecurityError):
     def __init__(self, message: str = "Authentication required",
-                 details: Optional[Dict[str, Any]] = None):
-        super().__init__(message=message, code="authentication_error", details=details)
+                 details: dict[str, Any] | None = None):
+        JarvisError.__init__(
+            self,
+            message=message,
+            code="authentication_error",
+            subsystem="security",
+            details=details,
+        )
 
 
 class AuthorizationError(SecurityError):
     def __init__(self, message: str = "Permission denied",
-                 details: Optional[Dict[str, Any]] = None):
-        super().__init__(message=message, code="authorization_error", details=details)
+                 details: dict[str, Any] | None = None):
+        JarvisError.__init__(
+            self,
+            message=message,
+            code="authorization_error",
+            subsystem="security",
+            details=details,
+        )
 
 
 class RateLimitError(SecurityError):
     def __init__(self, message: str = "Rate limit exceeded",
-                 retry_after: float = 0, details: Optional[Dict[str, Any]] = None):
-        super().__init__(message=message, code="rate_limit_error",
-                         details={**(details or {}), "retry_after": retry_after})
+                 retry_after: float = 0, details: dict[str, Any] | None = None):
+        JarvisError.__init__(
+            self,
+            message=message,
+            code="rate_limit_error",
+            subsystem="security",
+            details={**(details or {}), "retry_after": retry_after},
+        )
 
 
 # ── Providers (DB, Cache, AI) ──────────────────────────────
 
 class ProviderError(JarvisError):
     def __init__(self, message: str, provider: str = "",
-                 details: Optional[Dict[str, Any]] = None):
+                 details: dict[str, Any] | None = None):
         super().__init__(message=message, code="provider_error",
                          subsystem=f"provider.{provider}" if provider else "provider",
                          details=details)
@@ -85,21 +104,32 @@ class ProviderError(JarvisError):
 
 class AIProviderError(ProviderError):
     def __init__(self, message: str, provider: str = "ai",
-                 model: str = "", details: Optional[Dict[str, Any]] = None):
-        super().__init__(message=message, provider=provider,
-                         details={**(details or {}), "model": model})
+                 model: str = "", details: dict[str, Any] | None = None):
+        JarvisError.__init__(
+            self,
+            message=message,
+            code="ai_provider_error",
+            subsystem=f"provider.{provider}" if provider else "provider",
+            details={**(details or {}), "provider": provider, "model": model},
+        )
         self.model = model
 
 
 class DatabaseError(ProviderError):
     def __init__(self, message: str = "Database error",
-                 details: Optional[Dict[str, Any]] = None):
-        super().__init__(message=message, provider="database", details=details)
+                 details: dict[str, Any] | None = None):
+        JarvisError.__init__(
+            self,
+            message=message,
+            code="database_error",
+            subsystem="provider.database",
+            details=details,
+        )
 
 
 class CacheError(ProviderError):
     def __init__(self, message: str = "Cache error",
-                 details: Optional[Dict[str, Any]] = None):
+                 details: dict[str, Any] | None = None):
         super().__init__(message=message, provider="cache", details=details)
 
 
@@ -107,7 +137,7 @@ class CacheError(ProviderError):
 
 class ValidationError(JarvisError):
     def __init__(self, message: str = "Validation failed",
-                 field: str = "", details: Optional[Dict[str, Any]] = None):
+                 field: str = "", details: dict[str, Any] | None = None):
         super().__init__(message=message, code="validation_error",
                          subsystem="validation",
                          details={**(details or {}), "field": field})
@@ -116,7 +146,7 @@ class ValidationError(JarvisError):
 class NotFoundError(JarvisError):
     def __init__(self, message: str = "Resource not found",
                  resource_type: str = "", resource_id: str = "",
-                 details: Optional[Dict[str, Any]] = None):
+                 details: dict[str, Any] | None = None):
         super().__init__(message=message, code="not_found",
                          subsystem="api",
                          details={**(details or {}), "resource_type": resource_type, "resource_id": resource_id})
@@ -126,7 +156,7 @@ class NotFoundError(JarvisError):
 
 class TimeoutError(JarvisError):
     def __init__(self, message: str = "Operation timed out",
-                 timeout_seconds: float = 0, details: Optional[Dict[str, Any]] = None):
+                 timeout_seconds: float = 0, details: dict[str, Any] | None = None):
         super().__init__(message=message, code="timeout",
                          subsystem="core",
                          details={**(details or {}), "timeout_seconds": timeout_seconds})
@@ -134,7 +164,7 @@ class TimeoutError(JarvisError):
 
 class DependencyError(JarvisError):
     def __init__(self, message: str = "Dependency unavailable",
-                 dependency: str = "", details: Optional[Dict[str, Any]] = None):
+                 dependency: str = "", details: dict[str, Any] | None = None):
         super().__init__(message=message, code="dependency_error",
                          subsystem=f"dependency.{dependency}" if dependency else "dependency",
                          details=details)
@@ -143,7 +173,7 @@ class DependencyError(JarvisError):
 class ResourceExhaustedError(JarvisError):
     def __init__(self, message: str = "Resource exhausted",
                  resource: str = "", limit: Any = None,
-                 details: Optional[Dict[str, Any]] = None):
+                 details: dict[str, Any] | None = None):
         super().__init__(message=message, code="resource_exhausted",
                          subsystem="core",
                          details={**(details or {}), "resource": resource, "limit": str(limit) if limit else None})
@@ -153,20 +183,33 @@ class ResourceExhaustedError(JarvisError):
 
 class SandboxError(JarvisError):
     def __init__(self, message: str = "Sandbox execution failed",
-                 details: Optional[Dict[str, Any]] = None):
+                 action: str = "", details: dict[str, Any] | None = None):
         super().__init__(message=message, code="sandbox_error",
-                         subsystem="sandbox", details=details)
+                         subsystem="sandbox",
+                         details={**(details or {}), "action": action})
 
 
 class AutomationError(JarvisError):
     def __init__(self, message: str = "Automation execution failed",
-                 details: Optional[Dict[str, Any]] = None):
+                 details: dict[str, Any] | None = None):
         super().__init__(message=message, code="automation_error",
                          subsystem="automation", details=details)
 
 
 class InternalError(JarvisError):
     def __init__(self, message: str = "Internal error",
-                 details: Optional[Dict[str, Any]] = None):
+                 details: dict[str, Any] | None = None):
         super().__init__(message=message, code="internal_error",
                          subsystem="core", details=details)
+
+
+class IntegrationError(ProviderError):
+    def __init__(self, message: str, service: str = "",
+                 details: dict[str, Any] | None = None):
+        JarvisError.__init__(
+            self,
+            message=message,
+            code="integration_error",
+            subsystem=f"integration.{service}" if service else "integration",
+            details={**(details or {}), "service": service},
+        )

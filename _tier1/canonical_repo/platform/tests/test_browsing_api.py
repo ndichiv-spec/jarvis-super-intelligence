@@ -1,43 +1,45 @@
 import requests
-import json
 
-BASE = "http://127.0.0.1:8000"
 
-print("Testing JARVIS Enhanced Browsing Engine")
-print("=" * 50)
+def run_browsing_api_smoke():
+    base = "http://127.0.0.1:8000"
+    print("Testing JARVIS browsing API")
+    print("=" * 50)
 
-# Test health
-r = requests.get(f"{BASE}/api/v1/health/status")
-print(f"Health: {r.json()}")
+    response = requests.get(f"{base}/api/v1/health/status", timeout=10)
+    print(f"Health: {response.json()}")
 
-# Test browsing status
-r = requests.get(f"{BASE}/api/v1/browsing/status")
-print(f"Browsing Status: {r.json()['domain_classifier']}")
+    response = requests.get(f"{base}/api/v1/browsing/status", timeout=10)
+    print(f"Browsing Status: {response.json()['domain_classifier']}")
 
-# Test search
-payload = {"query": "python programming", "num_results": 5}
-r = requests.post(f"{BASE}/api/v1/browsing/search", json=payload)
-data = r.json()
-print(f"Search: {data['total_results']} results in {data['processing_time_ms']:.0f}ms")
-print(f"  Domain: {data['domain']}, Engines: {data['engines_used']}")
+    payload = {"query": "python programming", "num_results": 5}
+    response = requests.post(f"{base}/api/v1/browsing/search", json=payload, timeout=30)
+    data = response.json()
+    print(f"Search: {data['total_results']} results in {data['processing_time_ms']:.0f}ms")
+    print(f"  Domain: {data['domain']}, Engines: {data['engines_used']}")
 
-# Test feedback
-if data["results"]:
-    urls = [r["url"] for r in data["results"]]
-    payload = {
-        "query": "python programming",
-        "displayed_results": urls,
-        "clicked_url": urls[0],
-        "helpful": True,
-        "rating": 0.9,
-    }
-    r = requests.post(f"{BASE}/api/v1/browsing/feedback", json=payload)
-    print(f"Feedback: {r.json()['success']}")
+    if data["results"]:
+        urls = [result["url"] for result in data["results"]]
+        feedback = {
+            "query": "python programming",
+            "displayed_results": urls,
+            "clicked_url": urls[0],
+            "helpful": True,
+            "rating": 0.9,
+        }
+        response = requests.post(
+            f"{base}/api/v1/browsing/feedback", json=feedback, timeout=10
+        )
+        print(f"Feedback: {response.json()['success']}")
 
-# Test learning stats
-r = requests.get(f"{BASE}/api/v1/browsing/learning/stats")
-stats = r.json()
-print(f"Learning: {stats['engine_stats']['total_interactions']} interactions")
+    response = requests.get(
+        f"{base}/api/v1/browsing/learning/stats", timeout=10
+    )
+    stats = response.json()
+    print(f"Learning: {stats['engine_stats']['total_interactions']} interactions")
 
-print("=" * 50)
-print("All tests passed!")
+    print("=" * 50)
+
+
+if __name__ == "__main__":
+    run_browsing_api_smoke()

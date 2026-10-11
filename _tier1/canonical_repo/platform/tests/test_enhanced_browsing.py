@@ -3,21 +3,15 @@
 
 import asyncio
 import sys
-import io
-
-sys.path.insert(0, ".")
-
-# Fix Windows console encoding
-if sys.platform == "win32":
-    import codecs
-
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
-
-from core.enhanced_browsing_engine import get_enhanced_search_engine
-from core.browsing_trainer import get_browsing_trainer
 
 
-async def test_browsing_engine():
+async def run_browsing_engine():
+    if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+
+    from core.browsing_trainer import get_browsing_trainer
+    from core.enhanced_browsing_engine import get_enhanced_search_engine
+
     print("=" * 60)
     print("JARVIS Enhanced Browsing Engine Test")
     print("=" * 60)
@@ -103,4 +97,4 @@ async def test_browsing_engine():
 
 
 if __name__ == "__main__":
-    asyncio.run(test_browsing_engine())
+    asyncio.run(run_browsing_engine())

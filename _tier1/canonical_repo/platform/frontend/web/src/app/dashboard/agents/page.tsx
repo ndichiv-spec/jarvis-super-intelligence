@@ -810,6 +810,7 @@ export default function AgentsPage() {
     },
   });
   const [loading, setLoading] = useState(true);
+  const [dataLoadError, setDataLoadError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 
   // ── Fetch all data ──────────────────────────────────────────────────────
@@ -824,31 +825,46 @@ export default function AgentsPage() {
           jarvisAPI.getTaskExecutions(20),
           jarvisAPI.getServiceTailoringStatus(),
         ]);
+      const failures: string[] = [];
 
       if (agentsRes.status === "fulfilled") {
         setTasks(agentsRes.value.tasks || []);
       } else {
-        // Fallback: use demo data if API is not available
         setTasks([]);
+        failures.push("scheduled tasks");
       }
 
       if (statsRes.status === "fulfilled") {
         setStats(statsRes.value);
+      } else {
+        failures.push("agent statistics");
       }
 
       if (schedulerRes.status === "fulfilled") {
         setSchedulerStatus(schedulerRes.value);
+      } else {
+        failures.push("scheduler status");
       }
 
       if (executionsRes.status === "fulfilled") {
         setExecutions(executionsRes.value.executions || []);
+      } else {
+        failures.push("execution history");
       }
 
       if (tailoringRes.status === "fulfilled") {
         setServiceTailoring(tailoringRes.value);
+      } else {
+        failures.push("service tailoring status");
       }
+      setDataLoadError(
+        failures.length
+          ? `Could not load ${failures.join(", ")}. Displayed runtime data may be incomplete.`
+          : null
+      );
     } catch (error) {
       console.error("Failed to fetch agents data:", error);
+      setDataLoadError("Agent runtime data could not be loaded.");
     } finally {
       setLoading(false);
     }
@@ -965,6 +981,15 @@ export default function AgentsPage() {
               </Button>
             </div>
 
+            {dataLoadError && (
+              <p
+                role="alert"
+                className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+              >
+                {dataLoadError}
+              </p>
+            )}
+
             <Button onClick={() => setDialogOpen(true)} className="gap-1.5">
               <Plus className="h-4 w-4" />
               Create Task
@@ -1054,7 +1079,21 @@ export default function AgentsPage() {
         {/* ── Task Cards Grid ─────────────────────────────────────────── */}
         <div>
           <h2 className="text-lg font-semibold mb-3">Scheduled Tasks</h2>
-          {tasks.length === 0 ? (
+          {tasks.length === 0 && dataLoadError ? (
+            <Card className="bg-card/50 border-border backdrop-blur-sm">
+              <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+                <AlertCircle className="h-12 w-12 text-destructive/70 mb-3" />
+                <h3 className="text-lg font-medium mb-1">Scheduled tasks unavailable</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  The runtime did not return task data. Retry after the backend is available.
+                </p>
+                <Button onClick={() => void fetchData()} variant="outline">
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Retry
+                </Button>
+              </CardContent>
+            </Card>
+          ) : tasks.length === 0 ? (
             <Card className="bg-card/50 border-border backdrop-blur-sm">
               <CardContent className="flex flex-col items-center justify-center py-12 text-center">
                 <Bot className="h-12 w-12 text-muted-foreground/40 mb-3" />

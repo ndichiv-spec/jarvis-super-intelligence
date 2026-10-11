@@ -23,23 +23,30 @@ class TokenBucket:
     """Token bucket rate limiter (per-client)."""
     capacity: int
     refill_rate: float
-    tokens: float = 0
+    tokens: Optional[float] = None
     last_refill: float = field(default_factory=time.time)
+
+    def __post_init__(self):
+        if self.tokens is None:
+            self.tokens = float(self.capacity)
 
     def consume(self, tokens: int = 1) -> bool:
         now = time.time()
         elapsed = now - self.last_refill
-        self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_rate)
+        current_tokens = self.tokens if self.tokens is not None else float(self.capacity)
+        available = min(self.capacity, current_tokens + elapsed * self.refill_rate)
+        self.tokens = available
         self.last_refill = now
-        if self.tokens >= tokens:
-            self.tokens -= tokens
+        if available >= tokens:
+            self.tokens = available - tokens
             return True
         return False
 
     def remaining(self) -> float:
         now = time.time()
         elapsed = now - self.last_refill
-        return min(self.capacity, self.tokens + elapsed * self.refill_rate)
+        available = self.tokens if self.tokens is not None else float(self.capacity)
+        return min(self.capacity, available + elapsed * self.refill_rate)
 
 
 @dataclass

@@ -8,6 +8,12 @@ and multi-hop reasoning.
 import json
 import sys
 import time
+import pytest
+
+pytestmark = pytest.mark.skip(
+    "Legacy core.advanced_rag and knowledge-graph APIs were retired; "
+    "the supported infrastructure knowledge pipeline is tested separately."
+)
 
 
 def test_entity_extraction():

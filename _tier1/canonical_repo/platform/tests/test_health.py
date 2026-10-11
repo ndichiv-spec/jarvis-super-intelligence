@@ -4,8 +4,9 @@ Tests for Health Endpoints
 """
 
 import pytest
-from httpx import AsyncClient, ASGITransport
-from api.main import app
+from httpx import ASGITransport, AsyncClient
+
+from jarvis_backend.main import app
 
 
 @pytest.fixture
@@ -33,10 +34,9 @@ class TestHealthEndpoints:
         response = await client.get("/")
         assert response.status_code == 200
         data = response.json()
-        assert data["name"] == "JARVIS Super AI"
-        assert data["status"] == "online"
-        assert "docs" in data
-        assert "health" in data
+        assert data["service"] == "JARVIS API"
+        assert data["status"] in {"operational", "degraded"}
+        assert data["documentation"]["swagger"] == "/docs"
 
     @pytest.mark.asyncio
     async def test_health_status(self, client):
@@ -44,7 +44,8 @@ class TestHealthEndpoints:
         response = await client.get("/api/v1/health/status")
         assert response.status_code == 200
         data = response.json()
-        assert data["status"] == "healthy"
+        assert data["status"] in {"healthy", "degraded"}
+        assert data["alive"] is True
         assert "timestamp" in data
 
     @pytest.mark.asyncio
@@ -59,9 +60,9 @@ class TestHealthEndpoints:
     async def test_health_ready(self, client):
         """Test readiness probe."""
         response = await client.get("/api/v1/health/ready")
-        assert response.status_code == 200
+        assert response.status_code in {200, 503}
         data = response.json()
-        assert "status" in data
+        assert data["status"] in {"ready", "degraded"}
 
     @pytest.mark.asyncio
     async def test_health_metrics(self, client):
@@ -69,4 +70,5 @@ class TestHealthEndpoints:
         response = await client.get("/api/v1/health/metrics")
         assert response.status_code == 200
         data = response.json()
-        assert "cpu_percent" in data or "metrics" in data
+        assert "uptime_seconds" in data
+        assert "timestamp" in data

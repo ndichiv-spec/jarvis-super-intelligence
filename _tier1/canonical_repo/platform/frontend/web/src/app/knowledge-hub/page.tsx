@@ -5,8 +5,8 @@ import { motion } from "framer-motion";
 import {
   Library, Search, TrendingUp, Globe, BookOpen, Code2,
   Newspaper, MessageSquare, GraduationCap, Github, FileText,
-  ExternalLink, Clock, Filter, RefreshCw, AlertCircle,
-  Bookmark, Share2, ChevronDown, Star, Eye
+  ExternalLink, Clock, Filter, RefreshCw,
+  Star
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -84,6 +84,9 @@ export default function KnowledgeHubPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [knowledgeItems, setKnowledgeItems] = useState<KnowledgeItem[]>([]);
   const [trendingTopics, setTrendingTopics] = useState<TrendingTopic[]>([]);
+  const [knowledgeError, setKnowledgeError] = useState<string | null>(null);
+  const [trendingError, setTrendingError] = useState<string | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
@@ -95,18 +98,13 @@ export default function KnowledgeHubPage() {
   const loadKnowledge = async () => {
     try {
       setIsLoading(true);
-      // Try loading from global knowledge API
-      try {
-        const data = await jarvisAPI.globalTrends(50);
-        setKnowledgeItems(data.items || data.results || []);
-      } catch {
-        // Fallback to mock data if API not available
-        setKnowledgeItems(getMockKnowledge());
-      }
+      setKnowledgeError(null);
+      const data = await jarvisAPI.globalTrends(50);
+      setKnowledgeItems(data.items || data.results || []);
     } catch (error) {
       console.error("Failed to load knowledge:", error);
-      toast.error("Failed to load knowledge hub");
-      setKnowledgeItems(getMockKnowledge());
+      setKnowledgeItems([]);
+      setKnowledgeError(error instanceof Error ? error.message : "Unknown error");
     } finally {
       setIsLoading(false);
     }
@@ -114,11 +112,13 @@ export default function KnowledgeHubPage() {
 
   const loadTrending = async () => {
     try {
+      setTrendingError(null);
       const data = await jarvisAPI.globalTrends(20);
       setTrendingTopics(data.trends || data.trending || []);
     } catch (error) {
       console.error("Failed to load trends:", error);
-      setTrendingTopics(getMockTrending());
+      setTrendingTopics([]);
+      setTrendingError(error instanceof Error ? error.message : "Unknown error");
     }
   };
 
@@ -130,6 +130,7 @@ export default function KnowledgeHubPage() {
 
     try {
       setIsSearching(true);
+      setSearchError(null);
       toast.info(`Searching across ${selectedSources.length || 9} sources...`);
 
       const sources = selectedSources.length > 0 ? selectedSources.join(",") : undefined;
@@ -137,120 +138,14 @@ export default function KnowledgeHubPage() {
 
       setKnowledgeItems(data.items || data.results || []);
       toast.success(`Found ${data.items?.length || data.results?.length || 0} results`);
-    } catch (error: any) {
-      toast.error(`Search failed: ${error.message}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      setSearchError(message);
+      toast.error(`Search failed: ${message}`);
     } finally {
       setIsSearching(false);
     }
   };
-
-  const getMockKnowledge = (): KnowledgeItem[] => [
-    {
-      id: "1",
-      title: "Advances in Large Language Models 2024",
-      source: "arXiv",
-      url: "https://arxiv.org/abs/2024.xxxxx",
-      summary: "Comprehensive survey of recent advances in LLM architecture, training methods, and capabilities.",
-      published_at: new Date(Date.now() - 3600000).toISOString(),
-      relevance_score: 95,
-      tags: ["AI", "LLM", "Research"],
-      category: "research",
-    },
-    {
-      id: "2",
-      title: "Next.js 15 Released with Major Performance Improvements",
-      source: "Hacker News",
-      url: "https://news.ycombinator.com/item?id=xxxxx",
-      summary: "Next.js 15 brings significant performance improvements with new caching mechanisms and optimized bundling.",
-      published_at: new Date(Date.now() - 7200000).toISOString(),
-      relevance_score: 88,
-      tags: ["JavaScript", "Web Development", "Next.js"],
-      category: "tech",
-    },
-    {
-      id: "3",
-      title: "Rust vs Go: Performance Comparison in 2024",
-      source: "StackOverflow",
-      url: "https://stackoverflow.com/questions/xxxxx",
-      summary: "Detailed performance comparison between Rust and Go for various use cases including web servers and data processing.",
-      published_at: new Date(Date.now() - 10800000).toISOString(),
-      relevance_score: 82,
-      tags: ["Rust", "Go", "Performance"],
-      category: "programming",
-    },
-    {
-      id: "4",
-      title: "GitHub Copilot X: AI-Powered Development Revolution",
-      source: "GitHub",
-      url: "https://github.com/features/copilot",
-      summary: "GitHub Copilot X introduces new AI capabilities for developers including chat interface and voice coding.",
-      published_at: new Date(Date.now() - 14400000).toISOString(),
-      relevance_score: 90,
-      tags: ["AI", "GitHub", "Development Tools"],
-      category: "tech",
-    },
-    {
-      id: "5",
-      title: "The Future of Quantum Computing",
-      source: "Wikipedia",
-      url: "https://en.wikipedia.org/wiki/Quantum_computing",
-      summary: "Quantum computing continues to advance with new breakthroughs in qubit stability and error correction.",
-      published_at: new Date(Date.now() - 18000000).toISOString(),
-      relevance_score: 75,
-      tags: ["Quantum", "Computing", "Future Tech"],
-      category: "science",
-    },
-    {
-      id: "6",
-      title: "Best Practices for API Security in 2024",
-      source: "Reddit",
-      url: "https://reddit.com/r/programming/comments/xxxxx",
-      summary: "Community discussion on modern API security practices including OAuth 2.1, JWT best practices, and rate limiting.",
-      published_at: new Date(Date.now() - 21600000).toISOString(),
-      relevance_score: 85,
-      tags: ["Security", "API", "Best Practices"],
-      category: "programming",
-    },
-  ];
-
-  const getMockTrending = (): TrendingTopic[] => [
-    {
-      topic: "GPT-5",
-      mention_count: 1247,
-      trend_direction: "up",
-      percentage_change: 342,
-      sources: ["Google News", "Reddit", "Hacker News"],
-      first_seen: new Date(Date.now() - 86400000 * 3).toISOString(),
-      last_seen: new Date().toISOString(),
-    },
-    {
-      topic: "Rust Programming",
-      mention_count: 892,
-      trend_direction: "up",
-      percentage_change: 156,
-      sources: ["StackOverflow", "GitHub", "Hacker News"],
-      first_seen: new Date(Date.now() - 86400000 * 2).toISOString(),
-      last_seen: new Date().toISOString(),
-    },
-    {
-      topic: "WebAssembly",
-      mention_count: 634,
-      trend_direction: "up",
-      percentage_change: 89,
-      sources: ["Hacker News", "GitHub", "StackOverflow"],
-      first_seen: new Date(Date.now() - 86400000 * 1).toISOString(),
-      last_seen: new Date().toISOString(),
-    },
-    {
-      topic: "Quantum Computing",
-      mention_count: 521,
-      trend_direction: "stable",
-      percentage_change: 12,
-      sources: ["Wikipedia", "arXiv", "Google News"],
-      first_seen: new Date(Date.now() - 86400000 * 5).toISOString(),
-      last_seen: new Date().toISOString(),
-    },
-  ];
 
   const filteredItems = knowledgeItems.filter((item) => {
     const matchesSearch =
@@ -307,7 +202,7 @@ export default function KnowledgeHubPage() {
             Knowledge Hub
           </h1>
           <p className="text-muted-foreground/60 mt-1">
-            Aggregate knowledge from 9 global sources in real-time
+            Browse indexed knowledge and search supported sources
           </p>
         </div>
         <Button variant="outline" onClick={loadKnowledge} disabled={isLoading}>
@@ -321,7 +216,7 @@ export default function KnowledgeHubPage() {
         <CardHeader>
           <CardTitle className="text-lg">Knowledge Sources</CardTitle>
           <CardDescription>
-            Click to filter by source
+            Select sources to include in the search request
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -377,6 +272,11 @@ export default function KnowledgeHubPage() {
           </div>
         </CardContent>
       </Card>
+      {searchError && (
+        <p role="alert" className="text-sm text-red-400">
+          Search is unavailable: {searchError}
+        </p>
+      )}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -419,6 +319,10 @@ export default function KnowledgeHubPage() {
               {isLoading ? (
                 <div className="flex items-center justify-center py-20">
                   <RefreshCw className="h-8 w-8 animate-spin text-blue-400" />
+                </div>
+              ) : knowledgeError ? (
+                <div role="alert" className="text-center py-20">
+                  <p className="text-sm text-red-400">Knowledge data is unavailable: {knowledgeError}</p>
                 </div>
               ) : filteredItems.length === 0 ? (
                 <div className="text-center py-20">
@@ -473,22 +377,12 @@ export default function KnowledgeHubPage() {
                                 </a>
                               </Button>
                             )}
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <Bookmark className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <Share2 className="h-4 w-4" />
-                            </Button>
                           </div>
                         </div>
                         <div className="flex items-center gap-4 text-xs text-muted-foreground/40 mt-3">
                           <span className="flex items-center gap-1">
                             <Clock className="h-3 w-3" />
                             {item.published_at ? format(new Date(item.published_at), "MMM d, HH:mm") : "Unknown"}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Eye className="h-3 w-3" />
-                            {Math.floor(Math.random() * 1000 + 100)} views
                           </span>
                         </div>
                       </CardContent>
@@ -514,7 +408,13 @@ export default function KnowledgeHubPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {trendingTopics.map((trend, i) => (
+                {trendingError ? (
+                  <p role="alert" className="py-8 text-center text-sm text-red-400">
+                    Trending data is unavailable: {trendingError}
+                  </p>
+                ) : trendingTopics.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-muted-foreground">No trending topics were returned.</p>
+                ) : trendingTopics.map((trend, i) => (
                   <motion.div
                     key={trend.topic}
                     initial={{ opacity: 0, x: -20 }}

@@ -83,6 +83,32 @@ def test_account_result_best_effort():
     assert b.tokens_used == 10
 
 
+def test_account_result_charges_each_provider_call():
+    budget = TaskBudget(max_cost=0.02)
+    result = type("R", (), {
+        "metrics": {"cost_model": "provider", "provider_calls": 3},
+    })()
+
+    with pytest.raises(TaskBudgetExceeded):
+        budget.account_result(result)
+    assert budget.provider_calls == 3
+
+
+def test_account_result_uses_provider_reported_cost_when_available():
+    budget = TaskBudget(max_cost=0.05)
+    result = type("R", (), {
+        "metrics": {
+            "cost_model": "provider",
+            "provider_calls": 3,
+            "total_cost_usd": 0.02,
+        },
+    })()
+
+    budget.account_result(result)
+    assert budget.provider_calls == 3
+    assert budget.usd_spent == 0.02
+
+
 def test_spent_snapshot():
     b = TaskBudget(max_plan_iterations=10, max_retries=10, max_replans=10,
                    max_cost=10.0, max_execution_time=60.0)

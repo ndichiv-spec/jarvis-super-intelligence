@@ -4,16 +4,40 @@ JARVIS Test Configuration
 Pytest fixtures and configuration for test suite.
 """
 
+import asyncio
 import os
 import sys
+import tempfile
 from pathlib import Path
-import asyncio
 
 import pytest
 
 
-# Test configuration
-TEST_DB_URL = "sqlite+aiosqlite:///./test_jarvis.db"
+@pytest.fixture
+def event_loop():
+    """Provide a fresh event loop for legacy async tests.
+
+    Some older test suites expect the ``event_loop`` fixture even when the
+    current pytest-asyncio version does not automatically register it.
+    """
+    loop = asyncio.new_event_loop()
+    try:
+        yield loop
+    finally:
+        loop.close()
+
+
+# Test configuration. Test databases are kept outside the checkout so test
+# startup and cleanup can never remove a developer's local or tracked database.
+_ROOT = Path(__file__).resolve().parents[1]
+_TEST_DB_PATH = Path(os.environ.get(
+    "JARVIS_TEST_DB_PATH",
+    str(Path(tempfile.gettempdir()) / f"jarvis-tests-{os.getpid()}.db"),
+)).resolve()
+if _TEST_DB_PATH.is_relative_to(_ROOT):
+    raise RuntimeError("JARVIS_TEST_DB_PATH must be outside the platform checkout.")
+
+TEST_DB_URL = f"sqlite+aiosqlite:///{_TEST_DB_PATH.as_posix()}"
 os.environ.setdefault("JARVIS_SECRET_KEY", "stage1-test-secret-key-0123456789abcdef")
 for _var in (
     "NVIDIA_API_KEY", "NVIDIA_API_TOKEN", "NIM_API_KEY",
@@ -52,7 +76,9 @@ def mock_config():
 @pytest.fixture
 async def test_client():
     """Create test HTTP client."""
-    from httpx import AsyncClient, ASGITransport
+
+    from httpx import ASGITransport, AsyncClient
+
     from api.main import app
 
     transport = ASGITransport(app=app)
@@ -141,10 +167,7 @@ def cleanup_test_db():
     test begins. This prevents cross-user leakage and duplicate-registration
     failures caused by the previous test run leaving data behind.
     """
-    test_db_paths = (
-        Path("./test_jarvis.db"),
-        _TEST_DB_PATH,
-    )
+    test_db_paths = (_TEST_DB_PATH,)
     for db_path in test_db_paths:
         try:
             if db_path.exists():
@@ -207,16 +230,9 @@ def sample_agent():
 # the committed chat tests observe reachable providers instead of the
 # PROVIDER_UNAVAILABLE outcome they assert. Tests therefore run with no
 # provider credentials - the honest default for a test environment.
-_ROOT = Path(__file__).resolve().parents[1]
 for _path in (_ROOT, _ROOT.parent):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
-
-_TEST_DB_PATH = Path(os.environ.get(
-    "JARVIS_TEST_DB_PATH",
-    str(_ROOT / "tests" / "_test_jarvis.db"),
-)).resolve()
-
 
 def _remove_test_db() -> None:
     """Best-effort removal of the per-run test database.
@@ -251,7 +267,7 @@ os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB_PATH.as_posix()}"
 os.environ["JARVIS_TEST_MODE"] = "1"
 
 # Force engine creation now, while DATABASE_URL still points at the test DB.
-from jarvis_backend.db import get_engine as _get_engine
+from jarvis_backend.db import get_engine as _get_engine  # noqa: E402
 
 _get_engine()
 
@@ -291,11 +307,19 @@ def _seed_test_user() -> None:
                 "roles": ["user"],
             }
             users.save(store)
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
 
 
 _seed_test_user()
+
+
+@pytest.fixture
+def app():
+    """Expose the canonical JARVIS FastAPI app for legacy smoke tests."""
+    from jarvis_backend.main import app as canonical_app
+
+    return canonical_app
 
 
 @pytest.fixture

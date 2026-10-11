@@ -726,6 +726,101 @@ _META: dict[str, dict[str, Any]] = {
                           service_dependencies=("github_api",),
                           required_permissions=("github:read",), timeout=25),
     # -- research / web ------------------------------------------------------
+    "research.compare": dict(
+        domain="research",
+        execution_surface="http_browser_engine+provider_fabric",
+        operations=("research.compare",),
+        operation_arguments={
+            "research.compare": {"query": "$query"},
+        },
+        operation_intents={
+            "research.compare": {
+                "semantic_type": "research.compare",
+                "match_patterns": [
+                    r"\bresearch\b",
+                    r"\b(?:consult|ask)\b",
+                    r"\bindependently\b",
+                    r"\bcompare\b",
+                ],
+                "subject_pattern": (
+                    r"^\s*(?:(?:jarvis)[,:]?\s*)?(?:please\s+)?"
+                    r"research\s+(?P<subject>.+?)\s*,?\s+"
+                    r"(?:consult|ask)\s+(?:the\s+)?(?:configured\s+)?"
+                    r"(?:ai\s+systems|models|providers)\s+independently"
+                    r".*$"
+                ),
+                "query_template": "{subject}",
+                "result_caveat": (
+                    "Search snippets are discovery observations, not verified page "
+                    "contents. Provider analyses are attributed opinions, not facts."
+                ),
+                "empty_result_message": (
+                    "No valid public search sources were observed; no consultation "
+                    "or report is claimed."
+                ),
+                "plan_summary": (
+                    "Research the public topic and compare independent configured AI consultations."
+                ),
+                "step_summary": (
+                    "Search public sources, consult distinct healthy providers, "
+                    "synthesize their attributed conclusions, and present the comparison."
+                ),
+                "completion_condition_type": "answer_generated",
+                "completion_expected": (
+                    "observed public sources, two distinct provider responses, "
+                    "and a comparison synthesis, or an explicitly partial result"
+                ),
+                "result_renderer": "research_report",
+                "result_count_path": "artifacts",
+            },
+        },
+        intent_confirmation_operations=("research.compare",),
+        operation_output_requirements={
+            "research.compare": ("artifacts.url", "artifacts.title"),
+        },
+        input_schema={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "minLength": 2, "maxLength": 500},
+            },
+            "required": ["query"],
+            "additionalProperties": False,
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "result": {"type": "string"},
+                "artifacts": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "title": {"type": "string"},
+                            "url": {"type": "string"},
+                            "snippet": {"type": "string"},
+                            "retrieved_at": {"type": "string"},
+                            "provider": {"type": "string"},
+                        },
+                        "required": ["title", "url", "snippet"],
+                    },
+                },
+            },
+            "required": ["result", "artifacts"],
+        },
+        network_requirements="required",
+        data_classification="public_research_query_and_search_snippets",
+        provider_dependencies=("provider_fabric",),
+        service_dependencies=("browser",),
+        required_permissions=("web:read", "model:consult"),
+        supported_environments=("conversation", "web"),
+        observability="canonical_runtime_events",
+        approval_policy="explicit_user_request",
+        risk_level=RiskLevel.NETWORK.value,
+        cost_model="provider",
+        timeout=150,
+        retry_policy="none",
+        audit_policy="record_execution",
+    ),
     "search_web": dict(
         domain="web",
         execution_surface="http_browser_engine",

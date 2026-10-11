@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import main
 
 
@@ -32,7 +30,14 @@ def test_launch_backend_uses_uvicorn(monkeypatch) -> None:
     exit_code = main.main(["launch", "--host", "127.0.0.1", "--port", "9000"])
 
     assert exit_code == 0
-    assert called["args"] == ("api.main:create_application",)
-    assert called["kwargs"]["factory"] is True
+    assert called["args"] == ("jarvis_backend.main:app",)
+    assert "factory" not in called["kwargs"]
     assert called["kwargs"]["host"] == "127.0.0.1"
     assert called["kwargs"]["port"] == 9000
+
+
+def test_read_file_rejects_paths_outside_platform(capsys) -> None:
+    args = main.build_parser().parse_args(["read", "../.env", "--lines", "2"])
+
+    assert main.read_file(args) == 1
+    assert "inside the platform repository" in capsys.readouterr().out

@@ -169,6 +169,7 @@ class ChatService:
         # the real gateway; tests may inject a fake to drive chat logic without
         # a live provider.
         self.gateway = gateway or provider_gateway
+        self._world_turn_jobs: dict[str, asyncio.Task[dict[str, Any]]] = {}
 
     @staticmethod
     def _persist_presentation_revision(
@@ -207,6 +208,126 @@ class ChatService:
         )
         assistant_message["canonical_task_id"] = task_id
         assistant_message["presentation_revision_id"] = revision["revision_id"]
+
+    async def _complete_world_stream_turn(
+        self,
+        *,
+        assistant_message: dict[str, Any],
+        session: dict[str, Any],
+        content: str,
+        model: str | None,
+        user_id: str,
+        session_id: str,
+        request_id: str,
+        principal: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Finish a runtime-backed turn independently of its SSE consumer."""
+        try:
+            result = await self._generate(
+                content, model, user_id, session_id,
+                request_id=request_id, principal=principal,
+            )
+            full_text = result.get("message") or ""
+            presentation = result.get("presentation")
+            if presentation is None and full_text:
+                from .presentation_contract import build_conversation_presentation
+
+                presentation = build_conversation_presentation(
+                    full_text,
+                    request_id=request_id,
+                    session_id=session_id,
+                    conversation_id=session_id,
+                )
+            assistant_message.update({
+                "content": full_text,
+                "status": result.get("status", COMPLETED),
+                "provider": result.get("provider"),
+                "latency_ms": result.get("latency_ms"),
+                "sources": result.get("sources"),
+                "tool_calls": result.get("tool_calls"),
+                "runtime_command_id": result.get("runtime_command_id"),
+                "presentation": presentation,
+            })
+            if presentation:
+                self._persist_presentation_revision(
+                    user_id=user_id,
+                    session_id=session_id,
+                    request_id=request_id,
+                    assistant_message=assistant_message,
+                    presentation=presentation,
+                )
+        except ChatError as exc:
+            assistant_message["status"] = FAILED
+            assistant_message["error"] = _error_card(exc)
+        except Exception as exc:
+            err = normalize_exception(exc)
+            assistant_message["status"] = FAILED
+            assistant_message["error"] = _error_card(err)
+            logger.exception("runtime-backed chat turn failed for %s", request_id)
+        finally:
+            session["updated_at"] = now_iso()
+            get_store("chat_sessions").save()
+        return assistant_message
+
+    async def _complete_world_stream_turn(
+        self,
+        *,
+        assistant_message: dict[str, Any],
+        session: dict[str, Any],
+        content: str,
+        model: str | None,
+        user_id: str,
+        session_id: str,
+        request_id: str,
+        principal: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Finish a runtime-backed turn independently of its SSE consumer."""
+        try:
+            result = await self._generate(
+                content, model, user_id, session_id,
+                request_id=request_id, principal=principal,
+            )
+            full_text = result.get("message") or ""
+            presentation = result.get("presentation")
+            if presentation is None and full_text:
+                from .presentation_contract import build_conversation_presentation
+
+                presentation = build_conversation_presentation(
+                    full_text,
+                    request_id=request_id,
+                    session_id=session_id,
+                    conversation_id=session_id,
+                )
+            assistant_message.update({
+                "content": full_text,
+                "status": result.get("status", COMPLETED),
+                "provider": result.get("provider"),
+                "latency_ms": result.get("latency_ms"),
+                "sources": result.get("sources"),
+                "tool_calls": result.get("tool_calls"),
+                "runtime_command_id": result.get("runtime_command_id"),
+                "presentation": presentation,
+            })
+            if presentation:
+                self._persist_presentation_revision(
+                    user_id=user_id,
+                    session_id=session_id,
+                    request_id=request_id,
+                    assistant_message=assistant_message,
+                    presentation=presentation,
+                )
+        except ChatError as exc:
+            assistant_message["status"] = FAILED
+            assistant_message["error"] = _error_card(exc)
+        except Exception as exc:
+            err = normalize_exception(exc)
+            assistant_message["status"] = FAILED
+            assistant_message["error"] = _error_card(err)
+            logger.exception("runtime-backed chat turn failed for %s", request_id)
+        finally:
+            session["updated_at"] = now_iso()
+            get_store("chat_sessions").save()
+        return assistant_message
 
     # -- session CRUD ------------------------------------------------------- #
     def create_session(self, user_id: str, session_id: str | None = None,
@@ -668,11 +789,24 @@ class ChatService:
             item for item in (search_result.get("artifacts") or [])
             if isinstance(item, dict)
         ]
-        if current.get("status") == "COMPLETED" and search_result.get("success"):
-            message, sources = render_world_results(
-                intent, artifacts, evidence=[search_result],
+        if (
+            current.get("status") in {"COMPLETED", "PARTIAL"}
+            and search_result.get("success")
+        ):
+            if intent.operation == "research.compare":
+                message = str(search_result.get("result") or "")
+                sources = [
+                    str(item.get("url"))
+                    for item in artifacts
+                    if isinstance(item.get("url"), str)
+                ]
+            else:
+                message, sources = render_world_results(
+                    intent, artifacts, evidence=[search_result],
+                )
+            tool_status = (
+                "partial" if current.get("status") == "PARTIAL" else "completed"
             )
-            tool_status = "completed"
         elif current.get("resolution_status") != "selected":
             reason = current.get("resolution_reason") or (
                 "No authorized execution surface is currently available."
@@ -697,7 +831,11 @@ class ChatService:
             "message": message,
             "sources": sources,
             "presentation": presentation,
-            "status": "COMPLETED" if tool_status == "completed" else "FAILED",
+            "status": (
+                "COMPLETED" if tool_status == "completed"
+                else "PARTIAL" if tool_status == "partial"
+                else "FAILED"
+            ),
             "tool_calls": [{
                 "name": current.get("selected_capability_id") or intent.operation,
                 "operation": intent.operation,
@@ -1082,6 +1220,9 @@ class ChatService:
             if existing:
                 reply = self._find_assistant_after(messages, existing.get("id", ""))
                 if reply:
+                    job = self._world_turn_jobs.get(str(reply.get("id") or ""))
+                    if job is not None:
+                        reply = await asyncio.shield(job)
                     yield {
                         "type": "complete",
                         "session_id": session_id,
@@ -1139,53 +1280,41 @@ class ChatService:
                 is_result_selection_request(content)
                 and has_prior_media_results(messages)
             ):
-                world_result = await self._generate(
-                    content, model, user_id, session_id,
-                    request_id=request_id_for_audit, principal=principal,
-                )
-                full_text = world_result["message"]
-                presentation = world_result.get("presentation")
-                if presentation is None and full_text:
-                    from .presentation_contract import build_conversation_presentation
+                world_job = asyncio.create_task(self._complete_world_stream_turn(
+                    assistant_message=assistant_msg,
+                    session=session,
+                    content=content,
+                    model=model,
+                    user_id=user_id,
+                    session_id=session_id,
+                    request_id=request_id_for_audit,
+                    principal=principal,
+                ))
+                self._world_turn_jobs[assistant_id] = world_job
 
-                    presentation = build_conversation_presentation(
-                        full_text,
-                        request_id=request_id_for_audit,
-                        session_id=session_id,
-                        conversation_id=session_id,
-                    )
-                assistant_msg.update({
-                    "content": full_text,
-                    "status": world_result.get("status", COMPLETED),
-                    "provider": world_result.get("provider"),
-                    "latency_ms": world_result.get("latency_ms"),
-                    "sources": world_result.get("sources"),
-                    "tool_calls": world_result.get("tool_calls"),
-                    "runtime_command_id": world_result.get("runtime_command_id"),
-                    "presentation": presentation,
-                })
-                if presentation:
-                    self._persist_presentation_revision(
-                        user_id=user_id,
-                        session_id=session_id,
-                        request_id=request_id_for_audit,
-                        assistant_message=assistant_msg,
-                        presentation=presentation,
-                    )
-                session["updated_at"] = now_iso()
-                get_store("chat_sessions").save()
+                def forget_completed_world_job(
+                    completed: asyncio.Task[dict[str, Any]],
+                ) -> None:
+                    if self._world_turn_jobs.get(assistant_id) is completed:
+                        self._world_turn_jobs.pop(assistant_id, None)
+
+                world_job.add_done_callback(forget_completed_world_job)
+                completed_message = await asyncio.shield(world_job)
+                full_text = completed_message.get("content") or ""
+                presentation = completed_message.get("presentation")
                 yield {
                     "type": "complete",
                     "session_id": session_id,
                     "content": full_text,
-                    "status": world_result.get("status", COMPLETED),
+                    "status": completed_message.get("status", COMPLETED),
+                    "error": completed_message.get("error"),
                     "message_id": assistant_id,
-                    "sources": world_result.get("sources"),
-                    "tool_calls": world_result.get("tool_calls"),
-                    "runtime_command_id": world_result.get("runtime_command_id"),
+                    "sources": completed_message.get("sources"),
+                    "tool_calls": completed_message.get("tool_calls"),
+                    "runtime_command_id": completed_message.get("runtime_command_id"),
                     "presentation": presentation,
-                    "canonical_task_id": assistant_msg.get("canonical_task_id"),
-                    "presentation_revision_id": assistant_msg.get("presentation_revision_id"),
+                    "canonical_task_id": completed_message.get("canonical_task_id"),
+                    "presentation_revision_id": completed_message.get("presentation_revision_id"),
                     "request_id": request_id_for_audit,
                 }
                 return
@@ -1202,6 +1331,7 @@ class ChatService:
                 user_id, content, request_id_for_audit,
                 activity=project_activity,
             )
+
             for step in project_activity:
                 yield {
                     "type": "activity",

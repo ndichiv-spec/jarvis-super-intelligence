@@ -32,6 +32,11 @@ from bs4 import BeautifulSoup
 import numpy as np
 import pandas as pd
 
+pytest.importorskip(
+    "core.advanced_page_transactions",
+    reason="Legacy page-transaction engine is not part of the canonical platform.",
+)
+
 # Import the advanced page transaction components
 from core.advanced_page_transactions import (
     get_advanced_transaction_engine,

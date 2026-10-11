@@ -19,7 +19,7 @@ export default function LoginPage() {
   useEffect(() => {
     // Redirect if already authenticated
     if (isAuthenticated) {
-      router.push('/dashboard');
+      router.push('/chat');
     }
   }, [isAuthenticated, router]);
 
@@ -32,10 +32,14 @@ export default function LoginPage() {
       const response = await jarvisAPI.login(identifier, password);
       // Persist the refresh token so the session silently survives the 7-day
       // access-token TTL instead of bouncing back to first login.
-      authLogin(response.access_token, (response as any).refresh_token ?? null, response.user);
-      router.push('/dashboard');
-    } catch (err: any) {
-      setError(err.message || 'Login failed. Please check your credentials.');
+      authLogin(response.access_token, response.refresh_token ?? null, response.user);
+      router.push('/chat');
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Login failed. Please check your credentials.'
+      );
     } finally {
       setLoading(false);
     }
@@ -158,7 +162,7 @@ export default function LoginPage() {
           {/* Register Link */}
           <div className="mt-6 text-center">
             <p className="text-gray-400 text-sm">
-              Don't have an account?{' '}
+              Don&apos;t have an account?{' '}
               <Link
                 href="/register"
                 className="text-purple-400 hover:text-purple-300 font-medium transition-colors"

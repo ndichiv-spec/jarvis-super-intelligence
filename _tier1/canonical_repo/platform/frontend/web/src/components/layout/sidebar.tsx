@@ -1,18 +1,17 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   Brain, Bot, Cpu, Activity, BookOpen, Settings, Shield,
-  Layers, MessageSquare, Workflow, MonitorPlay, Code2,
-  ArrowUpCircle, Library, Server, Globe, Zap,
-  Crown, Sparkles, Terminal, Mail, Puzzle,
-  Mic, Image, Eye, Box, Network, Search,
-  Bell, Lock, Key, GitBranch, Target, Gauge,
-  FileText, Palette, Wrench, Database, ArrowLeftRight,
-  FlaskConical, Satellite, ShieldCheck, Users,
+  Layers, Workflow, Code2,
+  Library, Globe, Zap,
+  Terminal, Mail, Puzzle,
+  Mic, Image, Search,
+  Lock, Key, Gauge,
+  Database, Satellite,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -34,20 +33,17 @@ interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   // AI Core — the central intelligence cluster
-  { label: 'Neural Chat', href: '/dashboard', icon: Brain, category: 'AI Core', crossReference: '/dashboard/agents' },
+  { label: 'Assistant', href: '/chat', icon: Brain, category: 'AI Core', crossReference: '/dashboard/agents' },
   { label: 'Command Runtime', href: '/dashboard/commands', icon: Workflow, badge: 'RUNTIME', category: 'AI Core', crossReference: '/dashboard/monitoring' },
   { label: 'Agent Orchestration', href: '/dashboard/agents', icon: Bot, category: 'AI Core', crossReference: '/dashboard/monitoring' },
   { label: 'UME', href: '/dashboard/knowledge', icon: Layers, category: 'AI Core', crossReference: '/dashboard/system' },
-  { label: 'Supreme', href: '/supreme', icon: Crown, category: 'AI Core', crossReference: '/dashboard/agents' },
   { label: 'Voice', href: '/voice', icon: Mic, badge: 'BETA', category: 'AI Core', crossReference: '/dashboard/memory' },
   { label: 'Image', href: '/image-generation', icon: Image, badge: 'AI', category: 'AI Core', crossReference: '/dashboard/knowledge' },
   { label: 'Maps & Locations', href: '/locations', icon: Satellite, category: 'AI Core', crossReference: '/dashboard/knowledge' },
 
   // Workspace — productive environments
-  { label: 'Desktop', href: '/desktop', icon: MonitorPlay, badge: 'NEW', category: 'Workspace', crossReference: '/dashboard/embedded-browser' },
   { label: 'Browser', href: '/dashboard/embedded-browser', icon: Globe, category: 'Workspace', crossReference: '/knowledge-hub' },
   { label: 'Workflows', href: '/workflows', icon: Workflow, category: 'Workspace', crossReference: '/dashboard/agents' },
-  { label: 'Holographic', href: '/holographic', icon: Sparkles, badge: '3D', category: 'Workspace', crossReference: '/dashboard/monitoring' },
   { label: 'IDE', href: '/dashboard/self-reliant', icon: Code2, badge: 'NEW', category: 'Workspace', crossReference: '/dashboard/extensions' },
 
   // Infrastructure — system backbone
@@ -63,7 +59,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Settings', href: '/dashboard/settings', icon: Settings, category: 'System', crossReference: '/dashboard/admin' },
   { label: 'Extensions', href: '/dashboard/extensions', icon: Puzzle, category: 'System', crossReference: '/dashboard/connections' },
   { label: 'Admin Console', href: '/dashboard/admin', icon: Shield, badge: 'ENT', category: 'System', crossReference: '/dashboard/settings' },
-  { label: 'Self-Upgrade', href: '/upgrade', icon: ArrowUpCircle, category: 'System', crossReference: '/omega' },
 
   // Enterprise — security and compliance
   { label: 'Security', href: '/dashboard/security', icon: Shield, badge: 'SEC', category: 'Enterprise', crossReference: '/dashboard/admin' },
@@ -71,6 +66,14 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'API Keys', href: '/dashboard/api-keys', icon: Key, category: 'Enterprise', crossReference: '/dashboard/settings' },
   { label: 'Global Search', href: '/dashboard/search', icon: Search, category: 'Enterprise', crossReference: '/dashboard/knowledge' },
 ];
+
+const ASSISTANT_NAV_HREFS = new Set([
+  '/chat',
+  '/dashboard/commands',
+  '/dashboard/settings',
+  '/dashboard/connections',
+  '/dashboard/security',
+]);
 
 const SIDEBAR_WIDTH = 280;
 
@@ -82,6 +85,7 @@ interface SidebarProps {
 
 export function Sidebar({ isMobile, isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const isAssistantRoute = pathname === '/chat';
   const systemUsage = useSystemUsage();
   const backend = useBackend();
   const { summary, status: providerAvailability } = useProviders();
@@ -93,12 +97,22 @@ export function Sidebar({ isMobile, isOpen, onClose }: SidebarProps) {
   };
 
   const groupedItems = useMemo(() => {
-    return NAV_ITEMS.reduce<Record<string, NavItem[]>>((acc, item) => {
-      if (!acc[item.category]) acc[item.category] = [];
-      acc[item.category].push(item);
+    const visibleItems = isAssistantRoute
+      ? NAV_ITEMS.filter((item) => ASSISTANT_NAV_HREFS.has(item.href))
+      : NAV_ITEMS;
+    return visibleItems.reduce<Record<string, NavItem[]>>((acc, item) => {
+      const category = isAssistantRoute
+        ? item.href === '/chat'
+          ? 'Assistant'
+          : item.href === '/dashboard/commands'
+            ? 'Task Runtime'
+            : 'Administration'
+        : item.category;
+      if (!acc[category]) acc[category] = [];
+      acc[category].push(item);
       return acc;
     }, {});
-  }, []);
+  }, [isAssistantRoute]);
 
   const cpuPercent = systemUsage?.cpu_percent;
   const memPercent = systemUsage?.memory_percent;
@@ -231,6 +245,8 @@ export function Sidebar({ isMobile, isOpen, onClose }: SidebarProps) {
             ))}
           </nav>
 
+          {!isAssistantRoute && (
+            <>
           {/* Cross-reference quick links */}
           <div className="mt-6 space-y-2">
             <div className="px-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
@@ -318,6 +334,8 @@ export function Sidebar({ isMobile, isOpen, onClose }: SidebarProps) {
                 )}
               </div>
           </div>
+            </>
+          )}
         </ScrollArea>
 
         {/* Backend Status */}

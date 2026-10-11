@@ -14,20 +14,20 @@ class TestPluginTypes:
         manifest = PluginManifest(
             id="test-plugin",
             name="Test Plugin",
-            version="1.0.0",
+            version=PluginVersion.parse("1.0.0"),
             description="A test plugin",
             author="Tester",
-            permissions=[PluginPermission.KNOWLEDGE_READ],
-            hooks=[PluginHook.CHAT_BEFORE_RESPOND],
+            permissions=[PluginPermission.MEMORY_READ],
+            hooks=[PluginHook.CHAT_BEFORE_RESPONSE],
         )
         assert manifest.id == "test-plugin"
-        assert manifest.version == "1.0.0"
+        assert str(manifest.version) == "1.0.0"
 
     def test_manifest_memory_permission(self):
         manifest = PluginManifest(
-            id="mem-plugin", name="Mem Plugin", version="1.0.0",
+            id="mem-plugin", name="Mem Plugin", version=PluginVersion.parse("1.0.0"),
             permissions=[PluginPermission.MEMORY_READ, PluginPermission.MEMORY_WRITE],
-            hooks=[PluginHook.MEMORY_BEFORE_RETRIEVE],
+            hooks=[PluginHook.MEMORY_AFTER_RETRIEVE],
         )
         assert PluginPermission.MEMORY_READ in manifest.permissions
         assert PluginPermission.MEMORY_WRITE in manifest.permissions
@@ -52,7 +52,8 @@ class TestPluginTypes:
             pass
         instance = MyPlugin()
         assert instance is not None
-        assert instance.name == "MyPlugin"
+        assert callable(instance.initialize)
+        assert callable(instance.shutdown)
 
     def test_dependency_creation(self):
         dep = PluginDependency(plugin_id="dep-plugin", version=">=1.0.0")
@@ -63,17 +64,17 @@ class TestPluginTypes:
 class TestPluginRegistry:
     def test_register_and_get(self, plugin_registry):
         manifest = PluginManifest(
-            id="reg-test", name="Reg Test", version="1.0.0",
+            id="reg-test", name="Reg Test", version=PluginVersion.parse("1.0.0"),
             permissions=[], hooks=[],
         )
         plugin_registry.register(manifest)
         retrieved = plugin_registry.get("reg-test")
         assert retrieved is not None
-        assert retrieved.id == "reg-test"
+        assert retrieved.manifest.id == "reg-test"
 
     def test_register_duplicate_raises(self, plugin_registry):
         manifest = PluginManifest(
-            id="dup", name="Dup", version="1.0.0", permissions=[], hooks=[],
+            id="dup", name="Dup", version=PluginVersion.parse("1.0.0"), permissions=[], hooks=[],
         )
         plugin_registry.register(manifest)
         with pytest.raises(Exception):
@@ -81,7 +82,7 @@ class TestPluginRegistry:
 
     def test_unregister(self, plugin_registry):
         manifest = PluginManifest(
-            id="unreg", name="Unreg", version="1.0.0", permissions=[], hooks=[],
+            id="unreg", name="Unreg", version=PluginVersion.parse("1.0.0"), permissions=[], hooks=[],
         )
         plugin_registry.register(manifest)
         plugin_registry.unregister("unreg")
@@ -90,32 +91,33 @@ class TestPluginRegistry:
     def test_list_plugins(self, plugin_registry):
         for i in range(3):
             plugin_registry.register(PluginManifest(
-                id=f"p{i}", name=f"P{i}", version="1.0.0", permissions=[], hooks=[],
+                id=f"p{i}", name=f"P{i}", version=PluginVersion.parse("1.0.0"), permissions=[], hooks=[],
             ))
         assert len(plugin_registry.list()) == 3
 
     def test_find_by_hook(self, plugin_registry):
         manifest = PluginManifest(
-            id="hook-test", name="Hook Test", version="1.0.0",
-            permissions=[], hooks=[PluginHook.CHAT_BEFORE_RESPOND],
+            id="hook-test", name="Hook Test", version=PluginVersion.parse("1.0.0"),
+            permissions=[], hooks=[PluginHook.CHAT_BEFORE_RESPONSE],
         )
         plugin_registry.register(manifest)
-        results = plugin_registry.find_by_hook(PluginHook.CHAT_BEFORE_RESPOND)
+        plugin_registry.mark_enabled("hook-test")
+        results = plugin_registry.find_by_hook(PluginHook.CHAT_BEFORE_RESPONSE.value)
         assert len(results) == 1
-        assert results[0].id == "hook-test"
+        assert results[0].manifest.id == "hook-test"
 
     def test_find_by_permission(self, plugin_registry):
         manifest = PluginManifest(
-            id="perm-test", name="Perm Test", version="1.0.0",
-            permissions=[PluginPermission.KNOWLEDGE_WRITE], hooks=[],
+            id="perm-test", name="Perm Test", version=PluginVersion.parse("1.0.0"),
+            permissions=[PluginPermission.MEMORY_WRITE], hooks=[],
         )
         plugin_registry.register(manifest)
-        results = plugin_registry.find_by_permission(PluginPermission.KNOWLEDGE_WRITE)
+        results = plugin_registry.find_by_permission(PluginPermission.MEMORY_WRITE.value)
         assert len(results) == 1
 
     def test_find_by_tag(self, plugin_registry):
         manifest = PluginManifest(
-            id="tag-test", name="Tag Test", version="1.0.0",
+            id="tag-test", name="Tag Test", version=PluginVersion.parse("1.0.0"),
             tags=["utility", "test"], permissions=[], hooks=[],
         )
         plugin_registry.register(manifest)
@@ -124,52 +126,75 @@ class TestPluginRegistry:
 
 
 class TestHookSystem:
-    def test_emit_with_no_handlers(self, hook_system):
-        results = hook_system.emit(PluginHook.CHAT_BEFORE_RESPOND, {"text": "hello"})
-        assert results == []
+    @pytest.mark.asyncio
+    async def test_emit_with_no_handlers(self, hook_system):
+        result = await hook_system.emit(PluginHook.CHAT_BEFORE_RESPONSE, {"text": "hello"})
+        assert result.results == []
 
-    def test_register_and_emit(self, hook_system):
+    @pytest.mark.asyncio
+    async def test_register_and_emit(self, hook_system):
         received = []
-        def handler(event):
+        async def handler(event):
             received.append(event)
-        hook_system.register(PluginHook.CHAT_BEFORE_RESPOND, handler)
-        results = hook_system.emit(PluginHook.CHAT_BEFORE_RESPOND, {"text": "hello"})
+        hook_system.register("test-plugin", PluginHook.CHAT_BEFORE_RESPONSE, handler)
+        result = await hook_system.emit(PluginHook.CHAT_BEFORE_RESPONSE, {"text": "hello"})
         assert len(received) == 1
         assert received[0]["text"] == "hello"
+        assert result.results == [None]
 
-    def test_emit_filter_transforms(self, hook_system):
-        def upper_filter(event):
+    @pytest.mark.asyncio
+    async def test_emit_filter_transforms(self, hook_system):
+        async def upper_filter(event):
             event["text"] = event["text"].upper()
             return event
-        hook_system.register(PluginHook.CHAT_BEFORE_RESPOND, upper_filter)
-        results = hook_system.emit_filter(PluginHook.CHAT_BEFORE_RESPOND, {"text": "hello"})
-        assert results[0]["text"] == "HELLO"
+        hook_system.register("test-plugin", PluginHook.CHAT_BEFORE_RESPONSE, upper_filter)
+        result = await hook_system.emit_filter(
+            PluginHook.CHAT_BEFORE_RESPONSE,
+            {"text": "hello"},
+        )
+        assert result["text"] == "HELLO"
 
-    def test_multiple_handlers_in_order(self, hook_system):
+    @pytest.mark.asyncio
+    async def test_multiple_handlers_in_order(self, hook_system):
         order = []
-        hook_system.register(PluginHook.CHAT_BEFORE_RESPOND, lambda e: order.append(1), priority=10)
-        hook_system.register(PluginHook.CHAT_BEFORE_RESPOND, lambda e: order.append(2), priority=5)
-        hook_system.emit(PluginHook.CHAT_BEFORE_RESPOND, {})
-        assert order == [2, 1]
+        async def first_handler(_event):
+            order.append(1)
+        async def second_handler(_event):
+            order.append(2)
+        hook_system.register(
+            "test-plugin",
+            PluginHook.CHAT_BEFORE_RESPONSE,
+            first_handler,
+            priority=10,
+        )
+        hook_system.register(
+            "test-plugin",
+            PluginHook.CHAT_BEFORE_RESPONSE,
+            second_handler,
+            priority=5,
+        )
+        await hook_system.emit(PluginHook.CHAT_BEFORE_RESPONSE, {})
+        assert order == [1, 2]
 
-    def test_unregister_handler(self, hook_system):
-        def handler(e):
+    @pytest.mark.asyncio
+    async def test_unregister_handler(self, hook_system):
+        async def handler(_event):
             pass
-        hook_system.register(PluginHook.CHAT_BEFORE_RESPOND, handler)
-        hook_system.unregister(PluginHook.CHAT_BEFORE_RESPOND, handler)
-        results = hook_system.emit(PluginHook.CHAT_BEFORE_RESPOND, {})
-        assert len(results) == 0
+        hook_system.register("test-plugin", PluginHook.CHAT_BEFORE_RESPONSE, handler)
+        hook_system.unregister("test-plugin", PluginHook.CHAT_BEFORE_RESPONSE)
+        result = await hook_system.emit(PluginHook.CHAT_BEFORE_RESPONSE, {})
+        assert result.results == []
 
 
 class TestPluginContext:
     def test_has_permission_granted(self, mock_plugin_context):
-        assert mock_plugin_context.has_permission("knowledge:read") is True
+        assert mock_plugin_context.has_permission("memory:read") is True
 
     def test_has_permission_denied(self, mock_plugin_context):
         assert mock_plugin_context.has_permission("admin:*") is False
 
     def test_assert_permission_passes(self, mock_plugin_context):
-        mock_plugin_context.assert_permission("knowledge:read")
+        mock_plugin_context.assert_permission("memory:read")
 
     def test_assert_permission_raises(self, mock_plugin_context):
         with pytest.raises(PermissionError):
@@ -190,58 +215,98 @@ class TestPluginContext:
 
 
 class TestPluginLifecycleManager:
+    @staticmethod
+    def register_plugin(plugin_lifecycle, plugin_id):
+        manifest = PluginManifest(
+            id=plugin_id,
+            name=plugin_id,
+            version=PluginVersion.parse("1.0.0"),
+            permissions=[],
+            hooks=[],
+        )
+        plugin_lifecycle.registry.register(manifest, PluginBase())
+
     def test_state_transitions(self, plugin_lifecycle):
-        plugin_lifecycle.register("p1")
-        assert plugin_lifecycle.get_state("p1") == "registered"
+        self.register_plugin(plugin_lifecycle, "p1")
+        metadata = plugin_lifecycle.registry.get("p1")
+        assert metadata.state.value == "discovered"
 
-    def test_enable(self, plugin_lifecycle):
-        plugin_lifecycle.register("p1")
-        plugin_lifecycle.enable("p1")
-        assert plugin_lifecycle.get_state("p1") == "enabled"
+    @pytest.mark.asyncio
+    async def test_enable(self, plugin_lifecycle):
+        self.register_plugin(plugin_lifecycle, "p1")
+        result = await plugin_lifecycle.enable("p1")
+        assert result.success is True
+        assert plugin_lifecycle.registry.get("p1").state.value == "enabled"
 
-    def test_disable(self, plugin_lifecycle):
-        plugin_lifecycle.register("p1")
-        plugin_lifecycle.enable("p1")
-        plugin_lifecycle.disable("p1")
-        assert plugin_lifecycle.get_state("p1") == "disabled"
+    @pytest.mark.asyncio
+    async def test_disable(self, plugin_lifecycle):
+        self.register_plugin(plugin_lifecycle, "p1")
+        await plugin_lifecycle.enable("p1")
+        result = await plugin_lifecycle.disable("p1")
+        assert result.success is True
+        assert plugin_lifecycle.registry.get("p1").state.value == "disabled"
 
-    def test_uninstall(self, plugin_lifecycle):
-        plugin_lifecycle.register("p1")
-        plugin_lifecycle.uninstall("p1")
-        assert plugin_lifecycle.get_state("p1") is None
+    @pytest.mark.asyncio
+    async def test_uninstall(self, plugin_lifecycle):
+        self.register_plugin(plugin_lifecycle, "p1")
+        result = await plugin_lifecycle.uninstall("p1")
+        assert result.success is True
+        assert plugin_lifecycle.registry.get("p1") is None
 
-    def test_list_enabled(self, plugin_lifecycle):
-        plugin_lifecycle.register("a")
-        plugin_lifecycle.register("b")
-        plugin_lifecycle.enable("a")
-        enabled = plugin_lifecycle.list_state("enabled")
-        assert "a" in enabled
-        assert "b" not in enabled
+    @pytest.mark.asyncio
+    async def test_list_enabled(self, plugin_lifecycle):
+        self.register_plugin(plugin_lifecycle, "a")
+        self.register_plugin(plugin_lifecycle, "b")
+        await plugin_lifecycle.enable("a")
+        enabled = plugin_lifecycle.registry.list(
+            state=plugin_lifecycle.registry.get("a").state,
+        )
+        assert [plugin.manifest.id for plugin in enabled] == ["a"]
 
-    def test_enable_nonexistent_raises(self, plugin_lifecycle):
-        with pytest.raises(Exception):
-            plugin_lifecycle.enable("nonexistent")
+    @pytest.mark.asyncio
+    async def test_enable_nonexistent_returns_failure(self, plugin_lifecycle):
+        result = await plugin_lifecycle.enable("nonexistent")
+        assert result.success is False
 
 
 class TestDependencyResolver:
     def test_no_dependencies(self, dependency_resolver):
-        result = dependency_resolver.resolve([])
-        assert result == []
+        manifest = PluginManifest(
+            id="independent",
+            version=PluginVersion.parse("1.0.0"),
+        )
+        assert dependency_resolver.validate(manifest) == []
 
     def test_missing_dependency_detected(self, dependency_resolver):
         from infrastructure.plugins.types import PluginDependency
-        deps = [PluginDependency(plugin_id="missing-dep", version=">=1.0.0")]
-        with pytest.raises(Exception):
-            dependency_resolver.resolve(deps)
+        manifest = PluginManifest(
+            id="dependent",
+            version=PluginVersion.parse("1.0.0"),
+            dependencies=[PluginDependency(plugin_id="missing-dep", version=">=1.0.0")],
+        )
+        assert dependency_resolver.validate(manifest) == [
+            "Missing dependency: missing-dep",
+        ]
 
     def test_version_conflict(self, dependency_resolver):
         from infrastructure.plugins.types import PluginDependency, PluginManifest
-        dep = PluginDependency(plugin_id="base", version=">=2.0.0")
-        dependency_resolver.register_available(
-            PluginManifest(id="base", name="Base", version="1.0.0", permissions=[], hooks=[])
+        dependency_resolver.add_plugin(
+            PluginManifest(
+                id="base",
+                name="Base",
+                version=PluginVersion.parse("1.0.0"),
+                permissions=[],
+                hooks=[],
+            )
         )
-        with pytest.raises(Exception):
-            dependency_resolver.resolve([dep])
+        dependent = PluginManifest(
+            id="dependent",
+            version=PluginVersion.parse("1.0.0"),
+            dependencies=[PluginDependency(plugin_id="base", version=">=2.0.0")],
+        )
+        assert dependency_resolver.validate(dependent) == [
+            "Version conflict: base requires >=2.0.0, installed 1.0.0",
+        ]
 
 
 class TestPluginLoader:
@@ -250,8 +315,13 @@ class TestPluginLoader:
         assert plugins == []
 
     def test_scan_directory(self, plugin_loader, tmp_path):
-        plugin_dir = tmp_path / "plugins"
-        plugin_dir.mkdir()
-        (plugin_dir / "manifest.json").write_text('{"id":"test","version":"1.0.0"}')
-        found = plugin_loader.scan_directory(str(plugin_dir))
-        assert len(found) >= 1
+        plugin_dir = tmp_path / "plugins" / "test"
+        plugin_dir.mkdir(parents=True)
+        (plugin_dir / "manifest.json").write_text(
+            '{"id":"test","version":"1.0.0"}',
+            encoding="utf-8",
+        )
+        found = plugin_loader.discover()
+        assert len(found) == 1
+        assert found[0][0].id == "test"
+        assert found[0][1] is None

@@ -54,6 +54,7 @@ def _chat_result_to_payload(result: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @router.post("/api/chat")
+@router.post("/api/v1/chat")
 async def legacy_chat(body: ChatIn, user: Dict[str, Any] = Depends(get_current_user)):
     user_id = user["id"]
     session_id = body.session_id or str(uuid.uuid4())
@@ -68,6 +69,7 @@ async def legacy_chat(body: ChatIn, user: Dict[str, Any] = Depends(get_current_u
 
 
 @router.post("/api/chat/stream")
+@router.post("/api/v1/chat/stream")
 async def legacy_chat_stream(body: ChatIn, user: Dict[str, Any] = Depends(get_current_user)):
     user_id = user["id"]
     session_id = body.session_id or str(uuid.uuid4())

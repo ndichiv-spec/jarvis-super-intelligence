@@ -3,13 +3,14 @@ Centralized configuration loader with environment-aware resolution,
 secret injection, type coercion, and validation.
 """
 
-import os
 import json
+import os
 import re
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Type, Union, Callable
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
+from typing import Any
 
 
 class ConfigValidationError(Exception):
@@ -30,7 +31,7 @@ class ConfigSource:
     """Represents a single configuration source with priority."""
     name: str
     priority: int
-    loader: Callable[[], Dict[str, Any]]
+    loader: Callable[[], dict[str, Any]]
 
 
 @dataclass
@@ -39,14 +40,14 @@ class ConfigRule:
     key: str
     required: bool = False
     default: Any = None
-    type_: Optional[Type] = None
-    choices: Optional[List[str]] = None
-    min_value: Optional[float] = None
-    max_value: Optional[float] = None
-    pattern: Optional[str] = None
+    type_: type | None = None
+    choices: list[str] | None = None
+    min_value: float | None = None
+    max_value: float | None = None
+    pattern: str | None = None
     description: str = ""
     sensitive: bool = False
-    depends_on: Optional[List[str]] = None
+    depends_on: list[str] | None = None
 
 
 class ConfigLoader:
@@ -64,18 +65,18 @@ class ConfigLoader:
     def __init__(
         self,
         env_prefix: str = "JARVIS_",
-        config_dir: Optional[Path] = None,
-        environment: Optional[str] = None,
+        config_dir: Path | None = None,
+        environment: str | None = None,
     ):
         self.env_prefix = env_prefix
         self.config_dir = config_dir or Path.cwd()
         self.environment = environment or os.getenv("JARVIS_ENV", "development")
-        self.sources: List[ConfigSource] = []
-        self.rules: Dict[str, ConfigRule] = {}
-        self._resolved: Dict[str, Any] = {}
-        self._resolved_sensitive: Set[str] = set()
+        self.sources: list[ConfigSource] = []
+        self.rules: dict[str, ConfigRule] = {}
+        self._resolved: dict[str, Any] = {}
+        self._resolved_sensitive: set[str] = set()
 
-    def add_source(self, name: str, priority: int, loader: Callable[[], Dict[str, Any]]):
+    def add_source(self, name: str, priority: int, loader: Callable[[], dict[str, Any]]):
         self.sources.append(ConfigSource(name=name, priority=priority, loader=loader))
         self.sources.sort(key=lambda s: s.priority)
         return self
@@ -84,17 +85,18 @@ class ConfigLoader:
         self.rules[rule.key] = rule
         return self
 
-    def add_rules(self, rules: List[ConfigRule]):
+    def add_rules(self, rules: list[ConfigRule]):
         for rule in rules:
             self.add_rule(rule)
         return self
 
-    def load(self) -> Dict[str, Any]:
+    def load(self) -> dict[str, Any]:
         """Load and resolve configuration from all sources."""
-        merged: Dict[str, Any] = {}
+        merged: dict[str, Any] = {}
 
-        # Load from sources in priority order (lowest first = highest priority)
-        for source in self.sources:
+        # Merge lower-priority sources first so the highest-priority source
+        # (lowest numeric value) wins when the same key exists in multiple sources.
+        for source in reversed(self.sources):
             try:
                 data = source.loader()
                 merged.update(data)
@@ -117,9 +119,9 @@ class ConfigLoader:
         self._resolved = merged
         return merged
 
-    def _validate(self, config: Dict[str, Any]):
+    def _validate(self, config: dict[str, Any]):
         """Validate configuration against defined rules."""
-        errors: List[str] = []
+        errors: list[str] = []
 
         for key, rule in self.rules.items():
             value = config.get(key)
@@ -171,7 +173,7 @@ class ConfigLoader:
                 "Configuration validation failed:\n  " + "\n  ".join(errors)
             )
 
-    def _coerce_types(self, config: Dict[str, Any]) -> Dict[str, Any]:
+    def _coerce_types(self, config: dict[str, Any]) -> dict[str, Any]:
         """Coerce configuration values to their declared types."""
         coerced = dict(config)
         for key, rule in self.rules.items():
@@ -196,7 +198,7 @@ class ConfigLoader:
             return val
         return str(val).lower() in ("1", "true", "yes", "on")
 
-    def get_list(self, key: str, default: Optional[List[str]] = None) -> List[str]:
+    def get_list(self, key: str, default: list[str] | None = None) -> list[str]:
         val = self._resolved.get(key, default)
         if isinstance(val, list):
             return val
@@ -207,7 +209,7 @@ class ConfigLoader:
     def is_sensitive(self, key: str) -> bool:
         return self.rules.get(key, None) is not None and self.rules[key].sensitive
 
-    def expose(self) -> Dict[str, Any]:
+    def expose(self) -> dict[str, Any]:
         """Expose non-sensitive config (safe for logging/debug endpoints)."""
         return {
             k: "***REDACTED***" if self.is_sensitive(k) else v
@@ -217,10 +219,10 @@ class ConfigLoader:
 
 # Pre-built source loaders
 
-def env_source(prefix: str = "") -> Callable[[], Dict[str, Any]]:
+def env_source(prefix: str = "") -> Callable[[], dict[str, Any]]:
     """Load configuration from environment variables."""
-    def loader() -> Dict[str, Any]:
-        config: Dict[str, Any] = {}
+    def loader() -> dict[str, Any]:
+        config: dict[str, Any] = {}
         for key, value in os.environ.items():
             if prefix and not key.startswith(prefix):
                 continue
@@ -231,14 +233,14 @@ def env_source(prefix: str = "") -> Callable[[], Dict[str, Any]]:
     return loader
 
 
-def dotenv_source(env_path: Optional[Path] = None) -> Callable[[], Dict[str, Any]]:
+def dotenv_source(env_path: Path | None = None) -> Callable[[], dict[str, Any]]:
     """Load configuration from a .env file."""
-    def loader() -> Dict[str, Any]:
+    def loader() -> dict[str, Any]:
         path = env_path or Path.cwd() / ".env"
         if not path.exists():
             return {}
-        config: Dict[str, Any] = {}
-        with open(path, "r") as f:
+        config: dict[str, Any] = {}
+        with open(path) as f:
             for line in f:
                 line = line.strip()
                 if not line or line.startswith("#"):
@@ -254,17 +256,17 @@ def dotenv_source(env_path: Optional[Path] = None) -> Callable[[], Dict[str, Any
     return loader
 
 
-def json_source(config_path: Path) -> Callable[[], Dict[str, Any]]:
+def json_source(config_path: Path) -> Callable[[], dict[str, Any]]:
     """Load configuration from a JSON file."""
-    def loader() -> Dict[str, Any]:
+    def loader() -> dict[str, Any]:
         if not config_path.exists():
             return {}
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             return json.load(f)
     return loader
 
 
-def default_config_loader(environment: Optional[str] = None) -> ConfigLoader:
+def default_config_loader(environment: str | None = None) -> ConfigLoader:
     """Create a pre-configured ConfigLoader with standard sources."""
     env = environment or os.getenv("JARVIS_ENV", "development")
     loader = ConfigLoader(env_prefix="JARVIS_", environment=env)

@@ -217,6 +217,31 @@ def test_execution_presentation_uses_observed_sources_and_request_correlation():
     assert contract["interactions"][0]["required_permissions"] == ["web:read"]
 
 
+def test_execution_presentation_rejects_private_ip_source_links():
+    contract = build_execution_presentation(
+        operation="research.compare",
+        success=True,
+        message="Research summary.",
+        artifacts=[{
+            "title": "Internal service",
+            "url": "https://127.0.0.1/private",
+            "snippet": "Must not be presented as a public source.",
+        }],
+        tool_result="",
+        request_id="request-1",
+        session_id="session-1",
+        conversation_id="session-1",
+        command_id="command-1",
+        execution_id="execution-1",
+    )
+
+    assert all(
+        component["type"] != "research.source_list"
+        for component in contract["components"]
+    )
+    assert "127.0.0.1" not in json.dumps(contract)
+
+
 def test_map_presentation_uses_only_validated_user_provided_coordinates():
     contract = build_execution_presentation(
         operation="geography.coordinates.map",

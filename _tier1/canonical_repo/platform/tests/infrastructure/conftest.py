@@ -75,7 +75,12 @@ def populated_knowledge_store(empty_knowledge_store):
     from infrastructure.knowledge import KnowledgeIngestor, ChunkConfig
     from infrastructure.knowledge.types import ChunkingStrategy
     ingestor = KnowledgeIngestor(
-        ChunkConfig(chunk_size=100, min_chunk_size=10, strategy=ChunkingStrategy.FIXED_SIZE)
+        ChunkConfig(
+            chunk_size=100,
+            chunk_overlap=0,
+            min_chunk_size=10,
+            strategy=ChunkingStrategy.FIXED_SIZE,
+        )
     )
     for doc in [doc1, doc2, doc3]:
         chunks = ingestor.ingest(doc.content).chunks
@@ -90,7 +95,12 @@ def knowledge_ingestor():
     from infrastructure.knowledge import KnowledgeIngestor, ChunkConfig
     from infrastructure.knowledge.types import ChunkingStrategy
     return KnowledgeIngestor(
-        ChunkConfig(chunk_size=100, min_chunk_size=10, strategy=ChunkingStrategy.FIXED_SIZE)
+        ChunkConfig(
+            chunk_size=100,
+            chunk_overlap=0,
+            min_chunk_size=10,
+            strategy=ChunkingStrategy.FIXED_SIZE,
+        )
     )
 
 
@@ -142,15 +152,15 @@ def plugin_registry():
 
 
 @pytest.fixture
-def plugin_lifecycle():
-    from infrastructure.plugins import PluginLifecycleManager
-    return PluginLifecycleManager()
-
-
-@pytest.fixture
 def hook_system():
     from infrastructure.plugins import HookSystem
     return HookSystem()
+
+
+@pytest.fixture
+def plugin_lifecycle(plugin_registry, plugin_loader, hook_system):
+    from infrastructure.plugins import PluginLifecycleManager
+    return PluginLifecycleManager(plugin_registry, plugin_loader, hook_system)
 
 
 @pytest.fixture
@@ -162,7 +172,7 @@ def dependency_resolver():
 @pytest.fixture
 def plugin_loader(tmp_path):
     from infrastructure.plugins import PluginLoader
-    return PluginLoader(plugin_dir=str(tmp_path / "plugins"))
+    return PluginLoader(plugin_dirs=[tmp_path / "plugins"])
 
 
 # ── Security Fixtures ──────────────────────────────────────
@@ -170,7 +180,7 @@ def plugin_loader(tmp_path):
 @pytest.fixture
 def jwt_authenticator():
     from infrastructure.security import JWTAuthenticator
-    return JWTAuthenticator(secret_key="test-secret-key-32-chars-long-for-hmac!")
+    return JWTAuthenticator(secret="test-secret-key-32-chars-long-for-hmac!")
 
 
 @pytest.fixture

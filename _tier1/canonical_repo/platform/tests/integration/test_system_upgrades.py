@@ -5,6 +5,10 @@ Comprehensive testing for all implemented upgrades
 
 import asyncio
 import pytest
+pytest.importorskip(
+    "core.security.auth_service",
+    reason="Legacy microservice stack is not part of the canonical platform.",
+)
 import json
 import time
 from datetime import datetime, timedelta

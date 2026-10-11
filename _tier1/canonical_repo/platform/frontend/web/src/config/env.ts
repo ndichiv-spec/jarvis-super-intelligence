@@ -1,6 +1,8 @@
 const env = {
-  API_URL: process.env.NEXT_PUBLIC_API_URL || '',
-  WS_URL: process.env.NEXT_PUBLIC_WS_URL || '',
+  API_URL: process.env.NEXT_PUBLIC_API_URL
+    || (process.env.NODE_ENV === 'development' ? 'http://127.0.0.1:8000' : ''),
+  WS_URL: process.env.NEXT_PUBLIC_WS_URL
+    || (process.env.NODE_ENV === 'development' ? 'ws://127.0.0.1:8000' : ''),
   SOCKET_URL: process.env.NEXT_PUBLIC_SOCKET_URL || '',
   APP_NAME: process.env.NEXT_PUBLIC_APP_NAME || 'JARVIS AI',
   APP_VERSION: process.env.NEXT_PUBLIC_APP_VERSION || '3.0.0',

@@ -11,6 +11,11 @@ import logging
 from typing import Dict, Any, List
 import numpy as np
 
+pytest.importorskip(
+    "core.quantum_computing",
+    reason="Legacy Tier 6 simulation suite is not part of the canonical platform.",
+)
+
 # Import all Tier 6 engines
 from core.quantum_computing import get_quantum_computing_engine
 from core.neuromorphic_computing import get_neuromorphic_computing_engine

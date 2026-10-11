@@ -24,7 +24,6 @@ import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { useTheme } from 'next-themes';
-import { ThemeSelector } from '@/components/theme-selector';
 import {
   jarvisAPI,
   type ProviderFeatureStatus,
@@ -231,10 +230,6 @@ export default function SettingsPage() {
           </Button>
         </div>
       </div>
-
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-        <ThemeSelector />
-      </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
         {/* Appearance */}

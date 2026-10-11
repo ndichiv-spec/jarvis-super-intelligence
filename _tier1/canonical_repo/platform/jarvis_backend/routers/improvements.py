@@ -6,11 +6,20 @@ The Brain never receives provider credentials, API keys, or secrets.
 from __future__ import annotations
 
 import logging
+import os
+from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 
-from jarvis_backend.core import get_store
+from jarvis_backend.core import (
+    DATA_DIR,
+    _audit_system_action,
+    _require_admin,
+    get_store,
+)
+from jarvis_backend.isolated_candidate import IsolatedCandidateRunner
 from jarvis_backend.self_improvement import (
     SelfImprovementCycle,
     CandidateArtifact,
@@ -36,6 +45,30 @@ router = APIRouter(prefix="/api/v1/improvements", tags=["improvements"])
 _orchestrator: Optional[SelfImprovementOrchestrator] = None
 
 
+class CodeCandidateRequest(BaseModel):
+    problem: str = Field(min_length=1, max_length=2_000)
+    evidence: str = Field(min_length=1, max_length=8_000)
+    proposed_change: str = Field(min_length=1, max_length=2_000)
+    file_changes: dict[str, str] = Field(min_length=1, max_length=5)
+    test_targets: list[str] = Field(min_length=1, max_length=5)
+
+
+def _candidate_runner() -> IsolatedCandidateRunner:
+    project_root = Path(
+        os.environ.get(
+            "JARVIS_CODE_ROOT",
+            str(Path(__file__).resolve().parents[3]),
+        )
+    )
+    artifact_root = Path(
+        os.environ.get(
+            "JARVIS_CANDIDATE_ROOT",
+            str(DATA_DIR / "isolated_code_candidates"),
+        )
+    )
+    return IsolatedCandidateRunner(project_root, artifact_root)
+
+
 def get_orchestrator() -> SelfImprovementOrchestrator:
     global _orchestrator
     if _orchestrator is None:
@@ -46,6 +79,49 @@ def get_orchestrator() -> SelfImprovementOrchestrator:
 # ---------------------------------------------------------------------------
 # Static collection routes — MUST come before /{impr_id} dynamic routes.
 # ---------------------------------------------------------------------------
+
+@router.post("/code-candidates", response_model=dict)
+def prepare_code_candidate(
+    payload: CodeCandidateRequest,
+    user: dict[str, Any] = Depends(_require_admin),
+) -> dict[str, Any]:
+    """Evaluate a source-only candidate in an isolated checkout; never promote it."""
+    owner_id = str(user.get("id") or user.get("email") or "")
+    if not owner_id:
+        raise HTTPException(status_code=403, detail="Authenticated owner identity is required")
+    try:
+        report = _candidate_runner().run(
+            owner_id=owner_id,
+            problem=payload.problem,
+            evidence=payload.evidence,
+            proposed_change=payload.proposed_change,
+            file_changes=payload.file_changes,
+            test_targets=payload.test_targets,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _audit_system_action(
+        status="success" if report["status"] == "ready_for_owner_review" else "blocked",
+        action="prepare_isolated_code_candidate",
+        resource=report["candidate_id"],
+        user_email=str(user.get("email") or ""),
+        detail=f"Candidate evaluation status: {report['status']}",
+    )
+    return report
+
+
+@router.get("/code-candidates/{candidate_id}", response_model=dict)
+def get_code_candidate(
+    candidate_id: str,
+    user: dict[str, Any] = Depends(_require_admin),
+) -> dict[str, Any]:
+    """Return a persisted candidate report to its submitting owner only."""
+    owner_id = str(user.get("id") or user.get("email") or "")
+    report = _candidate_runner().load_report(owner_id, candidate_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Code candidate not found")
+    return report
+
 
 # List all improvement cycles
 @router.get("/", response_model=list)

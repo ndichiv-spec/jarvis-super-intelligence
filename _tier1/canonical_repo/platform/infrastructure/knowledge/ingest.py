@@ -29,6 +29,14 @@ class ChunkConfig:
     min_chunk_size: int = 50
     separators: List[str] = field(default_factory=lambda: ["\n\n", "\n", ". ", " ", ""])
 
+    def __post_init__(self):
+        if self.chunk_size <= 0:
+            raise ValueError("chunk_size must be greater than zero")
+        if self.chunk_overlap < 0 or self.chunk_overlap >= self.chunk_size:
+            raise ValueError("chunk_overlap must be non-negative and smaller than chunk_size")
+        if self.min_chunk_size < 0 or self.min_chunk_size > self.chunk_size:
+            raise ValueError("min_chunk_size must be between zero and chunk_size")
+
 
 class KnowledgeIngestor:
     """

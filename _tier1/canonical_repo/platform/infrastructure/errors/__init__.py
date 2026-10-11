@@ -8,23 +8,54 @@ Provides:
   - Structured error responses
 """
 
-from .types import (
-    JarvisError, ConfigurationError, SecurityError, AuthenticationError,
-    AuthorizationError, RateLimitError, ProviderError, AIProviderError,
-    DatabaseError, CacheError, ValidationError, NotFoundError,
-    TimeoutError, DependencyError, ResourceExhaustedError,
-    SandboxError, AutomationError, InternalError,
-)
 from .handler import ErrorHandler, error_response, exception_to_status
-from .tracker import ErrorTracker, ErrorEvent, get_error_tracker
+from .tracker import ErrorEvent, ErrorTracker, get_error_tracker
+from .types import (
+    AIProviderError,
+    AuthenticationError,
+    AuthorizationError,
+    AutomationError,
+    CacheError,
+    ConfigurationError,
+    DatabaseError,
+    DependencyError,
+    IntegrationError,
+    InternalError,
+    JarvisError,
+    NotFoundError,
+    ProviderError,
+    RateLimitError,
+    ResourceExhaustedError,
+    SandboxError,
+    SecurityError,
+    TimeoutError,
+    ValidationError,
+)
 
 __all__ = [
-    "JarvisError", "ConfigurationError", "SecurityError",
-    "AuthenticationError", "AuthorizationError", "RateLimitError",
-    "ProviderError", "AIProviderError",
-    "DatabaseError", "CacheError", "ValidationError", "NotFoundError",
-    "TimeoutError", "DependencyError", "ResourceExhaustedError",
-    "SandboxError", "AutomationError", "InternalError",
-    "ErrorHandler", "error_response", "exception_to_status",
-    "ErrorTracker", "ErrorEvent", "get_error_tracker",
+    "AIProviderError",
+    "AuthenticationError",
+    "AuthorizationError",
+    "AutomationError",
+    "CacheError",
+    "ConfigurationError",
+    "DatabaseError",
+    "DependencyError",
+    "ErrorEvent",
+    "ErrorHandler",
+    "ErrorTracker",
+    "IntegrationError",
+    "InternalError",
+    "JarvisError",
+    "NotFoundError",
+    "ProviderError",
+    "RateLimitError",
+    "ResourceExhaustedError",
+    "SandboxError",
+    "SecurityError",
+    "TimeoutError",
+    "ValidationError",
+    "error_response",
+    "exception_to_status",
+    "get_error_tracker",
 ]

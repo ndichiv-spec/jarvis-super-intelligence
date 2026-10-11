@@ -2,10 +2,8 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
-import { NeuralThemeProvider } from "@/lib/neural-theme-engine";
 import { Toaster } from "@/components/ui/sonner";
 import { ConnectionBanner } from "@/components/connection-banner";
-import { AutonomousDashboardProvider } from "@/components/autonomous-dashboard-provider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -23,19 +21,15 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         <ConnectionBanner />
-        <AutonomousDashboardProvider>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="dark"
-            enableSystem={false}
-            disableTransitionOnChange
-          >
-            <NeuralThemeProvider>
-              {children}
-              <Toaster richColors position="top-right" />
-            </NeuralThemeProvider>
-          </ThemeProvider>
-        </AutonomousDashboardProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem={false}
+          disableTransitionOnChange
+        >
+          {children}
+          <Toaster richColors position="top-right" />
+        </ThemeProvider>
       </body>
     </html>
   );

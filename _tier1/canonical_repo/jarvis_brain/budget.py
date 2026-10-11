@@ -17,6 +17,7 @@ This module owns no credentials, no secrets, no I/O — it is pure accounting.
 """
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -121,7 +122,22 @@ class TaskBudget:
             if isinstance(metrics, dict):
                 cm = metrics.get("cost_model")
                 if cm:
-                    self.spend_call(cm)
+                    call_count = metrics.get("provider_calls", 1)
+                    if type(call_count) is not int or not 0 <= call_count <= 100:
+                        call_count = 1
+                    reported_cost = metrics.get("total_cost_usd")
+                    if (
+                        isinstance(reported_cost, (int, float))
+                        and not isinstance(reported_cost, bool)
+                        and math.isfinite(reported_cost)
+                        and reported_cost >= 0
+                    ):
+                        self.provider_calls += call_count
+                        self.usd_spent += float(reported_cost)
+                        self._check()
+                    else:
+                        for _ in range(call_count):
+                            self.spend_call(cm)
         except TaskBudgetExceeded:
             raise
         except Exception:

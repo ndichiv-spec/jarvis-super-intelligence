@@ -15,6 +15,11 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+pytest.importorskip(
+    "core.agents.advanced_agent_orchestration",
+    reason="Legacy advanced-agent suite is not part of the canonical platform.",
+)
+
 # Import JARVIS components
 from core.agents.advanced_agent_orchestration import (
     advanced_orchestrator,

@@ -8,7 +8,7 @@ import asyncio
 import sys
 
 
-async def test_system():
+async def run_system_checks():
     print("=" * 70)
     print("JARVIS ENHANCED SEARCH SYSTEM - TEST")
     print("=" * 70)
@@ -102,12 +102,12 @@ async def test_system():
     else:
         print("SUCCESS - All tests passed!")
         print("\nTo use the search system:")
-        print("  1. Run: python -m uvicorn api.main:app --reload")
+        print("  1. Run: python -m uvicorn jarvis_backend.main:app --reload")
         print("  2. Visit: http://localhost:8000/api/v1/search/docs")
         print("  3. API: POST /api/v1/search with {'query': 'your search'}")
         return 0
 
 
 if __name__ == "__main__":
-    exit_code = asyncio.run(test_system())
+    exit_code = asyncio.run(run_system_checks())
     sys.exit(exit_code)

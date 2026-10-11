@@ -2,6 +2,11 @@ import json
 
 import pytest
 
+pytest.importorskip(
+    "config.settings",
+    reason="Legacy standalone engine package is not part of the canonical platform.",
+)
+
 from config.settings import Settings
 from core import MissionRequest
 from core.engine import JarvisEngine, create_engine

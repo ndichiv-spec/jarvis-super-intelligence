@@ -182,6 +182,56 @@ endpoint_audit_events = Table(
 Index("ix_jarvis_endpoint_audit_owner", endpoint_audit_events.c.owner_id,
       endpoint_audit_events.c.timestamp)
 
+infrastructure_resources = Table(
+    "jarvis_infrastructure_resources",
+    metadata,
+    Column("resource_id", String(36), primary_key=True),
+    Column("owner_id", String(255), nullable=False),
+    Column("provider", String(64), nullable=False),
+    Column("resource_type", String(64), nullable=False),
+    Column("name", String(128), nullable=False),
+    Column("base_url", String(2048), nullable=False),
+    Column("hostname", String(253), nullable=False),
+    Column("port", Integer, nullable=False),
+    Column("api_version", String(32), nullable=False),
+    Column("connection_method", String(64), nullable=False),
+    Column("auth_mechanism", String(64), nullable=False),
+    Column("allowed_operations", Text, nullable=False),
+    Column("permission_scope", Text, nullable=False),
+    Column("network_policy", Text, nullable=False),
+    Column("timeout_seconds", Integer, nullable=False),
+    Column("health_policy", Text, nullable=False),
+    Column("credential_ref", String(128), nullable=False),
+    Column("status", String(32), nullable=False),
+    Column("last_verified_at", Float),
+    Column("verified_identity", Text),
+    Column("sanitized_error", String(256)),
+    Column("created_at", Float, nullable=False),
+    Column("updated_at", Float, nullable=False),
+)
+Index(
+    "ix_jarvis_infrastructure_resources_owner",
+    infrastructure_resources.c.owner_id,
+    infrastructure_resources.c.provider,
+    infrastructure_resources.c.status,
+)
+
+infrastructure_resource_audit_events = Table(
+    "jarvis_infrastructure_resource_audit_events",
+    metadata,
+    Column("event_id", String(36), primary_key=True),
+    Column("resource_id", String(36), nullable=False),
+    Column("owner_id", String(255), nullable=False),
+    Column("event_type", String(64), nullable=False),
+    Column("timestamp", Float, nullable=False),
+    Column("payload", Text, nullable=False, default="{}"),
+)
+Index(
+    "ix_jarvis_infrastructure_resource_audit_owner",
+    infrastructure_resource_audit_events.c.owner_id,
+    infrastructure_resource_audit_events.c.timestamp,
+)
+
 presentation_revisions = Table(
     "jarvis_presentation_revisions",
     metadata,

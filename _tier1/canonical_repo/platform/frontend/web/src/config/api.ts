@@ -18,8 +18,8 @@ export const API_ENDPOINTS = {
   },
 
   chat: {
-    send: `${env.API_URL}/api/chat`,
-    stream: `${env.API_URL}/api/chat/stream`,
+    send: `${env.API_URL}${API_PREFIX}/chat`,
+    stream: `${env.API_URL}${API_PREFIX}/chat/stream`,
     generate: `${env.API_URL}${API_PREFIX}/ai/generate`,
     feedback: `${env.API_URL}/api/chat/messages`,
     status: `${env.API_URL}${API_PREFIX}/ai/status`,

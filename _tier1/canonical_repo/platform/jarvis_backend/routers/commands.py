@@ -619,6 +619,9 @@ async def _execute_command(command_id: str, user: dict[str, Any], autonomy: str)
         user_id = _owner_id(user)
         permissions = resolve_permissions(user_id, principal=user)
         registry = build_capability_registry()
+        research_metrics: dict[str, Any] = {}
+        research_partial = False
+        search_evidence: list[dict[str, Any]] = []
         if world_intent is not None:
             inventory = capability_inventory()
             contracts = build_contracts(registry, inventory)
@@ -790,6 +793,14 @@ async def _execute_command(command_id: str, user: dict[str, Any], autonomy: str)
                     if item.get("name") == resolved_capability
                     and item.get("success")
                 ]
+                research_metrics = (
+                    search_evidence[0].get("metrics") or {}
+                    if search_evidence else {}
+                )
+                research_partial = (
+                    world_intent.operation == "research.compare"
+                    and research_metrics.get("completion") != "complete"
+                )
                 artifacts = [
                     artifact
                     for item in search_evidence
@@ -833,6 +844,9 @@ async def _execute_command(command_id: str, user: dict[str, Any], autonomy: str)
                         search_evidence = []
                 elif search_evidence:
                     presentation_message = (
+                        str(search_evidence[0].get("result") or "")
+                        if world_intent.operation == "research.compare"
+                        else
                         f"Observed {len(artifacts)} public source(s) for "
                         f"{world_intent.operation}."
                         if world_intent.operation in {"web.search", "media.discovery"}
@@ -875,6 +889,7 @@ async def _execute_command(command_id: str, user: dict[str, Any], autonomy: str)
                         conversation_id=world_command.get("conversation_id"),
                         command_id=command_id,
                         execution_id=execution_id,
+                        task_status="partial" if research_partial else None,
                     )
                 compatibility = {
                     "decision": "canonical_contract",
@@ -951,13 +966,23 @@ async def _execute_command(command_id: str, user: dict[str, Any], autonomy: str)
             result.status == "COMPLETED"
             and bool(result.completion_condition_met)
             and result.confidence_state.value == "SUFFICIENT_INFORMATION"
+            and not (
+                world_intent is not None
+                and world_intent.operation == "research.compare"
+                and (
+                    not search_evidence
+                    or research_metrics.get("completion") != "complete"
+                )
+            )
         )
         current["result"] = {
-            "status": result.status,
+            "status": "PARTIAL" if research_partial else result.status,
             "summary": _safe_value(result.summary),
             "evidence": _safe_value(result.evidence),
             "confidence_state": result.confidence_state.value,
-            "completion_condition_met": result.completion_condition_met,
+            "completion_condition_met": (
+                False if research_partial else result.completion_condition_met
+            ),
             "cost": result.cost,
             **(
                 {"presentation": presentation}
@@ -966,7 +991,7 @@ async def _execute_command(command_id: str, user: dict[str, Any], autonomy: str)
         }
         current["errors"] = (
             [_safe_value(result.summary)]
-            if not verified and result.summary
+            if not verified and result.summary and not research_partial
             else []
         )
         terminal_status = {
@@ -1056,6 +1081,7 @@ async def _execute_command(command_id: str, user: dict[str, Any], autonomy: str)
             "COMPLETED": "command_completed",
             "RECOVERY_REQUIRED": "execution_recovery_required",
             "CANCELLED": "command_cancelled",
+            "PARTIAL": "command_partial",
         }.get(terminal_status, "command_failed")
         _append_event(
             command_id,

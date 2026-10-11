@@ -939,6 +939,22 @@ def capability_inventory() -> dict[str, Any]:
                 "reason": f"browser engine unavailable ({type(exc).__name__})",
             }
 
+    search_state = inventory.get("search_web", {}).get("state")
+    inventory["research.compare"] = {
+        "state": (
+            DEGRADED if search_state in {AVAILABLE, DEGRADED}
+            else NOT_CONFIGURED
+        ),
+        "health": "unknown",
+        "risk": RiskLevel.NETWORK.value,
+        "source": "public web search plus explicitly selected provider-fabric models",
+        "reason": (
+            "healthy provider responses are verified only during execution"
+            if search_state in {AVAILABLE, DEGRADED}
+            else "enable JARVIS_BROWSER_SEARCH_ENABLED for public research"
+        ),
+    }
+
     # Registration alone is not evidence that dependencies, authorization,
     # or the execution path are currently ready.
     for name, risk in _registered_risks().items():
@@ -1903,12 +1919,14 @@ def build_capability_registry(policy=None):
         MemoryRecallTool,
         MemoryTool,
         ModelConsultTool,
+        ResearchCompareTool,
         SandboxRunTool,
         StaticSearchTool,
     )
     for tool in (
         SandboxRunTool(), BrowserSearchTool(), KnowledgeRetrieveTool(),
-        MemoryTool(), MemoryRecallTool(), ModelConsultTool(), StaticSearchTool(),
+        MemoryTool(), MemoryRecallTool(), ModelConsultTool(),
+        ResearchCompareTool(), StaticSearchTool(),
     ):
         registry.register(tool)
     # New capability adapters.

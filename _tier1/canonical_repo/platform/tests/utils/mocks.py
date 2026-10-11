@@ -123,7 +123,6 @@ class MockPluginContext:
         from infrastructure.plugins.types import PluginPermission
         self.plugin_id = plugin_id
         self._allowed = set(allowed_capabilities or [
-            PluginPermission.KNOWLEDGE_READ.value,
             PluginPermission.MEMORY_READ.value,
         ])
         self._config = config or {}

@@ -926,7 +926,7 @@ def start_backend() -> None:
             "description": "Standard user",
             "permissions": [
                 "read", "chat", "agent:read", "memory:write", "voice:use",
-                "web:read",
+                "web:read", "model:consult",
             ],
             "created_at": now_iso(),
         }
@@ -938,6 +938,15 @@ def start_backend() -> None:
             "created_at": now_iso(),
         }
         get_store("roles").save()
+    else:
+        # Existing installations may have been seeded before public model
+        # consultation became an explicitly authorized capability.
+        user_role = roles.get("user")
+        if isinstance(user_role, dict):
+            user_permissions = user_role.get("permissions")
+            if isinstance(user_permissions, list) and "model:consult" not in user_permissions:
+                user_role["permissions"] = [*user_permissions, "model:consult"]
+                get_store("roles").save()
 
     perms = get_store("permissions").load()
     if not perms:
