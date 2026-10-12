@@ -159,6 +159,32 @@ def _is_sqlite_url(url: str) -> bool:
     return url.startswith("sqlite")
 
 
+def _postgres_engine_options() -> dict[str, Any]:
+    """Bound and health-check pooled PostgreSQL connections."""
+    def configured_int(name: str, default: int, minimum: int = 1) -> int:
+        value = os.environ.get(name)
+        if value is None:
+            return default
+        try:
+            parsed = int(value)
+        except ValueError as exc:
+            raise RuntimeError(f"{name} must be an integer of at least {minimum}.") from exc
+        if parsed < minimum:
+            raise RuntimeError(f"{name} must be an integer of at least {minimum}.")
+        return parsed
+
+    return {
+        "pool_pre_ping": True,
+        "pool_size": configured_int("JARVIS_DB_POOL_SIZE", 5),
+        "max_overflow": configured_int("JARVIS_DB_MAX_OVERFLOW", 5, minimum=0),
+        "pool_timeout": configured_int("JARVIS_DB_POOL_TIMEOUT_SECONDS", 10),
+        "pool_recycle": configured_int("JARVIS_DB_POOL_RECYCLE_SECONDS", 1800),
+        "connect_args": {
+            "connect_timeout": configured_int("JARVIS_DB_CONNECT_TIMEOUT_SECONDS", 10),
+        },
+    }
+
+
 def get_engine() -> Engine:
     """Return the process-wide SQLAlchemy engine (created lazily)."""
     global _engine
@@ -178,7 +204,7 @@ def get_engine() -> Engine:
                         url, connect_args={"check_same_thread": False}
                     )
                 else:
-                    _engine = create_engine(url)
+                    _engine = create_engine(url, **_postgres_engine_options())
     return _engine
 
 

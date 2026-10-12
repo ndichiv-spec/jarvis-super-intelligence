@@ -123,6 +123,85 @@ def test_registration_rejects_duplicate_email(client, account_email_outbox):
     assert duplicate.status_code == 409
 
 
+def test_production_owner_only_identity_and_registration(client, monkeypatch):
+    from jarvis_backend import core
+    from jarvis_backend.routers.auth import hash_password
+
+    monkeypatch.setattr(core, "is_production", lambda: True)
+    monkeypatch.setenv("JARVIS_ADMIN_EMAIL", "owner@example.test")
+
+    users = core.get_store("users").load()
+    users["non-owner-id"] = {
+        "id": "non-owner-id",
+        "email": "non-owner@example.test",
+        "username": "non-owner",
+        "password_hash": hash_password("S3cret!pass"),
+        "email_verified": True,
+        "status": "active",
+        "roles": ["user"],
+    }
+    core.get_store("users").save()
+    non_owner_token = create_token({"sub": "non-owner-id"})
+    denied = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {non_owner_token}"},
+    )
+    assert denied.status_code == 403
+    assert denied.json()["error"]["code"] == "AUTHORIZATION_ERROR"
+    assert core.refresh_access_token(
+        core.create_refresh_token("non-owner-id")
+    ) is None
+    assert core.rotate_refresh_token(
+        core.create_refresh_token("non-owner-id")
+    ) is None
+
+    non_owner_login = client.post(
+        "/api/v1/auth/login",
+        json={
+            "identifier": "non-owner@example.test",
+            "password": "S3cret!pass",
+        },
+    )
+    assert non_owner_login.status_code == 403
+
+    registration = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "new-user@example.test",
+            "username": "new-user",
+            "password": "S3cret!pass",
+        },
+    )
+    assert registration.status_code == 403
+    assert registration.json()["error"]["code"] == "AUTHORIZATION_ERROR"
+
+    users["owner-id"] = {
+        "id": "owner-id",
+        "email": "owner@example.test",
+        "username": "owner",
+        "password_hash": hash_password("S3cret!pass"),
+        "email_verified": True,
+        "status": "active",
+        "roles": ["owner", "admin"],
+    }
+    core.get_store("users").save()
+    owner_token = create_token({"sub": "owner-id"})
+    accepted = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert accepted.status_code == 200
+    assert accepted.json()["email"] == "owner@example.test"
+
+    owner_login = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": "owner@example.test", "password": "S3cret!pass"},
+    )
+    assert owner_login.status_code == 200
+    assert core.refresh_access_token(
+        core.create_refresh_token("owner-id")
+    ) is not None
+
 def test_invalid_token_rejected(client):
     assert client.get(
         "/api/v1/auth/me",

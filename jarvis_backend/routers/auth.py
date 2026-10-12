@@ -232,7 +232,7 @@ def _clear_auth_cookies(response: Response) -> None:
 
 @router.post("/login")
 async def login(body: LoginIn, request: Request, response: Response):
-    from ..core import validate_cookie_origin
+    from ..core import require_canonical_owner, validate_cookie_origin
 
     validate_cookie_origin(request, unsafe=False, reject_untrusted_origin=True)
     users = get_store("users").load()
@@ -257,6 +257,7 @@ async def login(body: LoginIn, request: Request, response: Response):
         )
     if user.get("status") in {"disabled", "suspended", "deleted"}:
         raise HTTPException(status_code=403, detail="Account is disabled")
+    require_canonical_owner(user)
     
     user["last_login_at"] = now_iso()
     users[user["id"]] = user
@@ -284,6 +285,17 @@ async def login(body: LoginIn, request: Request, response: Response):
 
 @router.post("/register")
 async def register(body: RegisterIn):
+    from ..core import is_production
+
+    if is_production():
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "OWNER_ONLY_REGISTRATION_DISABLED",
+                "message": "Create the configured owner account through the deployment bootstrap.",
+            },
+        )
+
     users = get_store("users").load()
     if any(u.get("email", "").lower() == body.email.lower() for u in users.values()):
         raise HTTPException(status_code=409, detail="Email already registered")
