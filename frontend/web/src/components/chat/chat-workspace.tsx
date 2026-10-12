@@ -20,6 +20,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { ChatWindow } from './chat-window';
+import { WorldTaskPanel } from './world-task-panel';
 import { SessionList } from './session-list';
 import { useChatStore } from '@/features/chat/store';
 import { useSystemStore } from '@/features/system/store';
@@ -101,6 +102,7 @@ export function ChatWorkspace() {
   const [showEvents, setShowEvents] = useState(false);
   const [showEnvironments, setShowEnvironments] = useState(false);
   const [showCapabilities, setShowCapabilities] = useState(false);
+  const [showTaskPanel, setShowTaskPanel] = useState(false);
 
   const serviceStatus = systemStatus?.status?.toLowerCase();
   const hasServiceStatus = ['online', 'degraded', 'offline'].includes(serviceStatus ?? '');
@@ -598,6 +600,15 @@ export function ChatWorkspace() {
                 </h2>
               </div>
               <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  aria-expanded={showTaskPanel}
+                  aria-controls="world-task-panel"
+                  onClick={() => setShowTaskPanel((visible) => !visible)}
+                  className="rounded-lg border border-cyan-200/20 bg-cyan-300/[0.06] px-3 py-2 text-xs font-medium text-cyan-100 hover:bg-cyan-300/10"
+                >
+                  {showTaskPanel ? 'Close task workspace' : 'Submit a task'}
+                </button>
                 <span className="hidden h-8 w-px bg-white/[0.08] sm:block" aria-hidden="true" />
                 <div className="min-w-[112px]">
                   <p className="text-[9px] font-medium uppercase tracking-[0.18em] text-slate-500">Assistant activity</p>
@@ -613,6 +624,11 @@ export function ChatWorkspace() {
                 </div>
               </div>
             </section>
+            {showTaskPanel && (
+              <div id="world-task-panel">
+                <WorldTaskPanel conversationId={currentSessionId} authenticated={isAuthenticated} />
+              </div>
+            )}
             <ChatWindow showSidebar={false} className="min-h-0 flex-1" />
           </div>
         </main>

@@ -53,6 +53,10 @@ vi.mock('./chat-window', () => ({
   ),
 }));
 
+vi.mock('./world-task-panel', () => ({
+  WorldTaskPanel: () => <section aria-label="World workspace task execution" />,
+}));
+
 vi.mock('@/components/ui/scroll-area', () => ({
   ScrollArea: ({ children, className }: { children: React.ReactNode; className?: string }) => (
     <div className={className}>{children}</div>
@@ -106,6 +110,18 @@ describe('ChatWorkspace', () => {
     expect(screen.getByRole('status', { name: 'Backend status: Checking' })).toBeInTheDocument();
     expect(screen.getAllByText('Not reported')).toHaveLength(2);
     expect(screen.queryByText('System overview')).not.toBeInTheDocument();
+  });
+
+  it('keeps task submission behind a separate explicit action without changing chat', () => {
+    render(<ChatWorkspace />);
+
+    expect(screen.getByRole('region', { name: 'Conversation pane' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'World workspace task execution' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Submit a task' }));
+
+    expect(screen.getByRole('region', { name: 'World workspace task execution' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Close task workspace' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('region', { name: 'Conversation pane' })).toBeInTheDocument();
   });
 
   it('filters the real session list and selects a matching conversation', () => {

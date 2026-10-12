@@ -115,6 +115,26 @@ def admin_email() -> str:
     return "admin@jarvis.local"
 
 
+def is_canonical_owner(user: dict[str, Any]) -> bool:
+    """Compare the principal to the configured owner identity."""
+    owner_email = (os.environ.get("JARVIS_ADMIN_EMAIL") or "").strip().lower()
+    user_email = (user.get("email") or "").strip().lower()
+    return bool(owner_email and user_email and user_email == owner_email)
+
+
+def require_canonical_owner(user: dict[str, Any]) -> dict[str, Any]:
+    """Enforce owner-only identity in production without trusting caller claims."""
+    if is_production() and not is_canonical_owner(user):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "OWNER_ONLY",
+                "message": "This JARVIS instance is restricted to its configured owner.",
+            },
+        )
+    return user
+
+
 # --------------------------------------------------------------------------- #
 # Persistence
 # --------------------------------------------------------------------------- #
@@ -388,6 +408,25 @@ def refresh_access_token(refresh_token: str) -> Optional[str]:
         store.pop(jti, None)
         get_store("refresh_tokens").save()
         return None
+    account = get_store("users").load().get(entry.get("user_id"))
+    if is_production() and not account:
+        store.pop(jti, None)
+        get_store("refresh_tokens").save()
+        return None
+    if account and (
+        account.get("email_verified") is False
+        or account.get("status") in {"disabled", "suspended", "deleted"}
+    ):
+        store.pop(jti, None)
+        get_store("refresh_tokens").save()
+        return None
+    if account:
+        try:
+            require_canonical_owner(account)
+        except HTTPException:
+            store.pop(jti, None)
+            get_store("refresh_tokens").save()
+            return None
     access = {"sub": entry["user_id"]}
     if entry.get("session_id"):
         access["sid"] = entry["session_id"]
@@ -406,6 +445,10 @@ def rotate_refresh_token(refresh_token: str) -> Optional[tuple[str, str]]:
         return None
 
     account = get_store("users").load().get(entry.get("user_id"))
+    if is_production() and not account:
+        store.pop(jti, None)
+        get_store("refresh_tokens").save()
+        return None
     if account and (
         account.get("email_verified") is False
         or account.get("status") in {"disabled", "suspended", "deleted"}
@@ -413,6 +456,13 @@ def rotate_refresh_token(refresh_token: str) -> Optional[tuple[str, str]]:
         store.pop(jti, None)
         get_store("refresh_tokens").save()
         return None
+    if account:
+        try:
+            require_canonical_owner(account)
+        except HTTPException:
+            store.pop(jti, None)
+            get_store("refresh_tokens").save()
+            return None
 
     session_id = entry.get("session_id")
     if session_id:
@@ -475,7 +525,7 @@ def get_current_user(
             raise HTTPException(status_code=403, detail="API key owner is not authorized")
         if principal.get("email_verified") is False:
             raise HTTPException(status_code=403, detail="API key owner email is not verified")
-        return principal
+        return require_canonical_owner(principal)
     payload = decode_token(token)
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
@@ -506,7 +556,7 @@ def get_current_user(
         session = get_store("sessions").load().get(session_id)
         if not session or session.get("user_id") != user.get("id"):
             raise HTTPException(status_code=401, detail="Session is revoked or expired")
-    return user
+    return require_canonical_owner(user)
 
 
 def get_optional_user(

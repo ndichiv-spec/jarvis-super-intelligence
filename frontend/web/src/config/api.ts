@@ -41,6 +41,15 @@ export const API_ENDPOINTS = {
     events: `${env.API_URL}${API_PREFIX}/runtime/events`,
   },
 
+  commands: {
+    list: `${env.API_URL}${API_PREFIX}/commands`,
+    submit: `${env.API_URL}${API_PREFIX}/commands`,
+    get: (commandId: string) =>
+      `${env.API_URL}${API_PREFIX}/commands/${encodeURIComponent(commandId)}`,
+    authorize: (commandId: string) =>
+      `${env.API_URL}${API_PREFIX}/commands/${encodeURIComponent(commandId)}/authorization`,
+  },
+
   endpoints: {
     register: `${env.API_URL}${API_PREFIX}/endpoints/register`,
     heartbeat: (endpointId: string) =>
