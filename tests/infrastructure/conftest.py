@@ -1,13 +1,17 @@
 """Fixtures for infrastructure subsystem tests."""
 
 from __future__ import annotations
+
+from typing import Any, AsyncGenerator, Dict, List, Optional
+
 import pytest
-from typing import Dict, List, Optional, Any, AsyncGenerator
 
 from tests.utils.mocks import (
-    MockAIProvider, MockEmbeddingProvider, MockLLMProvider, MockPluginContext,
+    MockAIProvider,
+    MockEmbeddingProvider,
+    MockLLMProvider,
+    MockPluginContext,
 )
-
 
 # ── Mock Provider Fixtures ─────────────────────────────────
 
@@ -72,10 +76,13 @@ def populated_knowledge_store(empty_knowledge_store):
         status=KnowledgeStatus.ACTIVE,
     )
 
-    from infrastructure.knowledge import KnowledgeIngestor, ChunkConfig
+    from infrastructure.knowledge import ChunkConfig, KnowledgeIngestor
     from infrastructure.knowledge.types import ChunkingStrategy
     ingestor = KnowledgeIngestor(
-        ChunkConfig(chunk_size=100, min_chunk_size=10, strategy=ChunkingStrategy.FIXED_SIZE)
+        ChunkConfig(
+            chunk_size=100, chunk_overlap=10, min_chunk_size=10,
+            strategy=ChunkingStrategy.FIXED_SIZE,
+        )
     )
     for doc in [doc1, doc2, doc3]:
         chunks = ingestor.ingest(doc.content).chunks
@@ -87,10 +94,13 @@ def populated_knowledge_store(empty_knowledge_store):
 
 @pytest.fixture
 def knowledge_ingestor():
-    from infrastructure.knowledge import KnowledgeIngestor, ChunkConfig
+    from infrastructure.knowledge import ChunkConfig, KnowledgeIngestor
     from infrastructure.knowledge.types import ChunkingStrategy
     return KnowledgeIngestor(
-        ChunkConfig(chunk_size=100, min_chunk_size=10, strategy=ChunkingStrategy.FIXED_SIZE)
+        ChunkConfig(
+            chunk_size=100, chunk_overlap=10, min_chunk_size=10,
+            strategy=ChunkingStrategy.FIXED_SIZE,
+        )
     )
 
 
@@ -117,7 +127,7 @@ def rag_pipeline(knowledge_retriever, context_manager):
 
 @pytest.fixture
 def learning_controller(populated_knowledge_store):
-    from infrastructure.knowledge import LearningController, LearningConfig
+    from infrastructure.knowledge import LearningConfig, LearningController
     return LearningController(populated_knowledge_store, LearningConfig(require_approval=True))
 
 
@@ -142,9 +152,13 @@ def plugin_registry():
 
 
 @pytest.fixture
-def plugin_lifecycle():
-    from infrastructure.plugins import PluginLifecycleManager
-    return PluginLifecycleManager()
+def plugin_lifecycle(tmp_path):
+    from infrastructure.plugins import (
+        HookSystem, PluginLifecycleManager, PluginLoader, PluginRegistry,
+    )
+    registry = PluginRegistry()
+    loader = PluginLoader(plugin_dirs=[tmp_path / "plugins"])
+    return PluginLifecycleManager(registry=registry, loader=loader, hooks=HookSystem())
 
 
 @pytest.fixture
@@ -162,7 +176,7 @@ def dependency_resolver():
 @pytest.fixture
 def plugin_loader(tmp_path):
     from infrastructure.plugins import PluginLoader
-    return PluginLoader(plugin_dir=str(tmp_path / "plugins"))
+    return PluginLoader(plugin_dirs=[tmp_path / "plugins"])
 
 
 # ── Security Fixtures ──────────────────────────────────────
@@ -170,7 +184,7 @@ def plugin_loader(tmp_path):
 @pytest.fixture
 def jwt_authenticator():
     from infrastructure.security import JWTAuthenticator
-    return JWTAuthenticator(secret_key="test-secret-key-32-chars-long-for-hmac!")
+    return JWTAuthenticator(secret="test-secret-key-32-chars-long-for-hmac!")
 
 
 @pytest.fixture
@@ -217,7 +231,7 @@ def error_tracker():
 
 @pytest.fixture
 def sandbox_executor():
-    from infrastructure.sandbox import SandboxExecutor, ExecutionPolicy
+    from infrastructure.sandbox import ExecutionPolicy, SandboxExecutor
     policy = ExecutionPolicy(default_timeout=5.0, allowed_commands=["echo", "python", "python3", "ls"])
     return SandboxExecutor(policy=policy)
 

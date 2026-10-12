@@ -4,7 +4,7 @@ Agent subsystem plugin interface.
 
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any
+from typing import Any, Dict, List
 
 
 class AgentPluginInterface(ABC):
@@ -12,7 +12,7 @@ class AgentPluginInterface(ABC):
 
     @abstractmethod
     async def on_agent_before_execute(self, agent_id: str, task: str,
-                                       context: Dict[str, Any]) -> Optional[str]:
+                                       context: Dict[str, Any]) -> str | None:
         """Called before an agent executes a task. Return modified task or None."""
         ...
 
@@ -24,6 +24,6 @@ class AgentPluginInterface(ABC):
 
     @abstractmethod
     async def on_agent_tool_invoke(self, agent_id: str, tool: str,
-                                    args: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+                                    args: Dict[str, Any]) -> Dict[str, Any] | None:
         """Called when an agent invokes a tool. Return modified args or None."""
         ...

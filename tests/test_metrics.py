@@ -1,15 +1,12 @@
-import sys
+"""Metrics endpoint tests for the canonical FastAPI application."""
 
-sys.path.insert(0, "C:/Users/Administrator/Jarvis")
 
-# Test the metrics endpoints
-from core.metrics import metrics, system_collector
+def test_metrics_endpoint_returns_runtime_snapshot(client):
+    response = client.get("/api/v1/metrics")
 
-print("Metrics module loaded")
-
-# Get system metrics
-sys_metrics = system_collector.get_system_metrics()
-print("System metrics:", sys_metrics)
-
-app_metrics = metrics.get_metrics()
-print("App metrics:", app_metrics)
+    assert response.status_code == 200
+    body = response.json()
+    assert "timestamp" in body
+    assert "system" in body
+    assert "active_sessions" in body
+    assert isinstance(body["active_sessions"], int)

@@ -252,7 +252,7 @@ Output your reasoning as JSON with:
                 success=False,
                 error=brain_response.get('error', 'Unknown error'),
                 error_type='PROVIDER_ERROR',
-                correlation_id=correlation_id,
+                correlation_id=context.correlation_id,
             )
 
         response_text = brain_response['data']['response']
@@ -282,7 +282,7 @@ Output your reasoning as JSON with:
                 event_type='brain.tool.request',
                 source='brain',
                 capability='brain',
-                correlation_id=correlation_id,
+                correlation_id=context.correlation_id,
                 session_id=context.session_id,
                 user_id=context.user_id,
                 status='started',
@@ -293,7 +293,7 @@ Output your reasoning as JSON with:
             capability=self.name,
             success=True,
             data=reasoning,
-            correlation_id=correlation_id,
+            correlation_id=context.correlation_id,
             metrics={
                 'context_length': len(full_context),
                 'capabilities_needed': len(reasoning.get('capabilities_needed', [])),
@@ -313,7 +313,7 @@ Task: {task}
 Goal: {goal}
 
 Output JSON with:
-- "steps": list of {step_number, capability, action, description, reason}
+- "steps": list of {{step_number, capability, action, description, reason}}
 - "estimated_time": total estimated time in seconds
 - "parallel_steps": which steps can run in parallel
 - "fallbacks": what to do if each step fails
@@ -333,10 +333,10 @@ Output JSON with:
             if cleaned.endswith('```'):
                 cleaned = cleaned[:-3]
             plan = json.loads(cleaned.strip())
-        except:
+        except json.JSONDecodeError:
             plan = {'steps': [], 'raw': response['data']['response']}
 
-        self.set_state(CapabilityStatus.READY)
+        self.set_status(CapabilityStatus.READY)
         return ExecutionResult(
             capability=self.name, success=True, data=plan,
             correlation_id=context.correlation_id,
@@ -370,7 +370,7 @@ Output JSON with: "chosen", "reasoning", "confidence"
             if cleaned.endswith('```'):
                 cleaned = cleaned[:-3]
             decision = json.loads(cleaned.strip())
-        except:
+        except json.JSONDecodeError:
             decision = {'chosen': options[0] if options else None,
                        'reasoning': response['data']['response']}
 

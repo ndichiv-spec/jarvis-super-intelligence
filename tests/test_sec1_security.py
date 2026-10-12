@@ -33,8 +33,13 @@ os.environ.setdefault("JARVIS_TEST_MODE", "1")
 
 from jarvis_backend import core  # noqa: E402
 from jarvis_backend.core import (  # noqa: E402
-    get_store, hash_password, create_token, now_iso, is_admin, _require_admin,
     _migrate_legacy_provider_secrets,
+    _require_admin,
+    create_token,
+    get_store,
+    hash_password,
+    is_admin,
+    now_iso,
 )
 
 
@@ -82,9 +87,14 @@ class TestAuthorizationBoundary:
         user = get_store("users").load()[uid]
         assert is_admin(user) is True
 
-    def test_is_admin_true_for_owner_wildcard(self):
+    def test_owner_role_name_does_not_grant_admin_identity(self):
         core._seed_canonical_roles()
         uid, _ = _make_user(["owner"])
+        user = get_store("users").load()[uid]
+        assert is_admin(user) is False
+
+    def test_configured_owner_identity_is_admin(self):
+        uid, _ = _make_user(["user"], email=core.admin_email())
         user = get_store("users").load()[uid]
         assert is_admin(user) is True
 
@@ -113,14 +123,23 @@ class TestAuthorizationBoundary:
 # P4: system host-op protection (auth + destructive lockdown)
 # --------------------------------------------------------------------------- #
 class TestSystemHostOps:
-    def test_public_readonly_surface(self, client):
+    def test_system_metadata_requires_admin(self, client, user_headers):
         for path in ("/api/v1/system/capabilities",
                      "/api/v1/platform/identity",
                      "/api/v1/system/dashboard",
                      "/api/v1/system/status",
-                     "/health", "/api/ping"):
-            r = client.get(path)
-            assert r.status_code == 200, (path, r.status_code, r.text)
+                     "/api/v1/system/launch/apps"):
+            response = client.get(path)
+            assert response.status_code == 401, (path, response.status_code)
+            assert "hostname" not in response.text
+            assert "instance_id" not in response.text
+            denied = client.get(path, headers=user_headers)
+            assert denied.status_code == 403, (path, denied.status_code)
+            assert "hostname" not in denied.text
+            assert "instance_id" not in denied.text
+
+        assert client.get("/health").status_code == 200
+        assert client.get("/api/ping").status_code == 200
 
     def test_unauthenticated_host_ops_rejected(self, client):
         for path in ("/api/v1/system/processes",
@@ -133,17 +152,17 @@ class TestSystemHostOps:
     @pytest.mark.parametrize("command", ["shutdown", "reboot", "halt", "poweroff"])
     def test_shutdown_lockdown_unauthenticated(self, client, command):
         r = client.post("/api/v1/system/launch", json={"app": command})
-        assert r.status_code == 403
-        # Structured error format: {"error": {"code": "AUTHORIZATION_ERROR", "message": "..."}}
+        assert r.status_code == 401
         body = r.json()
         assert "error" in body
-        assert "AUTHORIZATION_ERROR" in body["error"].get("code", "")
+        assert "AUTHENTICATION_ERROR" in body["error"].get("code", "")
+        assert command not in r.text
 
-    def test_shutdown_lockdown_even_when_authenticated(self, client, user_headers):
-        # An authenticated NON-admin still gets 403 for destructive commands
-        # (deny-list is evaluated before the admin check).
+    def test_shutdown_lockdown_even_for_owner(self, client, admin_headers):
+        # Once an owner reaches the handler, the destructive-command deny-list
+        # still rejects the command before any process can be launched.
         r = client.post("/api/v1/system/launch",
-                        json={"app": "shutdown"}, headers=user_headers)
+                        json={"app": "shutdown"}, headers=admin_headers)
         assert r.status_code == 403
 
     def test_non_admin_cannot_launch(self, client, user_headers):
@@ -151,11 +170,30 @@ class TestSystemHostOps:
                         json={"app": "cmd", "args": "/c echo sec1"}, headers=user_headers)
         assert r.status_code == 403
 
-    def test_admin_can_launch_non_destructive(self, client, admin_headers):
+    def test_nonowner_admin_cannot_launch_host_application(self, client, monkeypatch):
+        import subprocess
+
+        launched = []
+        monkeypatch.setattr(subprocess, "Popen", lambda *args, **_kwargs: launched.append(args))
+        _, admin_headers = _make_user(["admin"])
+        response = client.post(
+            "/api/v1/system/launch",
+            json={"app": "notepad.exe"},
+            headers=admin_headers,
+        )
+        assert response.status_code == 403
+        assert launched == []
+
+    def test_admin_can_launch_non_destructive(self, client, admin_headers, monkeypatch):
+        import subprocess
+
+        launched = []
+        monkeypatch.setattr(subprocess, "Popen", lambda args, **kwargs: launched.append((args, kwargs)))
         r = client.post("/api/v1/system/launch",
-                        json={"app": "cmd", "args": "/c echo sec1"}, headers=admin_headers)
+                        json={"app": "notepad.exe"}, headers=admin_headers)
         assert r.status_code == 200, r.text
-        assert r.json()["app"] == "cmd"
+        assert r.json()["app"] == "notepad.exe"
+        assert launched == [(["notepad.exe"], {"shell": False})]
 
     def test_admin_can_read_processes(self, client, admin_headers):
         r = client.get("/api/v1/system/processes", headers=admin_headers)
@@ -254,17 +292,19 @@ class TestLegacySecretMigration:
 # P8: sensitive actions are audited
 # --------------------------------------------------------------------------- #
 class TestAuditTrail:
-    def test_launch_denial_is_audited(self, client):
+    def test_launch_denial_is_audited(self, client, admin_headers):
         before = len([e for e in (get_store("audit_logs").load() or [])
                       if isinstance(e, dict) and e.get("kind") == "system_launch"])
-        client.post("/api/v1/system/launch", json={"app": "shutdown"})
+        response = client.post("/api/v1/system/launch",
+                               json={"app": "shutdown"}, headers=admin_headers)
+        assert response.status_code == 403
         after = [e for e in (get_store("audit_logs").load() or [])
                  if isinstance(e, dict) and e.get("kind") == "system_launch"]
         assert len(after) >= before + 1
         denials = [e for e in after if e.get("status") == "denied"]
         assert denials
         assert denials[-1]["app"] == "shutdown"
-        assert denials[-1]["actor"] == "anonymous"  # no authenticated principal
+        assert denials[-1]["actor"] == "admin@jarvis.local"
 
 
 # --------------------------------------------------------------------------- #
@@ -273,7 +313,7 @@ class TestAuditTrail:
 class TestSecurityHeaders:
     def test_defensive_headers_present(self, client):
         r = client.get("/api/v1/system/status")
-        assert r.status_code == 200
+        assert r.status_code == 401
         for hdr, val in (("x-content-type-options", "nosniff"),
                          ("x-frame-options", "DENY"),
                          ("referrer-policy", "no-referrer"),

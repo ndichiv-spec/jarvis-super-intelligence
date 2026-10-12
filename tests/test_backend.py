@@ -8,13 +8,16 @@ Phase 1 depends on.
 from __future__ import annotations
 
 
-def test_app_title(app):
+def test_app_title():
+    from jarvis_backend.main import app
+
     assert app.title == "JARVIS Unified System"
 
 
-def test_app_singleton(app):
-    import jarvis_backend.main as m
-    assert m.app is app
+def test_app_singleton():
+    from jarvis_backend import core, main
+
+    assert main.app is core.app
 
 
 def test_chat_endpoint_requires_auth(client):

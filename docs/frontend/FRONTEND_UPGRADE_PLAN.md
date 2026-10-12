@@ -658,7 +658,7 @@ const LoginResponse = z.object({
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| `POST` | `/api/v1/auth/login` | Login (verified: ndichiv@gmail.com / videlis@254 → 18/18 tests pass) |
+| `POST` | `/api/v1/auth/login` | Login (verified: ndichiv@gmail.com / <REDACTED> → 18/18 tests pass) |
 | `POST` | `/api/v1/auth/refresh` | Token refresh |
 | `POST` | `/api/v1/auth/logout` | Logout |
 | `GET` | `/api/v1/auth/me` | User profile |
@@ -1048,7 +1048,7 @@ Ensure `frontend/web/eslint.config.js` enforces:
 |---|---|
 | Preserve Next.js 16 / React 19 / TypeScript / Tailwind / shadcn/ui / Zustand | ✅ Must not change |
 | `tsc --noEmit` must pass after all changes | ✅ Required |
-| Backend login (ndichiv@gmail.com / videlis@254) verified working — DO NOT retry | ✅ 18/18 tests pass |
+| Backend login (ndichiv@gmail.com / <REDACTED>) verified working — DO NOT retry | ✅ 18/18 tests pass |
 | All new TS code must compile without errors | ✅ Required |
 | Changes must be additive (no destructive rewrites) | ✅ Required |
 
@@ -1162,7 +1162,7 @@ NEXT_PUBLIC_SOCKET_URL=http://localhost:8000
 **Backend `.env` (verified working):**
 ```env
 JARVIS_ADMIN_EMAIL=ndichiv@gmail.com
-JARVIS_ADMIN_PASSWORD=videlis@254
+JARVIS_ADMIN_PASSWORD=<REDACTED>
 # (redacted — full .env verified in place)
 ```
 

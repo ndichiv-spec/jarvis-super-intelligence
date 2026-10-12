@@ -449,7 +449,17 @@ def test_secret_file_refused() -> None:
     assert res.success is False
 
 
-def test_no_sql_parser_dependency_claimed() -> None:
+def test_no_sql_parser_dependency_claimed(monkeypatch: pytest.MonkeyPatch) -> None:
+    import research_engine.data_tools as data_tools
+
+    actual_dep_state = data_tools._dep_state
+
+    def without_optional_sql_parsers(module_name: str) -> str:
+        if module_name in {"sqlglot", "sqlparse"}:
+            return "UNAVAILABLE"
+        return actual_dep_state(module_name)
+
+    monkeypatch.setattr(data_tools, "_dep_state", without_optional_sql_parsers)
     deps = data_capability_status()["dependencies"]
     assert deps["sql_parser"] is False
     assert "conservative" in deps["sql_parser_note"]

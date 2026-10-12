@@ -93,12 +93,12 @@ class PluginManifestFactory:
             description=overrides.pop("description", "A test plugin"),
             author=overrides.pop("author", "Test Author"),
             permissions=overrides.pop("permissions", [
-                PluginPermission.KNOWLEDGE_READ,
+                PluginPermission.MEMORY_READ,
                 PluginPermission.MEMORY_READ,
             ]),
             hooks=overrides.pop("hooks", [
-                PluginHook.CHAT_BEFORE_RESPOND,
-                PluginHook.KNOWLEDGE_BEFORE_RETRIEVE,
+                PluginHook.CHAT_BEFORE_RESPONSE,
+                PluginHook.MEMORY_BEFORE_SEARCH,
             ]),
             **overrides,
         )

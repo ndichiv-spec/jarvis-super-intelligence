@@ -6,11 +6,12 @@ Pytest fixtures and configuration for test suite.
 
 import os
 import sys
+import tempfile
+import uuid
 from pathlib import Path
-import asyncio
+from urllib.parse import urlparse
 
 import pytest
-
 
 # Test configuration
 TEST_DB_URL = "sqlite+aiosqlite:///./test_jarvis.db"
@@ -40,12 +41,25 @@ def mock_config():
 @pytest.fixture
 async def test_client():
     """Create test HTTP client."""
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
+
     from jarvis_backend.main import app
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
+
+
+@pytest.fixture
+def legacy_service_base_url():
+    """Require an explicit URL before running legacy live-service tests."""
+    base_url = os.environ.get("JARVIS_LEGACY_SERVICE_URL", "").strip()
+    if not base_url:
+        pytest.skip("Set JARVIS_LEGACY_SERVICE_URL to run this live integration test.")
+    parsed = urlparse(base_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        pytest.fail("JARVIS_LEGACY_SERVICE_URL must be an absolute HTTP(S) URL.")
+    return base_url.rstrip("/")
 
 
 @pytest.fixture
@@ -115,7 +129,7 @@ def auth_headers(auth_token):
 
 @pytest.fixture(autouse=True)
 def cleanup_test_db():
-    """Cleanup test database after tests (if available)."""
+    """Reset application state between tests without deleting a caller's DB."""
     from jarvis_backend import core
     from jarvis_backend.db import reset_database
 
@@ -125,23 +139,6 @@ def cleanup_test_db():
     _seed_test_user()
 
     yield
-
-    try:
-        from core.database import close_db
-        loop = asyncio.new_event_loop()
-        try:
-            loop.run_until_complete(close_db())
-        finally:
-            loop.close()
-    except (ImportError, AttributeError):
-        pass
-
-    db_path = "./test_jarvis.db"
-    if os.path.exists(db_path):
-        try:
-            os.remove(db_path)
-        except PermissionError:
-            pass
 
     reset_database()
     for store in core.data.values():
@@ -185,7 +182,24 @@ for _path in (_ROOT, _ROOT.parent):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 
-_TEST_DB_PATH = _ROOT / "tests" / "_test_jarvis.db"
+_configured_test_db_path = os.environ.get("JARVIS_TEST_DATABASE_PATH")
+if _configured_test_db_path:
+    _TEST_DB_PATH = Path(_configured_test_db_path).expanduser().resolve()
+    try:
+        _TEST_DB_PATH.relative_to(_ROOT)
+    except ValueError:
+        pass
+    else:
+        raise RuntimeError(
+            "JARVIS_TEST_DATABASE_PATH must be outside the repository so tests "
+            "cannot overwrite tracked or development data."
+        )
+else:
+    _TEST_DB_PATH = (
+        Path(tempfile.gettempdir())
+        / f"jarvis-tests-{os.getpid()}-{uuid.uuid4().hex}.sqlite"
+    )
+_TEST_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 
 def _remove_test_db() -> None:
@@ -206,14 +220,15 @@ def _remove_test_db() -> None:
             return
         except PermissionError:
             if attempt == 4:
-                print(
-                    f"[conftest] warning: {_TEST_DB_PATH.name} is locked; "
-                    "continuing with the existing file (schema is re-created)"
+                raise RuntimeError(
+                    f"Cannot reset the disposable test database at {_TEST_DB_PATH}: "
+                    "the file remains locked after retries."
                 )
-                return
             time.sleep(0.4)
-        except OSError:
-            return
+        except OSError as exc:
+            raise RuntimeError(
+                f"Cannot reset the disposable test database at {_TEST_DB_PATH}."
+            ) from exc
 
 
 _remove_test_db()

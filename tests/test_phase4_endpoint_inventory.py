@@ -14,6 +14,7 @@ route registry to ensure it stays accurate as the codebase evolves.
 from __future__ import annotations
 
 import os
+
 import pytest
 
 os.environ.setdefault("JARVIS_TEST_MODE", "1")
@@ -25,22 +26,29 @@ os.environ.setdefault("JARVIS_SECRET_KEY", "phase4-test-secret-key-0123456789abc
 # --------------------------------------------------------------------------- #
 ENDPOINT_INVENTORY = [
     # (method, path, auth_level, description)
-    # PUBLIC endpoints - system health/status, no auth required
+    # PUBLIC endpoints expose only generic health, not host/runtime details.
     ("GET", "/health", "PUBLIC", "Health check endpoint"),
     ("GET", "/api/ping", "PUBLIC", "Simple ping for network connectivity"),
     ("GET", "/api/v1/status", "PUBLIC", "Unified system status (health)"),
-    ("GET", "/api/v1/system/status", "PUBLIC", "System status (hostname, services)"),
-    ("GET", "/api/v1/system/capabilities", "PUBLIC", "Capability registry"),
-    ("GET", "/api/v1/system/dashboard", "PUBLIC", "Public platform dashboard view"),
-    ("GET", "/api/v1/system/launch/apps", "PUBLIC", "List common applications (whitelist)"),
     ("GET", "/api/v2/control/health", "PUBLIC", "Control plane health check"),
-    
-    # AUTHENTICATED endpoints - any valid user token required
-    ("GET", "/api/v1/system/processes", "AUTHENTICATED", "List running processes"),
-    ("GET", "/api/v1/system/files", "AUTHENTICATED", "List files in directory"),
-    ("POST", "/api/v1/system/files/read", "AUTHENTICATED", "Read file contents"),
-    ("GET", "/api/v1/system/clipboard", "AUTHENTICATED", "Read clipboard"),
-    ("POST", "/api/v1/system/clipboard", "AUTHENTICATED", "Set clipboard"),
+
+    # ADMIN endpoints expose detailed host, capability, or identity information.
+    ("GET", "/api/v1/system/status", "ADMIN", "Detailed system status"),
+    ("GET", "/api/v1/system/capabilities", "ADMIN", "Capability registry"),
+    ("GET", "/api/v1/system/dashboard", "ADMIN", "Detailed platform dashboard"),
+    ("GET", "/api/v1/system/launch/apps", "ADMIN", "List common applications"),
+    ("GET", "/api/v1/platform/identity", "ADMIN", "Detailed platform identity"),
+
+    # OWNER endpoints expose or mutate host-level resources.
+    ("GET", "/api/v1/system/processes", "OWNER", "List running processes"),
+    ("GET", "/api/v1/system/files", "OWNER", "List files in directory"),
+    ("POST", "/api/v1/system/files/read", "OWNER", "Read file contents"),
+    ("GET", "/api/v1/system/clipboard", "OWNER", "Read clipboard"),
+    ("POST", "/api/v1/system/clipboard", "OWNER", "Set clipboard"),
+    ("POST", "/api/v1/system/launch", "OWNER", "Launch host application"),
+    ("POST", "/api/v1/system/processes/kill", "OWNER", "Kill process"),
+    ("GET", "/api/v1/system/provider-settings", "OWNER", "Get provider settings"),
+    ("PUT", "/api/v1/system/provider-settings", "OWNER", "Update provider settings"),
     
     # CONTROL PLANE - /api/v2/control (Phase 2+3.5)
     ("GET", "/api/v2/control/providers", "AUTHENTICATED", "List providers"),
@@ -72,6 +80,7 @@ ENDPOINT_INVENTORY = [
 PUBLIC_ENDPOINTS = [e for e in ENDPOINT_INVENTORY if e[2] == "PUBLIC"]
 AUTHENTICATED_ENDPOINTS = [e for e in ENDPOINT_INVENTORY if e[2] == "AUTHENTICATED"]
 ADMIN_ENDPOINTS = [e for e in ENDPOINT_INVENTORY if e[2] == "ADMIN"]
+OWNER_ENDPOINTS = [e for e in ENDPOINT_INVENTORY if e[2] == "OWNER"]
 
 
 class TestPublicEndpoints:
@@ -115,6 +124,16 @@ class TestAuthenticatedEndpoints:
         
         assert r.status_code == 401, \
             f"{method} {path}: expected 401, got {r.status_code}"
+
+
+class TestOwnerEndpoints:
+    @pytest.mark.parametrize("method,path,auth_level,description", OWNER_ENDPOINTS)
+    def test_owner_endpoint_rejects_non_owner(self, client, auth_headers, method, path, auth_level, description):
+        kwargs = {"headers": auth_headers}
+        if method in ("POST", "PUT", "PATCH"):
+            kwargs["json"] = {"app": "notepad.exe", "pid": 1234, "path": "."}
+        response = client.request(method, path, **kwargs)
+        assert response.status_code == 403, f"{method} {path}: expected owner denial, got {response.status_code}"
 
 
 class TestAdminEndpoints:
@@ -185,7 +204,7 @@ class TestSystemHostOperations:
         """Destructive commands should be blocked even for unauthenticated users."""
         for cmd in ["shutdown", "reboot", "halt", "poweroff"]:
             r = client.post("/api/v1/system/launch", json={"app": cmd})
-            assert r.status_code == 403, f"{cmd} should be blocked"
+            assert r.status_code == 401, f"{cmd} should require authentication"
     
     def test_launch_requires_admin(self, client):
         """Even non-destructive launch requires admin role."""

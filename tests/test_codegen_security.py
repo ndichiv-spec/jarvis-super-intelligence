@@ -41,10 +41,10 @@ def test_review_only_returns_ai_review_not_source(client, auth_headers, monkeypa
     assert body["validation"] == "not_run"
 
 
-def test_deploy_is_admin_only_and_not_implemented(client, auth_headers, admin_headers):
+def test_deploy_is_admin_only_and_capability_not_configured(client, auth_headers, admin_headers):
     payload = {"project_path": "project", "platform": "test", "project_name": "demo"}
     assert client.post("/api/v1/codegen/deploy", json=payload, headers=auth_headers).status_code == 403
 
     response = client.post("/api/v1/codegen/deploy", json=payload, headers=admin_headers)
     assert response.status_code == 501
-    assert response.json()["error"]["code"] == "NOT_IMPLEMENTED"
+    assert response.json()["error"]["code"] == "CAPABILITY_NOT_CONFIGURED"

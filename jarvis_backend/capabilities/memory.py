@@ -23,15 +23,20 @@ import os
 import sys
 import time
 import uuid
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
-from collections import defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from jarvis_backend.capability import Capability, CapabilityStatus, ExecutionContext, ExecutionResult
+from jarvis_backend.capability import (
+    Capability,
+    CapabilityStatus,
+    ExecutionContext,
+    ExecutionResult,
+)
 from jarvis_backend.event_fabric import get_event_bus
-from jarvis_backend.persistence import MemoryRepository, AuditLog
+from jarvis_backend.persistence import AuditLog, MemoryRepository
 
 
 class MemoryCapability(Capability):
@@ -75,8 +80,7 @@ class MemoryCapability(Capability):
             )
 
             # Clean up
-            from jarvis_backend.persistence import db_session
-            from jarvis_backend.persistence import memory_entries_table, delete
+            from jarvis_backend.persistence import db_session, delete, memory_entries_table
             with db_session() as conn:
                 conn.execute(
                     delete(memory_entries_table).where(
@@ -270,6 +274,8 @@ class MemoryCapability(Capability):
 
     def _forget_memory(self, request: Dict, context: ExecutionContext) -> ExecutionResult:
         """Remove a memory entry."""
+        from sqlalchemy import delete
+
         from jarvis_backend.persistence import db_session, memory_entries_table
         mem_id = request.get('memory_id')
 

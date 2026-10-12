@@ -7,15 +7,15 @@ Provides:
   - In-memory and Redis-backed implementations
 """
 
-import os
-import time
-import json
-import hashlib
 import asyncio
+import hashlib
+import json
+import os
 import threading
-from typing import Dict, Optional, Tuple, Callable, Any
+import time
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any, Callable, Dict, Optional, Tuple
 
 
 @dataclass
@@ -23,23 +23,26 @@ class TokenBucket:
     """Token bucket rate limiter (per-client)."""
     capacity: int
     refill_rate: float
-    tokens: float = 0
+    tokens: float | None = None
     last_refill: float = field(default_factory=time.time)
 
     def consume(self, tokens: int = 1) -> bool:
         now = time.time()
         elapsed = now - self.last_refill
-        self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_rate)
+        available = self.capacity if self.tokens is None else self.tokens
+        available = min(self.capacity, available + elapsed * self.refill_rate)
         self.last_refill = now
-        if self.tokens >= tokens:
-            self.tokens -= tokens
+        if available >= tokens:
+            self.tokens = available - tokens
             return True
+        self.tokens = available
         return False
 
     def remaining(self) -> float:
         now = time.time()
         elapsed = now - self.last_refill
-        return min(self.capacity, self.tokens + elapsed * self.refill_rate)
+        current = self.capacity if self.tokens is None else self.tokens
+        return min(self.capacity, current + elapsed * self.refill_rate)
 
 
 @dataclass

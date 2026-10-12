@@ -52,7 +52,7 @@ class VisualizationMode(Enum):
     DATA_FLOW = "data_flow"
     CALL_GRAPH = "call_graph"
     MODULE_VIEW = "module_view"
-    3D_VIEW = "3d_view"
+    VIEW_3D = "3d_view"
 
 
 @dataclass

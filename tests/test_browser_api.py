@@ -32,13 +32,19 @@ def _make_tab(test_client, auth_headers, sid, url="https://example.com", title="
 
 
 @pytest.fixture
-def browser_test_client():
+def test_client():
     """Use the repository ASGI app directly for browser endpoint regressions."""
     from jarvis_backend.main import app
 
     client = TestClient(app)
     yield client
     client.close()
+
+
+@pytest.fixture
+def browser_test_client(test_client):
+    """Provide the same in-process client under the browser-specific fixture name."""
+    return test_client
 
 
 # --------------------------------------------------------------------------- #
@@ -619,7 +625,7 @@ class TestAutonomous:
                   "params": {"url": "https://example.com"}, "consent": False},
             headers=auth_headers)
         assert resp.status_code == 403
-        assert "consent" in resp.json()["detail"].lower()
+        assert resp.json()["error"]["code"] == "AUTHORIZATION_ERROR"
 
     def test_autonomous_with_consent(self, test_client, auth_headers):
         sid = _make_session(test_client, auth_headers, "Auto", privacy_mode="automation")
@@ -1182,7 +1188,7 @@ class TestEvidencePromotion:
         resp2 = test_client.post(f"/api/v1/browser/evidence/{eid}/promote",
             json={}, headers=auth_headers)
         assert resp2.status_code == 400
-        assert "verified" in resp2.json()["detail"].lower()
+        assert resp2.json()["error"]["code"] == "INVALID_REQUEST"
 
     def test_promote_nonexistent_evidence(self, test_client, auth_headers):
         resp = test_client.post("/api/v1/browser/evidence/ev-nonexistent/promote",
@@ -1261,12 +1267,15 @@ class TestRemoteBrowser:
         assert "local_browsing_available" in data
         assert "routing_policy" in data
 
-    def test_create_remote_session_not_enabled(self, test_client, auth_headers):
+    def test_create_remote_session_not_enabled(
+        self, test_client, auth_headers, monkeypatch
+    ):
+        monkeypatch.delenv("JARVIS_REMOTE_BROWSER_ENABLED", raising=False)
         resp = test_client.post("/api/v1/browser/remote-browser/sessions",
             json={"session_name": "Remote"},
             headers=auth_headers)
         assert resp.status_code == 403
-        assert "not enabled" in resp.json()["detail"].lower()
+        assert resp.json()["error"]["code"] == "AUTHORIZATION_ERROR"
 
 
 # --------------------------------------------------------------------------- #

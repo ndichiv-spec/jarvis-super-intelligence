@@ -14,6 +14,14 @@ from fastapi.testclient import TestClient
 from jarvis_backend.core import create_token
 
 
+@pytest.fixture
+def test_client():
+    from jarvis_backend.main import app
+
+    with TestClient(app) as client:
+        yield client
+
+
 # --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #

@@ -44,10 +44,6 @@ from frontend.dashboard.code_metrics import get_code_metrics_analyzer
 from frontend.dashboard.searchable_index import get_searchable_codebase_index
 from frontend.dashboard.realtime_monitoring import get_realtime_monitoring_system
 
-# Import Tier 8 and Tier 9 systems
-from core.tier8_integration import get_tier8_integration
-from core.tier9_integration import get_tier9_integration
-
 logger = logging.getLogger(__name__)
 
 
@@ -67,11 +63,7 @@ class IntegratedDashboard:
         self.search_index = get_searchable_codebase_index()
         self.monitoring_system = get_realtime_monitoring_system()
         
-        # Initialize Tier 8 and Tier 9 systems
-        self.tier8_integration = get_tier8_integration()
-        self.tier9_integration = get_tier9_integration()
-        
-        # Dashboard state
+# Dashboard state
         self.initialized = False
         self.last_scan = None
         
@@ -106,13 +98,7 @@ class IntegratedDashboard:
                 # Load components and scripts into visualizer
                 await self._load_architecture_data()
             
-            # Initialize Tier 8 systems
-            await self.tier8_integration.initialize()
-            
-            # Initialize Tier 9 systems
-            await self.tier9_integration.initialize()
-            
-            # Initialize search index
+# Initialize search index
             await self._initialize_search_index()
             
             # Initialize metrics analyzer
@@ -499,163 +485,6 @@ class IntegratedDashboard:
         
         @self.web_dashboard.app.post("/api/monitoring/clear")
         
-        # Tier 8 API Endpoints
-        @self.web_dashboard.app.get("/api/tier8/status")
-        async def get_tier8_status():
-            """Get Tier 8 capabilities status"""
-            try:
-                return await self.tier8_integration.get_comprehensive_status()
-            except Exception as e:
-                logger.error(f"Failed to get Tier 8 status: {e}")
-                return {"error": str(e)}
-        
-        @self.web_dashboard.app.get("/api/tier8/proprietary")
-        async def get_tier8_proprietary():
-            """Get Proprietary AI Architecture status"""
-            try:
-                return await self.tier8_integration.get_proprietary_architecture_status()
-            except Exception as e:
-                logger.error(f"Failed to get proprietary architecture status: {e}")
-                return {"error": str(e)}
-        
-        @self.web_dashboard.app.get("/api/tier8/marketplace")
-        async def get_tier8_marketplace():
-            """Get Agent Marketplace status"""
-            try:
-                return await self.tier8_integration.get_marketplace_status()
-            except Exception as e:
-                logger.error(f"Failed to get marketplace status: {e}")
-                return {"error": str(e)}
-        
-        @self.web_dashboard.app.get("/api/tier8/governance")
-        async def get_tier8_governance():
-            """Get Governance Platform status"""
-            try:
-                return await self.tier8_integration.get_governance_status()
-            except Exception as e:
-                logger.error(f"Failed to get governance status: {e}")
-                return {"error": str(e)}
-        
-        @self.web_dashboard.app.get("/api/tier8/security")
-        async def get_tier8_security():
-            """Get Security Platform status"""
-            try:
-                return await self.tier8_integration.get_security_status()
-            except Exception as e:
-                logger.error(f"Failed to get security status: {e}")
-                return {"error": str(e)}
-        
-        @self.web_dashboard.app.get("/api/tier8/research")
-        async def get_tier8_research():
-            """Get Research Platform status"""
-            try:
-                return await self.tier8_integration.get_research_status()
-            except Exception as e:
-                logger.error(f"Failed to get research status: {e}")
-                return {"error": str(e)}
-        
-        @self.web_dashboard.app.get("/api/tier8/infrastructure")
-        async def get_tier8_infrastructure():
-            """Get Infrastructure Network status"""
-            try:
-                return await self.tier8_integration.get_infrastructure_status()
-            except Exception as e:
-                logger.error(f"Failed to get infrastructure status: {e}")
-                return {"error": str(e)}
-        
-        @self.web_dashboard.app.get("/api/tier8/intelligence")
-        async def get_tier8_intelligence():
-            """Get Business Intelligence status"""
-            try:
-                return await self.tier8_integration.get_intelligence_status()
-            except Exception as e:
-                logger.error(f"Failed to get intelligence status: {e}")
-                return {"error": str(e)}
-        
-        @self.web_dashboard.app.get("/api/tier8/education")
-        async def get_tier8_education():
-            """Get Education Platform status"""
-            try:
-                return await self.tier8_integration.get_education_status()
-            except Exception as e:
-                logger.error(f"Failed to get education status: {e}")
-                return {"error": str(e)}
-        
-        # Tier 9 API Endpoints
-        @self.web_dashboard.app.get("/api/tier9/status")
-        async def get_tier9_status():
-            """Get Tier 9 capabilities status"""
-            try:
-                return await self.tier9_integration.get_comprehensive_status()
-            except Exception as e:
-                logger.error(f"Failed to get Tier 9 status: {e}")
-                return {"error": str(e)}
-        
-        @self.web_dashboard.app.get("/api/tier9/neuromorphic")
-        async def get_tier9_neuromorphic():
-            """Get Neuromorphic Computing status"""
-            try:
-                import numpy as np
-                result = await self.tier9_integration.process_neuromorphic("status_check")
-                return {"status": "active", "data": result}
-            except Exception as e:
-                logger.error(f"Failed to get neuromorphic status: {e}")
-                return {"error": str(e)}
-        
-        @self.web_dashboard.app.get("/api/tier9/photonic")
-        async def get_tier9_photonic():
-            """Get Photonic Computing status"""
-            try:
-                result = await self.tier9_integration.process_photonic("status_check")
-                return {"status": "active", "data": result}
-            except Exception as e:
-                logger.error(f"Failed to get photonic status: {e}")
-                return {"error": str(e)}
-        
-        @self.web_dashboard.app.get("/api/tier9/quantum")
-        async def get_tier9_quantum():
-            """Get Quantum ML status"""
-            try:
-                import numpy as np
-                features = np.random.random((10, 5))
-                labels = np.random.randint(0, 2, 10)
-                result = await self.tier9_integration.learn_with_quantum(features, labels)
-                return {"status": "active", "data": result}
-            except Exception as e:
-                logger.error(f"Failed to get quantum status: {e}")
-                return {"error": str(e)}
-        
-        @self.web_dashboard.app.get("/api/tier9/cryogenic")
-        async def get_tier9_cryogenic():
-            """Get Cryogenic Computing status"""
-            try:
-                result = await self.tier9_integration.compute_cryogenic("status_check")
-                return {"status": "active", "data": result}
-            except Exception as e:
-                logger.error(f"Failed to get cryogenic status: {e}")
-                return {"error": str(e)}
-        
-        @self.web_dashboard.app.get("/api/tier9/dna")
-        async def get_tier9_dna():
-            """Get DNA Computing status"""
-            try:
-                result = await self.tier9_integration.compute_with_dna("status_check")
-                return {"status": "active", "data": result}
-            except Exception as e:
-                logger.error(f"Failed to get DNA status: {e}")
-                return {"error": str(e)}
-        
-        @self.web_dashboard.app.get("/api/tier9/biological")
-        async def get_tier9_biological():
-            """Get Biological AI status"""
-            try:
-                import numpy as np
-                signal_data = np.random.random((100, 5))
-                result = await self.tier9_integration.integrate_biological(signal_data)
-                return {"status": "active", "data": result}
-            except Exception as e:
-                logger.error(f"Failed to get biological status: {e}")
-                return {"error": str(e)}
         async def clear_monitoring_events(older_than_hours: int = 24):
             """Clear monitoring events"""
             try:

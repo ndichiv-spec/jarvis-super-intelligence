@@ -466,7 +466,7 @@ class ProviderGateway:
                 )
                 if brain_fallback_reason:
                     result["fallback"] = {
-                        "from": os.environ.get("JARVIS_BRAIN_MODEL", "jarvis-brain-qwen3-4b-v1"),
+                        "from": _brain_model(),
                         "to": result.get("model", ""),
                         "reason": brain_fallback_reason,
                     }
@@ -864,6 +864,8 @@ class ProviderGateway:
         deadline: float,
     ) -> Optional[dict[str, Any]]:
         """Route ``messages`` through the existing Phase 6 provider fabric."""
+        from .observability import request_id_var
+
         _ensure_provider_fabric_import_path()
 
         try:

@@ -123,7 +123,7 @@ describe('AdminPage backend contracts', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Settings' }));
 
-    expect(await screen.findByText('24')).toBeInTheDocument();
+    expect(await screen.findByText('24', {}, { timeout: 3000 })).toBeInTheDocument();
     expect(screen.getByText('Advanced Configuration')).toBeInTheDocument();
     expect(screen.queryByText('JARVIS Enterprise')).not.toBeInTheDocument();
     expect(screen.queryByText('Tenant ID')).not.toBeInTheDocument();

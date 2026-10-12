@@ -11,7 +11,7 @@ Provides:
 from .types import (
     JarvisError, ConfigurationError, SecurityError, AuthenticationError,
     AuthorizationError, RateLimitError, ProviderError, AIProviderError,
-    DatabaseError, CacheError, ValidationError, NotFoundError,
+    DatabaseError, CacheError, IntegrationError, ValidationError, NotFoundError,
     TimeoutError, DependencyError, ResourceExhaustedError,
     SandboxError, AutomationError, InternalError,
 )
@@ -22,7 +22,7 @@ __all__ = [
     "JarvisError", "ConfigurationError", "SecurityError",
     "AuthenticationError", "AuthorizationError", "RateLimitError",
     "ProviderError", "AIProviderError",
-    "DatabaseError", "CacheError", "ValidationError", "NotFoundError",
+    "DatabaseError", "CacheError", "IntegrationError", "ValidationError", "NotFoundError",
     "TimeoutError", "DependencyError", "ResourceExhaustedError",
     "SandboxError", "AutomationError", "InternalError",
     "ErrorHandler", "error_response", "exception_to_status",

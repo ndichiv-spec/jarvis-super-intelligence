@@ -13,7 +13,17 @@ Tests cover:
 The Browser must preserve instruction hierarchy in all cases.
 """
 
+import pytest
 
+
+@pytest.fixture
+def test_client():
+    from starlette.testclient import TestClient
+
+    from jarvis_backend.main import app
+
+    with TestClient(app) as client:
+        yield client
 
 
 # ---------------------------------------------------------------------------

@@ -7,8 +7,15 @@ and that the absence of memories leaves the base system prompt untouched.
 """
 from __future__ import annotations
 
+import pytest
+
 from jarvis_backend import chat_service as cs
 from jarvis_backend.core import _SYSTEM_PROMPT, get_store, now_iso
+
+
+@pytest.fixture
+def auth_user(admin_headers):
+    return {"user": {"id": "test-admin"}, "headers": admin_headers}
 
 
 class CapturingGateway:
@@ -52,7 +59,13 @@ def _seed_user_memory(user_id: str, content: str, importance: float = 0.9):
 
 def _seed_knowledge(key: str, value: str):
     kb = get_store("knowledge").load()
-    kb[key] = {"key": key, "value": value, "category": "system", "tags": ["system"]}
+    kb[key] = {
+        "key": key,
+        "value": value,
+        "category": "system",
+        "tags": ["system"],
+        "user_id": "system",
+    }
     get_store("knowledge").save()
 
 

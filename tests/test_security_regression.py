@@ -18,7 +18,7 @@ import json
 import os
 import time
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -29,12 +29,24 @@ os.environ.setdefault("JARVIS_TEST_MODE", "1")
 os.environ.setdefault("JARVIS_SECRET_KEY", "regression-test-secret-key-0123456789abcdef")
 
 from jarvis_backend import core  # noqa: E402
-from jarvis_backend.core import (  # noqa: E402
-    admin_email, api_key_prefix, create_token, decode_token, create_refresh_token,
-    generate_api_key, now, now_iso, iso_expire_at, is_api_key_expired,
-    _iso_to_epoch, is_production, get_store, hash_password, refresh_access_token,
-)
 from jarvis_backend.connectors import oauth  # noqa: E402
+from jarvis_backend.core import (  # noqa: E402
+    _iso_to_epoch,
+    admin_email,
+    api_key_prefix,
+    create_refresh_token,
+    create_token,
+    decode_token,
+    generate_api_key,
+    get_store,
+    hash_password,
+    is_api_key_expired,
+    is_production,
+    iso_expire_at,
+    now,
+    now_iso,
+    refresh_access_token,
+)
 
 # OAuth client fixtures (read-only scopes by default -- least privilege, §4/#15).
 GMAIL_CLIENTS = {
@@ -320,8 +332,11 @@ class TestRBAC:
         core._seed_canonical_roles()
         roles = get_store("roles").load()
         admin = roles.get("admin") or next((r for r in roles.values() if r.get("name") == "admin"), None)
+        owner = roles.get("owner") or next((r for r in roles.values() if r.get("name") == "owner"), None)
         assert admin is not None
-        assert "*" in admin["permissions"]
+        assert owner is not None
+        assert "*" not in admin["permissions"]
+        assert "*" in owner["permissions"]
 
     def test_least_privilege_viewer(self):
         core._seed_canonical_roles()
@@ -332,13 +347,12 @@ class TestRBAC:
         assert "*" not in perms
         assert all(p.endswith(":read") or p == "read" or p == "system:read" for p in perms)
 
-    def test_admin_authorized_to_create_role(self, client):
+    def test_admin_cannot_create_owner_only_role(self, client):
         headers = _user_token(["admin"])
         r = client.post("/api/v1/rbac/roles",
                         json={"name": "qa", "description": "q", "permissions": ["read"]},
                         headers=headers)
-        assert r.status_code == 200, r.text
-        assert r.json()["name"] == "qa"
+        assert r.status_code == 403
 
     def test_regular_user_denied_create_role(self, client):
         headers = _user_token(["user"])
@@ -352,19 +366,27 @@ class TestRBAC:
                         json={"name": "qa3", "permissions": ["read"]})
         assert r.status_code == 401
 
-    def test_owner_role_grants_admin_access(self, client):
-        # OWNER carries '*' permissions -> should pass the admin gate. The
-        # '*' permission is resolved against the roles store, so seed them first.
-        core._seed_canonical_roles()
+    def test_owner_role_name_does_not_impersonate_canonical_owner(self, client):
+        # OWNER is bound to the configured identity; assigning the role name
+        # to an unrelated user must not grant owner-only route access.
         headers = _user_token(["owner"])
         r = client.post("/api/v1/rbac/roles",
                         json={"name": "owner-ok", "permissions": ["read"]},
                         headers=headers)
-        assert r.status_code == 200
+        assert r.status_code == 403
 
-    def test_tenant_settings_model_dump_works_for_admin(self, client):
-        # Exercises the .dict() -> .model_dump() fix end-to-end via the API.
-        headers = _user_token(["admin"])
+    def test_canonical_owner_can_create_role_and_update_tenant_settings(self, client):
+        owner = next(
+            user for user in get_store("users").load().values()
+            if user.get("email", "").lower() == admin_email().lower()
+        )
+        headers = {"Authorization": f"Bearer {create_token({'sub': owner['id'], 'sid': None})}"}
+        created = client.post("/api/v1/rbac/roles",
+                              json={"name": "owner-qa", "permissions": ["read"]},
+                              headers=headers)
+        assert created.status_code == 200, created.text
+        assert created.json()["name"] == "owner-qa"
+
         r = client.put("/api/v1/rbac/tenant/settings",
                        json={"max_users": 5}, headers=headers)
         assert r.status_code == 200
@@ -403,7 +425,7 @@ class TestApiKeyAtRestSecurity:
             assert "raw_key" not in rec
             assert "secret" not in rec
             assert "token" not in rec
-            assert rec.get("hash", "").startswith("pbkdf2_sha256$")
+            assert core.verify_api_key(raw, rec.get("hash", ""))
             assert rec.get("prefix", "").startswith("jarvis_")
             import hashlib as _hl
             assert rec["hash"] != _hl.sha256(raw.encode()).hexdigest()
@@ -465,6 +487,25 @@ class TestApiKeyAtRestSecurity:
                         headers={"Authorization": f"Bearer {raw}"})
         assert r.status_code == 403
 
+    def test_canonical_owner_api_key_is_limited_to_its_scopes(
+        self, client, admin_headers, monkeypatch
+    ):
+        owner_id = decode_token(admin_headers["Authorization"].split(" ", 1)[1])["sub"]
+        owner = get_store("users").load()[owner_id]
+        monkeypatch.setenv("JARVIS_ADMIN_EMAIL", owner["email"])
+
+        created = client.post(
+            "/api/v1/auth/api-keys",
+            json={"name": "restricted-owner-key", "scopes": ["read"]},
+            headers=admin_headers,
+        )
+        assert created.status_code == 200
+        key = created.json()["key"]
+        headers = {"Authorization": f"Bearer {key}"}
+
+        assert client.get("/api/v1/auth/me", headers=headers).status_code == 200
+        assert client.get("/api/v1/platform/identity", headers=headers).status_code == 403
+
     def test_rotation(self, client, admin_headers):
         raw = client.post("/api/v1/auth/api-keys",
                           json={"name": "orig", "scopes": ["admin"]}, headers=admin_headers).json()["key"]
@@ -502,7 +543,7 @@ class TestApiKeyAtRestSecurity:
         assert r.status_code == 200
         rec = get_store("api_keys").load()[kid]
         assert "key" not in rec
-        assert rec.get("hash", "").startswith("pbkdf2_sha256$")
+        assert core.verify_api_key(raw, rec.get("hash", ""))
         assert rec.get("prefix") == api_key_prefix(raw)
         assert raw not in json.dumps(get_store("audit_logs").load())
 
@@ -526,6 +567,40 @@ class TestApiKeyAtRestSecurity:
 # --------------------------------------------------------------------------- #
 # §10/§17 OAuth callback validation + read-only scope validation
 # --------------------------------------------------------------------------- #
+class TestDeveloperApiKeySurface:
+    def test_developer_key_creation_rejects_unauthenticated_and_regular_users(self, client):
+        payload = {"name": "developer-key", "scopes": ["read"]}
+        assert client.post("/api/v1/developer/api-keys", json=payload).status_code == 401
+        assert client.post(
+            "/api/v1/developer/api-keys", json=payload,
+            headers=_user_token(["user"]),
+        ).status_code == 403
+
+    def test_developer_key_alias_uses_hashed_admin_key_store(self, client, admin_headers):
+        created = client.post(
+            "/api/v1/developer/api-keys",
+            json={"name": "developer-alias", "scopes": ["read"]},
+            headers=admin_headers,
+        )
+        assert created.status_code == 200
+        body = created.json()
+        raw_key = body["key"]
+        assert raw_key.startswith("jarvis_")
+
+        records = get_store("api_keys").load()
+        record = next(value for value in records.values() if value["name"] == "developer-alias")
+        assert raw_key not in json.dumps(record)
+        assert "key" not in record and "raw_key" not in record
+        assert core.verify_api_key(raw_key, record["hash"])
+
+        listing = client.get("/api/v1/developer/api-keys", headers=admin_headers)
+        assert listing.status_code == 200
+        serialized = json.dumps(listing.json())
+        assert raw_key not in serialized
+        assert '"hash"' not in serialized
+        assert '"key"' not in serialized
+
+
 class TestOAuthFlow:
     def test_state_tamper_detected(self):
         state = oauth.make_state("gmail", "u1")
@@ -626,17 +701,23 @@ class TestSecretNonDisclosure:
         assert "key" not in r.json()["api_key"]
         assert "hash" not in r.json()["api_key"]
 
-    def test_audit_logs_never_contain_passwords_or_tokens(self, client):
-        # Register + login, then inspect the audit trail for secret leakage.
+    def test_audit_logs_never_contain_passwords_or_tokens(self, client, account_email_outbox):
+        # Register + verify + authorize, then inspect the audit trail for leaks.
         email = f"{uuid.uuid4().hex[:8]}@audit.test"
         registered = client.post(
             "/api/v1/auth/register",
             json={"email": email, "username": "auditor", "password": "S3cret!audit1"},
         )
-        user_id = registered.json()["user"]["id"]
+        assert registered.status_code == 200
+        user_id = next(
+            uid for uid, user in get_store("users").load().items()
+            if user.get("email") == email
+        )
+        token = account_email_outbox[-1][2]
+        assert client.post("/api/v1/auth/verify-email", json={"token": token}).status_code == 200
         users = get_store("users")
         user = users.load()[user_id]
-        user["email_verified"] = True
+        user["status"] = "active"
         users.save()
         r = client.post("/api/v1/auth/login",
                         json={"identifier": email, "password": "S3cret!audit1"})
@@ -653,16 +734,22 @@ class TestSecretNonDisclosure:
 # §6/§18 Admin audit logging (login / register / api-key create are audited)
 # --------------------------------------------------------------------------- #
 class TestAdminAuditLogging:
-    def test_login_is_audited(self, client):
+    def test_login_is_audited(self, client, account_email_outbox):
         email = f"{uuid.uuid4().hex[:8]}@aud.test"
         registered = client.post(
             "/api/v1/auth/register",
             json={"email": email, "username": "a1", "password": "S3cret!1"},
         )
-        user_id = registered.json()["user"]["id"]
+        assert registered.status_code == 200
+        user_id = next(
+            uid for uid, user in get_store("users").load().items()
+            if user.get("email") == email
+        )
+        token = account_email_outbox[-1][2]
+        assert client.post("/api/v1/auth/verify-email", json={"token": token}).status_code == 200
         users = get_store("users")
         user = users.load()[user_id]
-        user["email_verified"] = True
+        user["status"] = "active"
         users.save()
         client.post("/api/v1/auth/login",
                     json={"identifier": email, "password": "S3cret!1"})
@@ -696,8 +783,11 @@ class TestAdminAuditLogging:
 class TestAdminSurface:
     def test_admin_login_uses_configured_email(self, monkeypatch):
         # The seeded dev admin always signs in with the configured/default email.
+        monkeypatch.delenv("JARVIS_ADMIN_EMAIL", raising=False)
+        monkeypatch.delenv("JARVIS_ENV", raising=False)
         monkeypatch.setenv("JARVIS_ADMIN_PASSWORD", "Admin#Jarvis1")
         from starlette.testclient import TestClient
+
         from jarvis_backend.main import app
 
         with TestClient(app) as client:

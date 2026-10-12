@@ -80,7 +80,7 @@ exec(  # noqa: S102 - deliberate, single-source package delegation
 
 #: Legacy alias. Older call sites raised/imported ``ProviderNotAvailableError``;
 #: the fabric names this condition ``ProviderUnavailable``.
-ProviderNotAvailableError = ProviderUnavailable
+ProviderNotAvailableError = ProviderUnavailable  # noqa: F821 - injected by the authoritative package initializer above
 
 if "ProviderNotAvailableError" not in __all__:
     __all__ = [*__all__, "ProviderNotAvailableError"]

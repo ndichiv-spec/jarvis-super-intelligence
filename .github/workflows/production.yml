@@ -15,12 +15,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: deployment/production/requirements-production.txt
-      - run: python -m pip install -r deployment/production/requirements-production.txt pytest pytest-asyncio
+      - run: python -m pip install -r deployment/production/requirements-production.txt pytest pytest-asyncio ruff
+      - name: Check Python syntax
+        run: |
+          python -m py_compile tests/test_page.py
+          python -m compileall -q jarvis_backend infrastructure tests
+      - name: Check collection without services
+        run: python -m pytest --collect-only -q
+        env:
+          JARVIS_TEST_MODE: "1"
+          JARVIS_SECRET_KEY: test-only-key-not-used-for-production
+          JARVIS_TEST_DATABASE_PATH: ${{ runner.temp }}/jarvis-collection.sqlite
+      - name: Prevent new Ruff debt
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+        run: python scripts/check_ruff_debt.py --base "$LINT_BASE" --committed
+        env:
+          LINT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
       - run: python -c "import jarvis_backend.main; print('FastAPI production entry point imported')"
         env:
           JARVIS_TEST_MODE: "1"
@@ -89,7 +106,7 @@ jobs:
       - uses: docker/metadata-action@v5
         id: meta
         with:
-          images: ghcr.io/ndichiv-spec/jarvis-super-intelligence-/backend
+          images: ghcr.io/ndichiv-spec/jarvis-super-intelligence/backend
           tags: |
             type=sha,format=long,prefix=sha-
             type=ref,event=tag
@@ -108,7 +125,7 @@ jobs:
       - uses: docker/metadata-action@v5
         id: frontend-meta
         with:
-          images: ghcr.io/ndichiv-spec/jarvis-super-intelligence-/frontend
+          images: ghcr.io/ndichiv-spec/jarvis-super-intelligence/frontend
           tags: |
             type=sha,format=long,prefix=sha-
             type=ref,event=tag
@@ -133,14 +150,14 @@ jobs:
           cache-to: type=gha,mode=max,scope=frontend
       - uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: ghcr.io/ndichiv-spec/jarvis-super-intelligence-/backend:sha-${{ github.sha }}
+          image-ref: ghcr.io/ndichiv-spec/jarvis-super-intelligence/backend:sha-${{ github.sha }}
           format: table
           exit-code: "1"
           ignore-unfixed: true
           vuln-type: os,library
       - uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: ghcr.io/ndichiv-spec/jarvis-super-intelligence-/frontend:sha-${{ github.sha }}
+          image-ref: ghcr.io/ndichiv-spec/jarvis-super-intelligence/frontend:sha-${{ github.sha }}
           format: table
           exit-code: "1"
           ignore-unfixed: true

@@ -18,7 +18,8 @@ class TestErrorTypes:
         err = JarvisError()
         assert err.code == "internal_error"
         assert err.subsystem == "core"
-        assert err.details == {}
+        assert err.details is None
+        assert err.to_dict()["details"] == {}
 
     def test_jarvis_error_with_details(self):
         from infrastructure.errors import JarvisError
@@ -68,6 +69,7 @@ class TestErrorTypes:
         from infrastructure.errors import SandboxError
         err = SandboxError("Execution rejected", action="rm -rf /")
         assert err.code == "sandbox_error"
+        assert err.details["action"] == "rm -rf /"
 
     def test_rate_limit_error(self):
         from infrastructure.errors import RateLimitError

@@ -61,9 +61,9 @@ class TestStartupValidation:
         for key in vars_with_prefix:
             assert key.startswith(prefix)
 
-    def test_database_url_default_fallback(self):
+    def test_database_url_uses_supported_scheme(self):
         url = os.environ.get("DATABASE_URL", "sqlite:///default.db")
-        assert url.endswith(".db") or url.startswith("postgresql")
+        assert url.startswith(("sqlite:", "postgresql:"))
 
 
 class TestDeploymentConfig:

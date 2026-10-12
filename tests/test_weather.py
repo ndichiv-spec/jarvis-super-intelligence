@@ -1,9 +1,17 @@
-import requests
-import json
+"""Opt-in integration check for the historical standalone weather service."""
 
-try:
-    r = requests.get("http://127.0.0.1:5000/api/web/weather", timeout=30)
-    print("Status:", r.status_code)
-    print("Response:", r.text[:500])
-except Exception as e:
-    print("Error:", e)
+import pytest
+import requests
+
+
+pytestmark = pytest.mark.integration
+
+
+def test_legacy_weather_service_returns_json(legacy_service_base_url):
+    response = requests.get(
+        f"{legacy_service_base_url}/api/web/weather",
+        timeout=30,
+    )
+
+    assert response.status_code == 200
+    assert isinstance(response.json(), dict)

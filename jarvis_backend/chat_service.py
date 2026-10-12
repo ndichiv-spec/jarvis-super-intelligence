@@ -565,7 +565,7 @@ class ChatService:
 
     async def _project_context(self, prompt: str, user_id: str,
                                request_id: str,
-                               activity: Optional[list[dict[str, Any]]] = None
+                               activity: list[dict[str, Any]] | None = None
                                ) -> str:
         """Project-intelligence evidence block, or '' for ordinary chat.
 
@@ -607,7 +607,7 @@ class ChatService:
         return block
 
     async def _prepare_system(self, user_id: str, prompt: str, request_id: str,
-                              activity: Optional[list[dict[str, Any]]] = None
+                              activity: list[dict[str, Any]] | None = None
                               ) -> str:
         """System prompt + memory context + (when relevant) project evidence.
 

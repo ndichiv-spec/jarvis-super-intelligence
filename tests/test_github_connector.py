@@ -5,7 +5,7 @@ import subprocess
 
 import pytest
 
-import digital_clock
+from frontend import digital_clock
 
 
 def require_git() -> str:

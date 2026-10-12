@@ -16,7 +16,8 @@ def test_runtime_paths_are_registered():
     assert str(SILVERWING_BACKEND_ROOT) in sys.path
 
 
-def test_entrypoints_share_application():
+def test_entrypoints_share_application(monkeypatch):
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT))
     import jarvis_api
     import start_jarvis
     import unified_jarvis_api

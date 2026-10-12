@@ -15,6 +15,7 @@ import time
 import json
 import asyncio
 import logging
+import re
 import tempfile
 import subprocess
 from typing import Dict, List, Optional, Any, Callable
@@ -173,7 +174,8 @@ class SandboxExecutor:
         command_lower = command.strip().lower()
 
         for denied in self.policy.denied_commands:
-            if command_lower.startswith(denied) or denied in command_lower:
+            pattern = rf"(?<!\w){re.escape(denied)}(?!\w)"
+            if re.search(pattern, command_lower):
                 raise SandboxViolation(
                     f"Command '{command}' matches denied pattern: {denied}"
                 )

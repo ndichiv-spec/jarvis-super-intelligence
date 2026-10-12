@@ -1,16 +1,31 @@
-import requests
+"""In-process smoke tests for the canonical JARVIS API."""
 
-tests = [
-    ("/api/status", "GET"),
-    ("/api/system/status", "GET"),
-    ("/api/system/processes?limit=5", "GET"),
-    ("/api/knowledge", "GET"),
-]
 
-for endpoint, method in tests:
-    try:
-        if method == "GET":
-            r = requests.get(f"http://127.0.0.1:5000{endpoint}", timeout=10)
-            print(f"✓ {endpoint}: {r.status_code}")
-    except Exception as e:
-        print(f"✗ {endpoint}: {str(e)[:50]}")
+def test_health_status_is_available(client):
+    response = client.get("/api/v1/health/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] in {"healthy", "degraded"}
+    assert body["service_readiness"] in {"ready", "degraded"}
+
+
+def test_system_status_returns_runtime_summary(client, admin_headers):
+    response = client.get("/api/v1/system/status", headers=admin_headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "online"
+    assert isinstance(body["services"], list)
+    assert "timestamp" in body
+
+
+def test_process_listing_requires_administrator(client):
+    unauthenticated = client.get("/api/v1/system/processes")
+    assert unauthenticated.status_code == 401
+
+
+def test_knowledge_search_requires_authentication(client):
+    response = client.get("/api/v1/cognitive/knowledge/search")
+
+    assert response.status_code == 401

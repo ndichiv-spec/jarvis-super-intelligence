@@ -157,6 +157,17 @@ def test_remote_brain_honest_fallback(monkeypatch):
     import asyncio
     _patch_httpx(monkeypatch, FakeResponse())
     gw = ProviderGateway(router=None, timeout=30.0)
+    monkeypatch.setenv("JARVIS_BRAIN_MODEL", "jarvis-brain-qwen3-4b-v1")
+
+    async def _phase6_unavailable(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(gw, "_chat_via_phase6_fabric", _phase6_unavailable)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
 
     async def _brain_down(*a, **k):
         raise ChatError(ErrorCategory.PROVIDER_UNAVAILABLE, "brain down")
@@ -193,6 +204,12 @@ def test_remote_brain_no_fallback_without_silverwing(monkeypatch):
     _patch_httpx(monkeypatch, FakeResponse())
     gw = ProviderGateway(router=None, timeout=30.0)
 
+    async def _phase6_unavailable(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(gw, "_chat_via_phase6_fabric", _phase6_unavailable)
+    monkeypatch.setattr("jarvis_backend.gateway._has_cloud_key", lambda _sw: False)
+
     async def _brain_down(*a, **k):
         raise ChatError(ErrorCategory.PROVIDER_UNAVAILABLE, "brain down")
 
@@ -212,6 +229,11 @@ def test_remote_brain_empty_reply_rejected(monkeypatch):
     import asyncio
     _patch_httpx(monkeypatch, FakeResponse(content=""))
     gw = ProviderGateway(router=None, timeout=30.0)
+    async def _phase6_unavailable(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(gw, "_chat_via_phase6_fabric", _phase6_unavailable)
+
     try:
         asyncio.run(gw.chat([{"role": "user", "content": "hi"}]))
         raised = False

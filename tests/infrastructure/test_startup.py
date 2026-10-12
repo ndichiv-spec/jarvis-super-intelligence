@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 import os
+import socket
 import sys
 import pytest
 from tests.utils.helpers import temp_env_vars
 from infrastructure.startup.validator import (
     StartupValidator, CheckResult, CheckSeverity, StartupCheck,
     check_env_var, check_disk_space, check_directory_writable,
+    check_tcp_connectivity,
 )
 
 
@@ -133,6 +135,19 @@ class TestBuiltinChecks:
         check = check_disk_space(min_gb=999_999)
         result = await check.check_fn()
         assert result.passed is False
+
+    @pytest.mark.asyncio
+    async def test_check_tcp_connectivity_uses_controlled_loopback_listener(self):
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            listener.listen()
+            host, port = listener.getsockname()
+            check = check_tcp_connectivity(host, port, timeout=1)
+
+            result = await check.check_fn()
+
+        assert result.passed is True
+        assert result.details == {"host": host, "port": port}
 
     @pytest.mark.asyncio
     async def test_check_directory_writable(self, tmp_path):

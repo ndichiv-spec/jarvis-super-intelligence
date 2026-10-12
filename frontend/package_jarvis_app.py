@@ -7,6 +7,7 @@ Creates a downloadable package of the JARVIS desktop application
 import os
 import sys
 import shutil
+import subprocess
 import zipfile
 import json
 from pathlib import Path

@@ -178,6 +178,36 @@ def test_connector_config_and_execution_are_owner_scoped(iso_dirs, mail_fakes):
         })
 
 
+def test_legacy_shared_config_is_preserved_but_not_used_for_user_dispatch(iso_dirs):
+    import json
+
+    from jarvis_backend.connectors import registry
+
+    legacy_file = iso_dirs[0] / "email.json"
+    legacy_file.parent.mkdir(parents=True, exist_ok=True)
+    legacy_file.write_text(json.dumps({
+        "kind": "email", "imap_host": "legacy.example", "password": "legacy-secret",
+        "enabled": True, "capabilities": ["read"],
+    }), encoding="utf-8")
+
+    assert registry.load("email", user_id="owner-1") is None
+    assert registry.load("email")["imap_host"] == "legacy.example"
+    assert _run("email", "email.folders", user_id="owner-1")["ok"] is False
+    assert legacy_file.exists()
+    assert "legacy-secret" in legacy_file.read_text(encoding="utf-8")
+
+
+def test_connector_deletion_does_not_remove_another_owners_configuration(iso_dirs):
+    from jarvis_backend.connectors import registry
+
+    registry.save({"kind": "email", "owner_user_id": "owner-a", "enabled": True})
+    registry.save({"kind": "email", "owner_user_id": "owner-b", "enabled": True})
+
+    assert registry.delete("email", user_id="owner-a") is True
+    assert registry.load("email", user_id="owner-a") is None
+    assert registry.load("email", user_id="owner-b") is not None
+
+
 def test_connector_audit_history_is_owner_scoped(iso_dirs):
     from jarvis_backend.connectors import registry
 

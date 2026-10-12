@@ -31,6 +31,7 @@ vi.mock('@/features/chat/api', () => ({
 }));
 
 vi.mock('@/features/chat/store', () => ({
+  isCurrentLocationRequest: vi.fn(() => false),
   useChatStore: Object.assign(vi.fn(() => mockState), { setState }),
 }));
 

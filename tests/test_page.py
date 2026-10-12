@@ -1,13 +1,16 @@
-import urllib.request
+"""Static smoke checks for the legacy dashboard template."""
 
-try:
-    r = urllib.request.urlopen('http://localhost:5000/', timeout=3)
-    content = r.read().decode()
-    print(f'Page size: {len(content)} bytes')
-    print(f'Has chat panel: {\"chat-panel\" in content}')
-    print(f'Has files panel: {\"id=\\\"files\\\"\" in content}')
-    print(f'Has processes: {\"id=\\\"processes\\\"\" in content}')
-    print(f'Has knowledge: {\"id=\\\"knowledge\\\"\" in content}')
-    print(f'All panels present!')
-except Exception as e:
-    print(f'Error: {e}')
+from pathlib import Path
+
+
+def test_dashboard_template_contains_primary_panels():
+    template = (
+        Path(__file__).resolve().parents[1]
+        / "frontend"
+        / "templates"
+        / "index.html"
+    )
+    content = template.read_text(encoding="utf-8")
+
+    for panel_id in ("chatPanel", "processesPanel", "filesPanel", "knowledgePanel"):
+        assert f'id="{panel_id}"' in content

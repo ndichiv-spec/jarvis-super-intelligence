@@ -85,17 +85,14 @@ class TestAgentCollaboration:
     """Test Agent Collaboration System integration"""
     
     @pytest.mark.asyncio
-    async def test_agent_system_status(self):
-        """Test that agent system status can be retrieved"""
-        try:
-            from core.agent_collaboration import AgentCollaborationSystem
-            
-            agents = AgentCollaborationSystem()
-            status = agents.get_status()
-            
-            assert status is not None
-        except ImportError:
-            pytest.skip("Agent collaboration system not available")
+    async def test_agent_collaboration_status(self, test_client, auth_headers):
+        """Test the supported authenticated agent collaboration route."""
+        response = await test_client.get(
+            "/api/v1/agents/collaboration/agents/list",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        assert "agents" in response.json()
 
 
 class TestErrorHandling:

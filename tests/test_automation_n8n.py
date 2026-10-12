@@ -102,7 +102,7 @@ def test_extract_webhook_path():
 def test_parse_run_response_plain_text():
     r = FakeResponse(status_code=200, text="allIncomingItems")
     import asyncio
-    parsed = asyncio.get_event_loop().run_until_complete(mod._parse_run_response(r))
+    parsed = asyncio.run(mod._parse_run_response(r))
     assert isinstance(parsed, dict)
     assert parsed["message"] == "allIncomingItems"
     assert parsed["status_code"] == 200
@@ -111,7 +111,7 @@ def test_parse_run_response_plain_text():
 def test_parse_run_response_json():
     r = FakeResponse(status_code=200, json_data={"ok": True})
     import asyncio
-    parsed = asyncio.get_event_loop().run_until_complete(mod._parse_run_response(r))
+    parsed = asyncio.run(mod._parse_run_response(r))
     assert parsed == {"ok": True}
 
 

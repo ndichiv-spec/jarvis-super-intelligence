@@ -4,10 +4,13 @@ Core plugin types: manifest, state, metadata, and versioning.
 
 from __future__ import annotations
 import time
-from typing import Dict, List, Optional, Any, Set
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+
+if TYPE_CHECKING:
+    from .context import PluginContext
 
 
 class PluginState(Enum):

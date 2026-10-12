@@ -206,7 +206,7 @@ def main() -> int:
         r = next((x for x in results if x.get("tag") == tag), {})
         out = (r.get("output") or "").strip()
         if tag.endswith("phase6-1"):
-            return any(c.isdigit() and out.replace(" ","").strip() == "120" for _ in [0]) or "120" in out.split()
+            return out.replace(" ", "") == "120" or "120" in out.split()
         return None
 
     eval_report = {

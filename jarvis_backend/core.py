@@ -26,10 +26,10 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
-from fastapi.middleware.cors import CORSMiddleware
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from .db import create_db_and_tables, kv_load, kv_save, reset_database
@@ -573,6 +573,8 @@ ROLE_PERMISSIONS: Dict[str, tuple[str, ...]] = {
 
 def is_owner(user: Dict[str, Any]) -> bool:
     """The configured creator identity is the only effective OWNER."""
+    if user.get("api_key_id"):
+        return False
     configured_owner = admin_email().lower().strip()
     return bool(configured_owner) and (
         (user.get("email") or "").lower().strip() == configured_owner
@@ -815,12 +817,9 @@ def is_api_key_expired(key: Dict[str, Any], grace_seconds: float = 0.0) -> bool:
 # --------------------------------------------------------------------------- #
 # API-key at-rest protection (spec sections 8 / 14 / 20)
 # --------------------------------------------------------------------------- #
-# Raw API keys are NEVER persisted. We store a one-way PBKDF2-HMAC-SHA256 hash
-# (the project existing, stdlib-only password-hashing mechanism -- see
-# hash_password / verify_password above). Argon2id would be preferred but is
-# unavailable in this runtime (argon2-cffi not installed); per section 3 we
-# reuse the existing approved PBKDF2 stack rather than introducing redundant
-# cryptography. Each key gets a unique random salt (via hash_password).
+# Raw API keys are NEVER persisted. New keys use the platform's password
+# hashing implementation (Argon2id); verification retains support for legacy
+# PBKDF2-HMAC-SHA256 hashes. Each key gets a unique random salt.
 API_KEY_PREFIX = "jarvis_"
 _API_KEY_HEX_LEN = 32            # 256 bits of entropy after the prefix
 _API_KEY_PREFIX_HEX = 8          # safe display/identification prefix (first 8 hex)
@@ -843,7 +842,7 @@ def hash_api_key(raw_key: str) -> str:
 
 def verify_api_key(raw_key: str, stored_hash: str) -> bool:
     """Constant-time verification of a supplied API key against its stored hash."""
-    if not stored_hash or not str(stored_hash).startswith("pbkdf2_sha256$"):
+    if not stored_hash or not str(stored_hash).startswith(("$argon2id$", "pbkdf2_sha256$")):
         return False
     return verify_password(raw_key, stored_hash)
 

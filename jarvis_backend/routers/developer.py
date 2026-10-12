@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import secrets
-import uuid
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -69,34 +67,20 @@ async def get_ai_capabilities(user: Dict[str, Any] = Depends(get_current_user)):
 
 @router.get("/api-keys")
 async def list_api_keys(user: Dict[str, Any] = Depends(get_current_user)):
-    keys = get_store("api_keys").load()
-    mine = [
-        {k: v for k, v in item.items() if k != "key"}
-        for item in keys.values()
-        if item.get("user_id") == user.get("id")
-    ]
-    return {"api_keys": mine}
+    from ..routers.auth import list_api_keys as list_auth_api_keys
+
+    return await list_auth_api_keys(user)
 
 
 @router.post("/api-keys")
 async def create_api_key(body: ApiKeyCreateIn, user: Dict[str, Any] = Depends(get_current_user)):
-    from ..routers.auth import _audit
-    keys = get_store("api_keys").load()
-    key_id = str(uuid.uuid4())
-    raw_key = "jarvis_" + __import__("secrets").token_hex(24)
-    keys[key_id] = {
-        "id": key_id,
-        "user_id": user["id"],
-        "name": body.name,
-        "description": body.description,
-        "scopes": body.scopes or [],
-        "key": raw_key,
-        "created_at": now_iso(),
-        "expires_at": None,
-    }
-    get_store("api_keys").save()
-    _audit(user["id"], "create_api_key", body.name)
-    return {"api_key": keys[key_id], "raw_key": raw_key}
+    from ..routers.auth import ApiKeyCreate
+    from ..routers.auth import create_api_key as create_auth_api_key
+
+    return await create_auth_api_key(
+        ApiKeyCreate(name=body.name, description=body.description, scopes=body.scopes),
+        user,
+    )
 
 
 @router.get("/status")

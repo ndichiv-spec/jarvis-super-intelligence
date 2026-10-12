@@ -1,18 +1,16 @@
-import sys
+"""Unit tests for the supported infrastructure metrics collector."""
 
-sys.path.insert(0, "C:/Users/Administrator/Jarvis")
+from infrastructure.observability import MetricsCollector
 
-# Test directly
-from core.metrics import metrics, system_collector
 
-print("Testing metrics module...")
+def test_metrics_collector_records_counters_and_gauges():
+    collector = MetricsCollector()
+    requests = collector.counter("requests", namespace="test")
+    queue_depth = collector.gauge("queue_depth", namespace="test")
 
-# Collect system metrics
-sys_metrics = system_collector.collect()
-print("System metrics:", sys_metrics)
+    requests.inc(2)
+    queue_depth.set(3)
 
-# Get metrics summary
-summary = metrics.get_metrics_summary()
-print("Metrics summary:", summary)
-
-print("\nMetrics module is working correctly!")
+    snapshot = collector.snapshot()
+    assert snapshot["requests"] == {"type": "counter", "value": 2}
+    assert snapshot["queue_depth"] == {"type": "gauge", "value": 3}

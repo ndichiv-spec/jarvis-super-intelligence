@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 
 const { replace, authErrorHandler, onAuthError, clearAuthToken } = vi.hoisted(() => ({
   replace: vi.fn(),
@@ -64,13 +64,23 @@ describe('AuthGuard', () => {
     expect(replace).not.toHaveBeenCalled();
   });
 
-  it('redirects an empty persisted session once rehydration finishes', async () => {
+  it('redirects an empty persisted session once rehydration finishes', () => {
     useAuthStore.setState({ user: null, isAuthenticated: false, authStatus: 'idle' });
+    const hasHydrated = vi.spyOn(useAuthStore.persist, 'hasHydrated').mockReturnValue(false);
+    vi.useFakeTimers();
 
-    render(<AuthGuard><p>Protected content</p></AuthGuard>);
+    try {
+      render(<AuthGuard><p>Protected content</p></AuthGuard>);
 
-    expect(screen.queryByText('Protected content')).not.toBeInTheDocument();
-    await waitFor(() => expect(replace).toHaveBeenCalledWith('/login'));
+      expect(screen.queryByText('Protected content')).not.toBeInTheDocument();
+      act(() => {
+        vi.advanceTimersByTime(1_000);
+      });
+      expect(replace).toHaveBeenCalledWith('/login');
+    } finally {
+      hasHydrated.mockRestore();
+      vi.useRealTimers();
+    }
   });
 
   it('renders protected content after identity is authenticated', () => {

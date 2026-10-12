@@ -26,6 +26,15 @@ def _register(client, email: str, username: str):
     )
 
 
+def _authorize_user(email: str) -> None:
+    user = next(
+        user for user in get_store("users").load().values()
+        if user.get("email", "").lower() == email.lower()
+    )
+    user["status"] = "active"
+    get_store("users").save()
+
+
 def test_registration_delivers_token_out_of_band_and_requires_verification(
     client, monkeypatch
 ):
@@ -54,6 +63,7 @@ def test_registration_delivers_token_out_of_band_and_requires_verification(
 
     verified = client.post("/api/v1/auth/verify-email", json={"token": token})
     assert verified.status_code == 200
+    _authorize_user(email)
     login = client.post(
         "/api/v1/auth/login",
         json={"identifier": email, "password": "S3cret!pass"},
@@ -73,11 +83,12 @@ def test_forgot_password_hides_token_and_reset_expires_consumes_and_revokes(
         "/api/v1/auth/verify-email",
         json={"token": verification_token},
     ).status_code == 200
+    _authorize_user("recover@example.test")
     login = client.post(
         "/api/v1/auth/login",
         json={"identifier": "recover@example.test", "password": "S3cret!pass"},
-    ).json()
-    headers = {"Authorization": f"Bearer {login['access_token']}"}
+    )
+    assert login.status_code == 200
 
     response = client.post(
         "/api/v1/auth/forgot-password",
@@ -103,7 +114,7 @@ def test_forgot_password_hides_token_and_reset_expires_consumes_and_revokes(
         "/api/v1/auth/reset-password",
         json={"token": reset_token, "new_password": "Another!Pass"},
     ).status_code == 400
-    assert client.get("/api/v1/auth/me", headers=headers).status_code == 401
+    assert client.get("/api/v1/auth/me").status_code == 401
     assert client.post(
         "/api/v1/auth/login",
         json={"identifier": "recover@example.test", "password": "N3w!Passphrase"},

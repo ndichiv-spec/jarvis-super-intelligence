@@ -320,17 +320,18 @@ def _recover_expired_commands(now: Optional[float] = None) -> dict[str, int]:
             recovered += 1
         except Exception as exc:
             failed_to_enqueue += 1
+            error_name = type(exc).__name__
             store.update_key(
                 command_id,
-                lambda command: {
+                lambda command, error_name=error_name: {
                     **command,
-                    "queue_error": type(exc).__name__,
+                    "queue_error": error_name,
                 },
             )
             _append_event(
                 command_id,
                 "command_recovery_enqueue_failed",
-                error=type(exc).__name__,
+                error=error_name,
             )
     return {"recovered": recovered, "enqueue_failures": failed_to_enqueue}
 

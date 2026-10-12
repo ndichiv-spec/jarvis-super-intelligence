@@ -49,8 +49,9 @@ class ConfigurationError(JarvisError):
 # ── Security ───────────────────────────────────────────────
 
 class SecurityError(JarvisError):
-    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
-        super().__init__(message=message, code="security_error",
+    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None,
+                 code: str = "security_error"):
+        super().__init__(message=message, code=code,
                          subsystem="security", details=details)
 
 
@@ -77,8 +78,9 @@ class RateLimitError(SecurityError):
 
 class ProviderError(JarvisError):
     def __init__(self, message: str, provider: str = "",
-                 details: Optional[Dict[str, Any]] = None):
-        super().__init__(message=message, code="provider_error",
+                 details: Optional[Dict[str, Any]] = None,
+                 code: str = "provider_error"):
+        super().__init__(message=message, code=code,
                          subsystem=f"provider.{provider}" if provider else "provider",
                          details=details)
 
@@ -87,23 +89,35 @@ class AIProviderError(ProviderError):
     def __init__(self, message: str, provider: str = "ai",
                  model: str = "", details: Optional[Dict[str, Any]] = None):
         super().__init__(message=message, provider=provider,
-                         details={**(details or {}), "model": model})
+                         details={**(details or {}), "provider": provider,
+                                  "model": model},
+                         code="ai_provider_error")
         self.model = model
 
 
 class DatabaseError(ProviderError):
     def __init__(self, message: str = "Database error",
                  details: Optional[Dict[str, Any]] = None):
-        super().__init__(message=message, provider="database", details=details)
+        super().__init__(message=message, provider="database", details=details,
+                         code="database_error")
 
 
 class CacheError(ProviderError):
     def __init__(self, message: str = "Cache error",
                  details: Optional[Dict[str, Any]] = None):
-        super().__init__(message=message, provider="cache", details=details)
+        super().__init__(message=message, provider="cache", details=details,
+                         code="cache_error")
 
 
 # ── Validation ─────────────────────────────────────────────
+
+class IntegrationError(JarvisError):
+    def __init__(self, message: str = "Integration failed", service: str = "",
+                 details: dict[str, Any] | None = None):
+        super().__init__(message=message, code="integration_error",
+                         subsystem=f"integration.{service}" if service else "integration",
+                         details=details)
+
 
 class ValidationError(JarvisError):
     def __init__(self, message: str = "Validation failed",
@@ -153,9 +167,13 @@ class ResourceExhaustedError(JarvisError):
 
 class SandboxError(JarvisError):
     def __init__(self, message: str = "Sandbox execution failed",
-                 details: Optional[Dict[str, Any]] = None):
+                 details: Optional[Dict[str, Any]] = None,
+                 action: str | None = None):
+        error_details = {**(details or {})}
+        if action is not None:
+            error_details["action"] = action
         super().__init__(message=message, code="sandbox_error",
-                         subsystem="sandbox", details=details)
+                         subsystem="sandbox", details=error_details)
 
 
 class AutomationError(JarvisError):

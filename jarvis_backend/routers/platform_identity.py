@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import os
 import platform as _platform
-from typing import Any, Dict
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from ..core import ai_service, get_store, now_iso, _require_admin
+from ..core import _require_admin, ai_service, get_store, now_iso
 from .system import _PROVIDER_KEYS
 
 router = APIRouter(prefix="/api/v1/platform", tags=["platform"])
@@ -97,13 +97,16 @@ def _audit_identity(action: str, fields: list[str]) -> None:
 
 
 @router.get("/identity")
-async def get_identity():
+async def get_identity(_user: Annotated[dict[str, Any], Depends(_require_admin)]):
     """Platform Identity resource (spec §2). Read-only view of real state."""
     return _build_identity()
 
 
 @router.put("/identity")
-async def update_identity(request: Request, user: Dict[str, Any] = Depends(_require_admin)):
+async def update_identity(
+    request: Request,
+    _user: Annotated[dict[str, Any], Depends(_require_admin)],
+):
     """Persist editable identity fields; audit-logged (spec §6 / #14)."""
     try:
         raw_body = await request.json()

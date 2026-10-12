@@ -216,14 +216,6 @@ def check_tcp_connectivity(
 
     async def _check() -> CheckResult:
         try:
-            _, await asyncio.wait_for(
-                asyncio.get_event_loop().sock_connect(
-                    socket.create_connection((host, port), timeout=timeout),
-                    (host, port),
-                ),
-                timeout=timeout,
-            )
-            # Simpler approach for cross-platform
             async def _connect():
                 loop = asyncio.get_event_loop()
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
