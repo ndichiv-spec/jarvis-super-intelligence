@@ -12,8 +12,10 @@ the recovery branch was at `4e17d91fd29a555a528ee9fe08d133825eec189d` (8
 ahead/7 behind) and had no upstream. Commit `4e17d91` is authored and
 committed by `ndichiv-spec`; it was not amended. Recovery work was committed
 locally as `73b7857` (backend/test recovery) and `5245198` (deployment image
-defaults). This verification/audit update is committed separately on the same
-recovery branch. No push or history reconciliation was performed.
+defaults). The reviewed branch was published as the new
+`origin/recovery/integration-20261012` ref at `0fd6b7f`; remote `main` was not
+modified. This delivery addendum records the publication. No history
+reconciliation was performed.
 
 At the graph inspection, `origin/main` was `74c8dd9`; a read-only
 `git ls-remote origin refs/heads/main` confirmed the live remote SHA was
@@ -178,12 +180,22 @@ changes. Repository-wide Ruff is not clean.
   files differ only in `docProps/core.xml` timestamps, and DOCX archive members
   are unchanged. The two recovery commits listed above are local and include
   the Ruff debt gate required by CI.
-- No push was attempted. A fresh `git fetch --no-tags origin main` and
+- A non-force push created the previously absent
+  `origin/recovery/integration-20261012` branch and configured the local
+  upstream. At publication time it pointed to `0fd6b7f`; the recovery branch
+  remained 7 behind / 11 ahead of `origin/main` with no merge base. Remote
+  `main` was not changed. GitHub returned the PR creation URL:
+  `https://github.com/ndichiv-spec/jarvis-super-intelligence/pull/new/recovery/integration-20261012`.
+- GitHub's push-time notice reported **573 Dependabot vulnerabilities on the
+  default branch** (33 critical, 293 high, 196 moderate, 51 low). These alerts
+  were not individually triaged or remediated in this recovery; do not infer
+  that the recovery-branch test results resolve them.
+- A fresh `git fetch --no-tags origin main` and
   `git ls-remote` confirmed remote `main` remains `74c8dd97c4e9869d9cd22015411e3f0d3244185d`;
-  after the two implementation commits, local `origin/main...HEAD` was 7
-  behind / 10 ahead, and `merge-base` is empty. The audit documentation adds
-  one more local commit. The recovery branch has no upstream; pushing remains
-  unsafe until both histories are reconciled non-destructively.
+  at publication time local `origin/main...HEAD` was 7 behind / 11 ahead, and
+  `merge-base` was empty. Reconcile the histories on a dedicated review branch
+  before proposing a merge; do not force-push or merge the unrelated histories
+  directly.
 
 ## Remaining blockers and safe rollback
 
