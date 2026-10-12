@@ -10,8 +10,8 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/ndichiv-spec/jarvis-cloud.git
-cd jarvis-cloud
+git clone https://github.com/ndichiv-spec/jarvis-super-intelligence.git
+cd jarvis-super-intelligence
 
 # Create virtual environment
 python -m venv .venv
