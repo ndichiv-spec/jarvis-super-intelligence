@@ -112,7 +112,7 @@ set_env BUILD_TIME "$build_time"
 set_env DEPLOYMENT_ID "$deployment_id"
 compose pull jarvis worker beat frontend
 image_prefix="$(read_env JARVIS_IMAGE_PREFIX)"
-image_prefix="${image_prefix:-ghcr.io/ndichiv-spec/jarvis-super-intelligence-}"
+image_prefix="${image_prefix:-ghcr.io/ndichiv-spec/jarvis-super-intelligence}"
 frontend_image="${image_prefix%/}/frontend:$candidate"
 image_base_path="$(docker image inspect --format '{{ index .Config.Labels "org.jarvis.public-base-path" }}' "$frontend_image")"
 if [[ "$image_base_path" != "$JARVIS_FRONTEND_BASE_PATH" ]]; then

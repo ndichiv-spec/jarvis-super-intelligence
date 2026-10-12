@@ -1,7 +1,7 @@
 name: jarvis-production
 
 x-backend-image: &backend-image
-  image: ${JARVIS_IMAGE_PREFIX:-ghcr.io/ndichiv-spec/jarvis-super-intelligence-}/backend:${JARVIS_VERSION:?Set JARVIS_VERSION to an immutable image tag}
+  image: ${JARVIS_IMAGE_PREFIX:-ghcr.io/ndichiv-spec/jarvis-super-intelligence}/backend:${JARVIS_VERSION:?Set JARVIS_VERSION to an immutable image tag}
 
 services:
   postgres:
@@ -287,7 +287,7 @@ services:
     stop_grace_period: 30s
 
   frontend:
-    image: ${JARVIS_IMAGE_PREFIX:-ghcr.io/ndichiv-spec/jarvis-super-intelligence-}/frontend:${JARVIS_VERSION:?Set JARVIS_VERSION}
+    image: ${JARVIS_IMAGE_PREFIX:-ghcr.io/ndichiv-spec/jarvis-super-intelligence}/frontend:${JARVIS_VERSION:?Set JARVIS_VERSION}
     restart: unless-stopped
     init: true
     environment:

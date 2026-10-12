@@ -12,7 +12,7 @@ document before registering it. The base origin must be the real HTTPS domain,
 not localhost. Supply OAuth client credentials as server-side secret material;
 do not put access tokens in browser storage or ordinary event payloads.
 
-The repository target is `ndichiv-spec/Jarvis-super-intelligence-`, default
+The repository target is `ndichiv-spec/jarvis-super-intelligence`, default
 branch `main`. The connector currently supports authenticated read/inspection
 paths where the authorized installation permits them. Do not assume support
 for branch creation, commits, pull requests, webhook ingestion, CI artifact
