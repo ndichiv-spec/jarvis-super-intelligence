@@ -134,7 +134,7 @@ class TestPhase5Completion:
         service.create_session(user_id, session_id, "Search Test")
         
         # Add some messages directly to the store
-        sessions = get_store("chat_sessions").load()
+        sessions = get_store("chat_sessions").reload()
         sessions[session_id]["messages"] = [
             {"id": "m1", "role": "user", "content": "hello world search query"},
             {"id": "m2", "role": "assistant", "content": "the answer is here"},
@@ -182,7 +182,7 @@ class TestPhase5Completion:
         service.create_session(user_id, session_id)
         
         # Add a user message with client_message_id
-        sessions = get_store("chat_sessions").load()
+        sessions = get_store("chat_sessions").reload()
         sessions[session_id]["messages"] = [
             {"id": "msg-1", "role": "user", "content": "Original", "client_message_id": "cm-1"},
             {"id": "msg-2", "role": "assistant", "content": "Original response"}

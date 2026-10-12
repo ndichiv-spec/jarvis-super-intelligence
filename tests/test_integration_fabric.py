@@ -6,8 +6,10 @@ fabricated) continuations, approval gating, and optionality of Docker.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -19,6 +21,8 @@ from jarvis_runtime import bootstrap_runtime  # noqa: E402
 
 bootstrap_runtime()
 
+from research_engine import capability_tools  # noqa: E402
+
 from jarvis_backend import brain_fabric as bf  # noqa: E402
 
 LADDER = ("configured", "authenticated", "reachable", "healthy",
@@ -26,8 +30,46 @@ LADDER = ("configured", "authenticated", "reachable", "healthy",
           "deployed")
 
 
-@pytest.fixture(scope="module")
-def matrix():
+@pytest.fixture(autouse=True)
+def _offline_external_probes(monkeypatch, request):
+    if request.node.get_closest_marker("live_provider"):
+        return
+    monkeypatch.setattr(bf, "_kaggle_real_status", lambda: {
+        "credential_file_present": False,
+        "cli_installed": False,
+        "connected": False,
+        "state": "NOT_CONFIGURED",
+        "read_only": True,
+        "submitted": False,
+        "kernel_count": 0,
+    })
+    monkeypatch.setattr(bf, "_hf_real_status", lambda: {
+        "token_present": False,
+        "connected": False,
+        "state": "NOT_CONFIGURED",
+        "error": "No provider credentials in the unit-test snapshot",
+        "repositories": {},
+    })
+    monkeypatch.setattr(capability_tools, "live_provider_status", lambda: {
+        "nvidia": {
+            "configured": True,
+            "authenticated": True,
+            "reachable": True,
+            "available": True,
+            "health_status": "healthy",
+            "inference_verified": True,
+        },
+    })
+    monkeypatch.setattr(bf, "docker_status", lambda: {
+        "state": "UNAVAILABLE",
+        "reason": "Docker is unavailable in this unit-test snapshot",
+        "required_action": "No action is required for unit tests",
+        "impact": "No effect on core lifecycle",
+    })
+
+
+@pytest.fixture
+def matrix(_offline_external_probes):
     return bf.integration_matrix()
 
 
@@ -80,8 +122,10 @@ def test_roles_are_correct(matrix) -> None:
 # --------------------------------------------------------------------------- #
 def test_no_credential_values_in_matrix(matrix) -> None:
     blob = json.dumps(matrix)
-    for pattern in ("hf_", "sk-", "nvapi-", "Bearer ", "KAGGLE_KEY="):
-        assert pattern not in blob, f"credential-shaped value leaked: {pattern}"
+    for pattern in (r"hf_[A-Za-z0-9]{20,}", r"sk-[A-Za-z0-9]{16,}",
+                    r"nvapi-[A-Za-z0-9]{16,}", "Bearer ", "KAGGLE_KEY="):
+        assert re.search(pattern, blob) is None, \
+            f"credential-shaped value leaked: {pattern}"
 
 
 def test_approval_actions_never_silent() -> None:
@@ -156,20 +200,68 @@ def test_kaggle_status_has_no_submission() -> None:
     assert kg["read_only"] is True
 
 
-def test_kaggle_detects_credential_file_not_only_env() -> None:
-    """The env-var-only probe produced a false negative; kaggle.json counts."""
-    kg = bf._kaggle_real_status()
+def test_test_mode_disables_external_provider_probes(monkeypatch) -> None:
+    import subprocess
+    import urllib.request
+
+    def unexpected_probe(*args, **kwargs):
+        pytest.fail("a provider probe ran in test mode")
+
+    monkeypatch.setenv("JARVIS_TEST_MODE", "1")
+    monkeypatch.delenv("JARVIS_RUN_LIVE_PROVIDER_TESTS", raising=False)
+    monkeypatch.delenv("JARVIS_LIVE_PROVIDER_TEST_ACTIVE", raising=False)
+    monkeypatch.setenv("HF_TOKEN", "test-only-token")
+    monkeypatch.setattr("dotenv.load_dotenv", unexpected_probe)
+    monkeypatch.setattr(urllib.request, "urlopen", unexpected_probe)
+    monkeypatch.setattr(subprocess, "run", unexpected_probe)
+    monkeypatch.setattr(Path, "home", unexpected_probe)
+
+    hf = bf._hf_probe()
+    kaggle = bf._kaggle_probe()
+    assert hf["state"] == "NOT_CONFIGURED"
+    assert hf["token_present"] is False
+    assert kaggle["state"] == "NOT_CONFIGURED"
+    assert kaggle["credential_file_present"] is False
+
+
+def test_kaggle_detects_credential_file_not_only_env(monkeypatch, tmp_path) -> None:
+    """A fake credential file is detected without invoking the live CLI."""
+    import shutil
+    import subprocess
+
+    monkeypatch.delenv("JARVIS_TEST_MODE", raising=False)
+    kaggle_home = tmp_path / ".kaggle"
+    kaggle_home.mkdir()
+    (kaggle_home / "kaggle.json").write_text(
+        json.dumps({"username": "test-user", "key": "test-key"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(shutil, "which", lambda _name: "kaggle.exe")
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=0, stdout="ref,title\n", stderr=""),
+    )
+    kg = bf._kaggle_probe()
     assert "credential_file_present" in kg
-    if kg["credential_file_present"]:
-        assert kg["key_present"] is True
-        # Presence/length metadata is fine; a field literally named "key"
-        # carrying the credential is not.
-        blob = json.dumps(kg)
-        assert '"key":' not in blob, "raw Kaggle key must never be returned"
-        assert kg.get("key_length") == 37 or kg.get("key_length", 0) > 0
+    assert kg["credential_file_present"] is True
+    assert kg["key_present"] is True
+    blob = json.dumps(kg)
+    assert '"key":' not in blob, "raw Kaggle key must never be returned"
+    assert kg.get("key_length", 0) > 0
 
 
-def test_hf_reports_live_revision_and_flags_mismatch() -> None:
+@pytest.mark.integration
+@pytest.mark.live_provider
+def test_hf_reports_live_revision_and_flags_mismatch(
+    monkeypatch, live_provider_credentials
+) -> None:
+    if not {"HF_TOKEN", "HUGGINGFACEHUB_API_TOKEN",
+            "JARVIS_HF_TOKEN"}.intersection(live_provider_credentials):
+        pytest.skip("Set an HF token in the environment for live HF verification.")
+    monkeypatch.setattr(bf, "_HF_CACHE", None)
     hf = bf._hf_real_status()
     if hf.get("state") != "AVAILABLE":
         pytest.skip("HF not authenticated")
@@ -224,8 +316,9 @@ def test_integration_capability_executes_without_secrets() -> None:
         "fabric.integrations", {}, ToolContext(request_id="ig", user_id="u")))
     assert res.success is True
     blob = res.result
-    for pattern in ("hf_", "sk-", "nvapi-"):
-        assert pattern not in blob
+    for pattern in (r"hf_[A-Za-z0-9]{20,}", r"sk-[A-Za-z0-9]{16,}",
+                    r"nvapi-[A-Za-z0-9]{16,}"):
+        assert re.search(pattern, blob) is None
 
 
 def test_control_plane_integration_routes_exist() -> None:

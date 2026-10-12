@@ -280,7 +280,15 @@ def test_no_secrets_in_findings():
 # --------------------------------------------------------------------------- #
 # Resource-aware cognition (Phase 9 integration)
 # --------------------------------------------------------------------------- #
-def test_cognitive_state_captures_local_hardware():
+def test_cognitive_state_captures_local_hardware(monkeypatch):
+    from jarvis_backend import cognitive_kernel
+
+    monkeypatch.setattr(cognitive_kernel, "local_hardware", lambda: {
+        "cpu": "Test CPU",
+        "gpu": None,
+        "gpu_count": 0,
+        "ram_gb": 8.0,
+    })
     mission = _make_mission()
     kernel = CognitiveKernel()
     result = kernel.resume(mission.mission_id, max_steps=1)

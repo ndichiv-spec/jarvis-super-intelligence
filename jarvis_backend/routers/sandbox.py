@@ -38,7 +38,9 @@ router = APIRouter(prefix="/api/v1/sandbox", tags=["sandbox"])
 _SW_BACKEND_DIR = Path(__file__).resolve().parent.parent.parent / "silverwing-backend"
 if str(_SW_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_SW_BACKEND_DIR))
-import sandbox as sw  # noqa: E402
+from silverwing_sandbox_loader import load_sandbox  # noqa: E402
+
+sw = load_sandbox()
 
 MAX_CODE_LEN = 20_000
 DEFAULT_TIMEOUT_S = 5.0

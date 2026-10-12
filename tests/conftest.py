@@ -234,6 +234,7 @@ def _remove_test_db() -> None:
 _remove_test_db()
 os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB_PATH.as_posix()}"
 os.environ["JARVIS_TEST_MODE"] = "1"
+os.environ.pop("JARVIS_LIVE_PROVIDER_TEST_ACTIVE", None)
 os.environ["JARVIS_SECRET_KEY"] = "test-only-secret-key-that-must-never-be-used-in-production"
 for _var in ("JARVIS_ADMIN_EMAIL", "JARVIS_ADMIN_PASSWORD"):
     os.environ.pop(_var, None)
@@ -257,8 +258,13 @@ _PROVIDER_ENV_VARS = (
     "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "HF_TOKEN",
     "HUGGINGFACEHUB_API_TOKEN", "JARVIS_HF_TOKEN", "HF_API_TOKEN",
     "GROQ_API_KEY", "DEEPSEEK_API_KEY", "TOGETHER_API_KEY",
-    "MISTRAL_API_KEY", "COHERE_API_KEY",
+    "MISTRAL_API_KEY", "COHERE_API_KEY", "KAGGLE_USERNAME",
+    "KAGGLE_KEY", "KAGGLE_API_TOKEN", "GITHUB_TOKEN", "GH_TOKEN",
+    "GITHUB_API_TOKEN",
 )
+_LIVE_PROVIDER_ENV = {
+    name: os.environ[name] for name in _PROVIDER_ENV_VARS if name in os.environ
+}
 for _var in _PROVIDER_ENV_VARS:
     os.environ.pop(_var, None)
 
@@ -307,3 +313,114 @@ def account_email_outbox(monkeypatch):
     monkeypatch.setattr(auth_routes, "_ensure_account_email_configured", lambda: None)
     monkeypatch.setattr(auth_routes, "_send_account_email", capture)
     return deliveries
+
+
+@pytest.fixture
+def isolated_cloud_fabric(monkeypatch):
+    """Supply explicit provider snapshots to cloud-routing unit tests.
+
+    These snapshots exercise selection and serialization only; they do not
+    claim that any external provider is reachable.
+    """
+    from copy import deepcopy
+
+    from research_engine import capability_tools
+
+    from jarvis_backend import brain_fabric, cloud_fabric
+
+    local_profile = {
+        "kind": "local",
+        "os": "Test OS",
+        "architecture": "test-architecture",
+        "host": "test-host",
+        "cpu": "Test CPU",
+        "cpu_logical_cores": 4,
+        "ram_gb": 8.0,
+        "gpu": None,
+        "gpu_count": 0,
+        "vram_gb": None,
+        "disk_free_gb": 100.0,
+        "virtualization": {
+            "feature_state": "Disabled",
+            "firmware_enabled": False,
+            "slat": False,
+            "vmcompute_service": "Stopped",
+            "supported": False,
+            "reason": "Disabled in the test profile",
+        },
+        "docker": {"installed": False, "cli": None, "daemon": None,
+                   "usable": False},
+        "network": {"internet_reachable": True},
+        "suited_for": ["control plane / orchestration"],
+        "not_suited_for": ["containers", "vms", "wsl2 workloads"],
+        "role": "control_plane",
+    }
+    provider_status = {
+        "nvidia": {
+            "configured": True,
+            "reachable": True,
+            "authenticated": True,
+            "available": True,
+            "health_status": "healthy",
+            "inference_verified": True,
+        },
+    }
+    kaggle_status = {
+        "connected": True,
+        "cli_installed": True,
+        "kernel_count": 1,
+    }
+    huggingface_status = {
+        "connected": True,
+        "token_present": True,
+        "repositories": {"test/model": {"exists": True}},
+    }
+
+    def unavailable_resource(resource_id, provider, resource_type, status="UNAVAILABLE"):
+        return cloud_fabric._resource(
+            resource_id,
+            provider,
+            type=resource_type,
+            status=status,
+            health="unavailable",
+            capabilities=[],
+            reason="Unavailable in the deterministic unit-test snapshot",
+            state_chain={"configured": False, "reachable": False},
+            blocking=False,
+        )
+
+    monkeypatch.setattr(
+        cloud_fabric, "local_hardware",
+        lambda **_: deepcopy(local_profile),
+    )
+    monkeypatch.setattr(cloud_fabric, "_internet_reachable", lambda *_, **__: False)
+    monkeypatch.setattr(capability_tools, "live_provider_status",
+                        lambda: deepcopy(provider_status))
+    monkeypatch.setattr(brain_fabric, "_kaggle_real_status",
+                        lambda *_, **__: deepcopy(kaggle_status))
+    monkeypatch.setattr(brain_fabric, "_hf_real_status",
+                        lambda *_, **__: deepcopy(huggingface_status))
+    monkeypatch.setattr(
+        cloud_fabric, "_docker_resource",
+        lambda _local: unavailable_resource(
+            "docker:execution", "docker", "container_runtime"),
+    )
+    monkeypatch.setattr(
+        cloud_fabric, "_remote_host_resource",
+        lambda: unavailable_resource(
+            "remote_execution_host", "remote_host", "remote_execution_host",
+            status="NOT_CONFIGURED"),
+    )
+
+
+@pytest.fixture
+def live_provider_credentials(monkeypatch):
+    """Restore ambient provider keys only for explicitly selected live tests."""
+    if os.environ.get("JARVIS_RUN_LIVE_PROVIDER_TESTS") != "1":
+        pytest.skip("Set JARVIS_RUN_LIVE_PROVIDER_TESTS=1 to opt into live probes.")
+    if not _LIVE_PROVIDER_ENV:
+        pytest.skip("No provider credentials were present in the test environment.")
+    for name, value in _LIVE_PROVIDER_ENV.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setenv("JARVIS_LIVE_PROVIDER_TEST_ACTIVE", "1")
+    return frozenset(_LIVE_PROVIDER_ENV)

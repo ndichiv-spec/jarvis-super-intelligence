@@ -133,7 +133,11 @@ def test_watch_routes_require_auth_and_legacy_rss_does_not_claim_success(monkeyp
     app.dependency_overrides[get_current_user] = lambda: {"roles": ["user"]}
     assert client.post("/api/v1/global/technology/refresh").status_code == 403
 
-    app.dependency_overrides[get_current_user] = lambda: {"is_admin": True}
+    app.dependency_overrides[get_current_user] = lambda: {
+        "id": "test-admin",
+        "roles": ["admin"],
+        "is_admin": True,
+    }
     response = client.get("/api/v1/global/technology/updates")
     assert response.status_code == 200
     assert response.json()["automatic_refresh"] is False

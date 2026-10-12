@@ -1,13 +1,11 @@
-"""Tests for the JARVIS Data Analytics Capability Domain.
-
-REAL tests run against the live PostgreSQL/MongoDB and genuinely generated
-CSV/XLSX/JSON files. Only the no-database fallback is conditional.
-"""
+"""Exercise data analytics against generated local files and real parsers."""
 from __future__ import annotations
 
 import asyncio
 import json
 import sys
+import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -30,9 +28,6 @@ from research_engine.data_tools import (  # noqa: E402
     query_hash,
     validate_readonly_sql,
 )
-
-FIX = ROOT / "tests" / "_data_fixtures"
-FIX.mkdir(exist_ok=True)
 
 CAPS = ("data.sources", "data.schema", "data.preview", "data.query",
         "data.aggregate", "data.profile", "data.analyze", "data.compare",
@@ -66,6 +61,12 @@ def _invoke(cap: str, args: dict):
     ctx = ToolContext(request_id="du", user_id="du", permissions=granted)
     res = asyncio.run(_reg().invoke(cap, args, ctx))
     return res, (json.loads(res.result) if res.success and res.result else None)
+
+
+@pytest.fixture
+def tmp_path() -> Iterator[Path]:
+    with tempfile.TemporaryDirectory(prefix=".jarvis-data-", dir=ROOT) as directory:
+        yield Path(directory)
 
 
 # --------------------------------------------------------------------------- #
@@ -309,17 +310,17 @@ def test_mongodb_injection_rejected() -> None:
 # --------------------------------------------------------------------------- #
 # REAL: local files
 # --------------------------------------------------------------------------- #
-@pytest.fixture(scope="module")
-def csv_a() -> Path:
-    p = FIX / "a.csv"
+@pytest.fixture
+def csv_a(tmp_path: Path) -> Path:
+    p = tmp_path / "a.csv"
     p.write_text("id,name,score,team\n1,ada,90,red\n2,bob,80,blue\n"
                  "3,cyd,70,red\n4,dee,,blue\n5,eve,60,red\n", encoding="utf-8")
     return p
 
 
-@pytest.fixture(scope="module")
-def csv_b() -> Path:
-    p = FIX / "b.csv"
+@pytest.fixture
+def csv_b(tmp_path: Path) -> Path:
+    p = tmp_path / "b.csv"
     p.write_text("id,name,score,team\n1,ada,95,red\n2,bob,80,blue\n"
                  "6,fay,50,green\n", encoding="utf-8")
     return p
@@ -345,14 +346,14 @@ def test_local_csv_preview_real(csv_a: Path) -> None:
     assert "name" in d["columns"]
 
 
-def test_local_xlsx_analytics_real() -> None:
+def test_local_xlsx_analytics_real(tmp_path: Path) -> None:
     openpyxl = pytest.importorskip("openpyxl")
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.append(["k", "v"])
     for i in range(1, 21):
         ws.append([f"k{i}", i * 2])
-    p = FIX / "s.xlsx"
+    p = tmp_path / "s.xlsx"
     wb.save(str(p))
     res, d = _invoke("data.profile", {"path": str(p)})
     assert res.success, res.error
@@ -361,8 +362,8 @@ def test_local_xlsx_analytics_real() -> None:
     assert isinstance(d["columns"]["v"]["max"], (int, float))
 
 
-def test_local_json_analytics_real() -> None:
-    p = FIX / "d.json"
+def test_local_json_analytics_real(tmp_path: Path) -> None:
+    p = tmp_path / "d.json"
     p.write_text(json.dumps([{"a": 1}, {"a": 2}, {"a": 3}]), encoding="utf-8")
     res, d = _invoke("data.profile", {"path": str(p)})
     assert res.success, res.error
@@ -379,9 +380,9 @@ def test_local_compare_real(csv_a: Path, csv_b: Path) -> None:
     assert "score" in d["numeric_comparison"]
 
 
-def test_export_registers_artifact_real(csv_a: Path) -> None:
+def test_export_registers_artifact_real(csv_a: Path, tmp_path: Path) -> None:
     for fmt, suffix in (("csv", "csv"), ("json", "json"), ("xlsx", "xlsx")):
-        out = FIX / f"export.{suffix}"
+        out = tmp_path / f"export.{suffix}"
         res, d = _invoke("data.export", {
             "path": str(csv_a), "output": str(out), "format": fmt})
         assert res.success, f"{fmt}: {res.error}"
@@ -389,9 +390,9 @@ def test_export_registers_artifact_real(csv_a: Path) -> None:
         assert d["artifact_registry"] in {"registered", "unavailable"}
 
 
-def test_visualize_generates_real_png(csv_a: Path) -> None:
+def test_visualize_generates_real_png(csv_a: Path, tmp_path: Path) -> None:
     pytest.importorskip("matplotlib")
-    out = FIX / "chart.png"
+    out = tmp_path / "chart.png"
     res, d = _invoke("data.visualize", {
         "path": str(csv_a), "chart": "bar", "x": "team",
         "output": str(out), "title": "By team"})
@@ -401,9 +402,9 @@ def test_visualize_generates_real_png(csv_a: Path) -> None:
     assert d["rows_plotted"] == 5
 
 
-def test_visualize_histogram_real(csv_a: Path) -> None:
+def test_visualize_histogram_real(csv_a: Path, tmp_path: Path) -> None:
     pytest.importorskip("matplotlib")
-    out = FIX / "hist.png"
+    out = tmp_path / "hist.png"
     res, _ = _invoke("data.visualize", {"path": str(csv_a), "chart": "histogram",
                                         "x": "score", "output": str(out)})
     assert res.success
@@ -413,15 +414,15 @@ def test_visualize_histogram_real(csv_a: Path) -> None:
 # --------------------------------------------------------------------------- #
 # Malformed / limits
 # --------------------------------------------------------------------------- #
-def test_malformed_dataset_reports_error() -> None:
-    p = FIX / "bad.xlsx"
+def test_malformed_dataset_reports_error(tmp_path: Path) -> None:
+    p = tmp_path / "bad.xlsx"
     p.write_bytes(b"not a workbook at all")
     res, _ = _invoke("data.profile", {"path": str(p)})
     assert res.success is False
 
 
-def test_unsupported_local_format_rejected() -> None:
-    p = FIX / "x.bin"
+def test_unsupported_local_format_rejected(tmp_path: Path) -> None:
+    p = tmp_path / "x.bin"
     p.write_bytes(b"\x00\x01\x02")
     res, _ = _invoke("data.profile", {"path": str(p)})
     assert res.success is False

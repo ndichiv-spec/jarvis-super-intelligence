@@ -212,9 +212,9 @@ class TestPlatformDiagnostics:
         from jarvis_backend.main import app
         return TestClient(app)
 
-    def test_platform_diagnose_endpoint(self, client):
+    def test_platform_diagnose_endpoint(self, client, admin_headers):
         """Test the GET /system/diagnose endpoint."""
-        response = client.get("/api/v1/system/diagnose")
+        response = client.get("/api/v1/system/diagnose", headers=admin_headers)
         
         assert response.status_code == 200
         data = response.json()
@@ -224,9 +224,9 @@ class TestPlatformDiagnostics:
         assert "providers" in data
         assert "verification" in data
 
-    def test_platform_diagnose_includes_required_fields(self, client):
+    def test_platform_diagnose_includes_required_fields(self, client, admin_headers):
         """Test that diagnostics includes all required fields."""
-        response = client.get("/api/v1/system/diagnose")
+        response = client.get("/api/v1/system/diagnose", headers=admin_headers)
         data = response.json()
         
         # Check required fields

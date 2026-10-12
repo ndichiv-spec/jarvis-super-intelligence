@@ -62,14 +62,15 @@ def test_password_save_encrypts_at_rest(tmp_path):
     assert "super-secret-pw" not in json.dumps(pub)
 
 
-def test_gmail_token_never_in_connectors_api(client):
+def test_gmail_token_never_in_connectors_api(client, admin_headers):
     # Connect gmail (oauth_user_id) and store an encrypted token in the SQL vault.
-    registry.save({"kind": "gmail", "provider": "gmail", "oauth_user_id": "u1",
+    registry.save({"kind": "gmail", "provider": "gmail", "owner_user_id": "test-admin",
+                   "oauth_user_id": "test-admin",
                    "capabilities": ["read", "summarize", "draft", "send"], "enabled": True})
-    oauth.save_tokens("gmail", "u1", {"access_token": "AT-123", "refresh_token": "RT-456",
+    oauth.save_tokens("gmail", "test-admin", {"access_token": "AT-123", "refresh_token": "RT-456",
                                       "expires_at": time.time() + 3600, "account": "a@b.com"})
     for path in ("/api/v1/connectors", "/api/v1/connectors/gmail"):
-        r = client.get(path)
+        r = client.get(path, headers=admin_headers)
         assert r.status_code == 200
         blob = json.dumps(r.json())
         assert "AT-123" not in blob

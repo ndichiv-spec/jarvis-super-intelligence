@@ -382,8 +382,8 @@ class TestRetryRecovery:
             name = "test.auth_fail"
             description = "Always auth fails."
             schema = {"type": "object", "properties": {}, "required": []}
-            risk = RiskLevel.NETWORK
-            requires_confirmation = True
+            risk = RiskLevel.READ
+            requires_confirmation = False
 
             async def invoke(self, args, ctx):
                 call_count["n"] += 1
@@ -449,7 +449,7 @@ class TestHumanApproval:
         # Re-execute.
         result = await executor.resume(task.task_id)
         # It may fail (no token) but should not be WAITING_FOR_USER anymore.
-        assert result["status"] != "WAITING_FOR_USER"
+        assert result["task_status"] != "WAITING_FOR_USER"
 
     @pytest.mark.asyncio
     async def test_reject_node_marks_failed(

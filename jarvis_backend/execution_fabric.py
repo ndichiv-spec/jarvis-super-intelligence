@@ -390,7 +390,30 @@ class ExecutionGraph:
                        error="dependency failed")
 
     def skip_dependent_of(self, node_id: str) -> set[str]:
-        """Cascading skip: mark ``node_id`` and all its downstream nodes FAILED."""
+        """Fail pending descendants of a failed root, once per remaining work."""
+        root = self.nodes.get(node_id)
+        if root is None:
+            return set()
+        if root.status in {
+            ExecutionNodeStatus.COMPLETED,
+            ExecutionNodeStatus.VERIFIED,
+        }:
+            return set()
+
+        descendants: set[str] = set()
+        pending = list(root.dependents)
+        while pending:
+            current = pending.pop()
+            if current in descendants or current not in self.nodes:
+                continue
+            descendants.add(current)
+            pending.extend(self.nodes[current].dependents)
+        if root.status in _TERMINAL_NODE_STATUSES and all(
+            self.nodes[current].status in _TERMINAL_NODE_STATUSES
+            for current in descendants
+        ):
+            return set()
+
         skipped: set[str] = set()
         queue = [node_id]
         while queue:
@@ -398,12 +421,15 @@ class ExecutionGraph:
             if cur in skipped or cur not in self.nodes:
                 continue
             n = self.nodes[cur]
-            if n.status in _TERMINAL_NODE_STATUSES:
-                continue
-            n.status = ExecutionNodeStatus.FAILED
-            n.error = f"skipped: dependency chain broken at {node_id}"
-            n.failure_class = FailureClass.CAPABILITY_FAILURE
-            n.completed_at = time.time()
+            if n.status not in _TERMINAL_NODE_STATUSES:
+                n.status = ExecutionNodeStatus.FAILED
+                n.error = (
+                    f"failed dependency root: {node_id}"
+                    if cur == node_id
+                    else f"skipped: dependency chain broken at {node_id}"
+                )
+                n.failure_class = FailureClass.CAPABILITY_FAILURE
+                n.completed_at = time.time()
             skipped.add(cur)
             queue.extend(n.dependents)
         self.updated_at = time.time()

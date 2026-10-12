@@ -1,9 +1,4 @@
-"""Tests for the Cloud Hardware Fabric.
-
-Verifies truthful hardware detection, real-only resource registration,
-purpose-fit compute selection, infeasibility reporting, and no credential
-exposure.
-"""
+"""Deterministic Cloud Hardware Fabric contract and routing tests."""
 from __future__ import annotations
 
 import json
@@ -26,13 +21,18 @@ STATES = ("configured", "authenticated", "reachable", "healthy",
           "resource_verified", "job_verified", "inference_verified")
 
 
-@pytest.fixture(scope="module")
-def hardware():
+@pytest.fixture(autouse=True)
+def _offline_probes(isolated_cloud_fabric):
+    return isolated_cloud_fabric
+
+
+@pytest.fixture
+def hardware(_offline_probes):
     return cf.local_hardware()
 
 
-@pytest.fixture(scope="module")
-def resources():
+@pytest.fixture
+def resources(_offline_probes):
     return cf.cloud_resources()
 
 
@@ -117,12 +117,7 @@ def test_modest_workload_stays_local() -> None:
 
 
 def test_gpu_training_selects_a_verified_gpu_resource() -> None:
-    """GPU training must land on a real GPU provider.
-
-    Which one depends on live connectivity: Kaggle is preferred for ephemeral
-    training, NVIDIA for serving. The assertion is on verified GPU capability,
-    not on a hard-coded provider, so a transient outage cannot make this lie.
-    """
+    """Selection follows verified provider snapshots, not live connectivity."""
     r = cf.select_compute({"task": "fine-tune a LoRA adapter",
                            "gpu_required": True, "network_required": True})
     assert r["selected"] is not None, "no GPU resource available"
@@ -133,7 +128,7 @@ def test_gpu_training_selects_a_verified_gpu_resource() -> None:
 
 
 def test_ephemeral_training_prefers_training_resource_when_available() -> None:
-    """Kaggle is preferred for training when it is actually connected."""
+    """Kaggle is preferred for training when the snapshot says it is available."""
     disc = cf.cloud_resources()["by_id"]
     kaggle = disc.get("cloud:kaggle")
     if not kaggle or kaggle["status"] != "AVAILABLE":
@@ -184,7 +179,7 @@ def test_offline_task_does_not_require_network() -> None:
 # --------------------------------------------------------------------------- #
 # Execution mode
 # --------------------------------------------------------------------------- #
-def test_execution_mode_reports_real_connectivity() -> None:
+def test_execution_mode_uses_isolated_network_snapshot() -> None:
     m = cf.execution_mode()
     assert m["mode"] in {"online", "degraded", "offline"}
     assert isinstance(m["internet_reachable"], bool)

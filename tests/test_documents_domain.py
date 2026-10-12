@@ -8,6 +8,8 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -29,8 +31,13 @@ from research_engine.document_tools import (  # noqa: E402
 )
 from research_engine.tool_registry import ToolContext  # noqa: E402
 
-DOCS = ROOT / "tests" / "_document_fixtures"
-DOCS.mkdir(exist_ok=True)
+
+@pytest.fixture(scope="module")
+def docs_dir() -> Iterator[Path]:
+    with tempfile.TemporaryDirectory(
+        prefix=".jarvis-document-fixtures-", dir=ROOT
+    ) as directory:
+        yield Path(directory)
 
 
 def _invoke(cap: str, args: dict, auto_confirm: bool = False) -> dict:
@@ -53,44 +60,44 @@ def _invoke(cap: str, args: dict, auto_confirm: bool = False) -> dict:
 # REAL fixtures
 # --------------------------------------------------------------------------- #
 @pytest.fixture(scope="module")
-def txt_file() -> Path:
-    p = DOCS / "sample.txt"
+def txt_file(docs_dir: Path) -> Path:
+    p = docs_dir / "sample.txt"
     p.write_text("alpha\nbravo\ncharlie\ndelta\nALPHA again\n", encoding="utf-8")
     return p
 
 
 @pytest.fixture(scope="module")
-def md_file() -> Path:
-    p = DOCS / "sample.md"
+def md_file(docs_dir: Path) -> Path:
+    p = docs_dir / "sample.md"
     p.write_text("# Title\n\nSome **bold** text.\n\n- a\n- b\n", encoding="utf-8")
     return p
 
 
 @pytest.fixture(scope="module")
-def csv_file() -> Path:
-    p = DOCS / "sample.csv"
+def csv_file(docs_dir: Path) -> Path:
+    p = docs_dir / "sample.csv"
     p.write_text("name,role\nada,engineer\ngrace,admiral\n",
                  encoding="utf-8")
     return p
 
 
 @pytest.fixture(scope="module")
-def json_file() -> Path:
-    p = DOCS / "sample.json"
+def json_file(docs_dir: Path) -> Path:
+    p = docs_dir / "sample.json"
     p.write_text(json.dumps({"a": 1, "b": [1, 2, 3]}, indent=2),
                  encoding="utf-8")
     return p
 
 
 @pytest.fixture(scope="module")
-def bad_json_file() -> Path:
-    p = DOCS / "broken.json"
+def bad_json_file(docs_dir: Path) -> Path:
+    p = docs_dir / "broken.json"
     p.write_text("{not valid json,,}", encoding="utf-8")
     return p
 
 
 @pytest.fixture(scope="module")
-def pdf_file() -> Path:
+def pdf_file(docs_dir: Path) -> Path:
     if not dep_available("pdf"):
         pytest.skip("pypdf not installed")
     pypdf = pytest.importorskip("pypdf")
@@ -126,14 +133,14 @@ def pdf_file() -> Path:
             NameObject("/Font"): DictionaryObject({NameObject("/F1"): w._add_object(font)}),
         })
         page[NameObject("/Contents")] = w._add_object(stream)
-    out = DOCS / "sample.pdf"
+    out = docs_dir / "sample.pdf"
     with out.open("wb") as fh:
         w.write(fh)
     return out
 
 
 @pytest.fixture(scope="module")
-def docx_file() -> Path:
+def docx_file(docs_dir: Path) -> Path:
     if not dep_available("docx"):
         pytest.skip("python-docx not installed")
     docx = pytest.importorskip("docx")
@@ -143,13 +150,13 @@ def docx_file() -> Path:
     t = d.add_table(rows=2, cols=2)
     t.cell(0, 0).text = "k"; t.cell(0, 1).text = "v"
     t.cell(1, 0).text = "x"; t.cell(1, 1).text = "y"
-    out = DOCS / "sample.docx"
+    out = docs_dir / "sample.docx"
     d.save(str(out))
     return out
 
 
 @pytest.fixture(scope="module")
-def xlsx_file() -> Path:
+def xlsx_file(docs_dir: Path) -> Path:
     if not dep_available("xlsx"):
         pytest.skip("openpyxl not installed")
     openpyxl = pytest.importorskip("openpyxl")
@@ -160,7 +167,7 @@ def xlsx_file() -> Path:
     ws.append(["alpha", 1])
     ws2 = wb.create_sheet("More")
     ws2.append(["charlie", 2])
-    out = DOCS / "sample.xlsx"
+    out = docs_dir / "sample.xlsx"
     wb.save(str(out))
     return out
 
@@ -294,8 +301,8 @@ def test_search_case_insensitive_by_default(txt_file: Path) -> None:
     assert r["data"]["match_count"] == 2
 
 
-def test_search_directory(txt_file: Path, csv_file: Path) -> None:
-    r = _invoke("documents.search", {"path": str(DOCS), "query": "charlie"})
+def test_search_directory(txt_file: Path, csv_file: Path, docs_dir: Path) -> None:
+    r = _invoke("documents.search", {"path": str(docs_dir), "query": "charlie"})
     assert r["success"], r["error"]
     assert r["data"]["files_searched"] >= 2
     assert r["data"]["match_count"] >= 1
@@ -356,8 +363,8 @@ def test_compare_documents_deterministic(txt_file: Path, md_file: Path) -> None:
 # --------------------------------------------------------------------------- #
 # Generate + ArtifactRegistry
 # --------------------------------------------------------------------------- #
-def test_generate_json_and_register_artifact() -> None:
-    out = DOCS / "generated.json"
+def test_generate_json_and_register_artifact(docs_dir: Path) -> None:
+    out = docs_dir / "generated.json"
     r = _invoke("documents.generate", {
         "path": str(out), "format": "json",
         "content": {"generated": True, "n": 1}})
@@ -374,8 +381,8 @@ def test_generate_json_and_register_artifact() -> None:
         assert art["checksum"] == r["data"]["sha256"]
 
 
-def test_generate_csv_real_writer() -> None:
-    out = DOCS / "generated.csv"
+def test_generate_csv_real_writer(docs_dir: Path) -> None:
+    out = docs_dir / "generated.csv"
     r = _invoke("documents.generate", {
         "path": str(out), "format": "csv",
         "content": [["a", "b"], ["1", "2"]]})
@@ -383,8 +390,8 @@ def test_generate_csv_real_writer() -> None:
     assert "a,b" in out.read_text(encoding="utf-8")
 
 
-def test_generate_rejects_unsupported_format() -> None:
-    r = _invoke("documents.generate", {"path": str(DOCS / "x.pdf"),
+def test_generate_rejects_unsupported_format(docs_dir: Path) -> None:
+    r = _invoke("documents.generate", {"path": str(docs_dir / "x.pdf"),
                                       "format": "pdf"})
     assert r["success"] is False
     assert "unsupported" in r["error"].lower()
@@ -393,8 +400,8 @@ def test_generate_rejects_unsupported_format() -> None:
 # --------------------------------------------------------------------------- #
 # Convert
 # --------------------------------------------------------------------------- #
-def test_convert_csv_to_text(csv_file: Path) -> None:
-    out = DOCS / "converted.txt"
+def test_convert_csv_to_text(csv_file: Path, docs_dir: Path) -> None:
+    out = docs_dir / "converted.txt"
     r = _invoke("documents.convert", {"source": str(csv_file),
                                       "target": "txt", "output": str(out)})
     assert r["success"], r["error"]
@@ -408,8 +415,8 @@ def test_convert_unsupported_target_is_truthful(txt_file: Path) -> None:
     assert "unsupported" in r["error"].lower()
 
 
-def test_archive_container_refused() -> None:
-    fake = DOCS / "archive.zip"
+def test_archive_container_refused(docs_dir: Path) -> None:
+    fake = docs_dir / "archive.zip"
     fake.write_bytes(b"PK\x03\x04" + b"0" * 32)  # real zip container
     r = _invoke("documents.extract_text", {"path": str(fake)})
     fake.unlink(missing_ok=True)
@@ -498,10 +505,10 @@ def test_no_shell_or_exec_in_document_tools() -> None:
         assert banned not in src, f"document tools must not use {banned}"
 
 
-def test_size_limit_enforced() -> None:
+def test_size_limit_enforced(docs_dir: Path) -> None:
     from research_engine import document_tools as dt
 
-    big = DOCS / "big.txt"
+    big = docs_dir / "big.txt"
     big.write_text("x" * 100, encoding="utf-8")
     original = dt.MAX_FILE_BYTES
     try:

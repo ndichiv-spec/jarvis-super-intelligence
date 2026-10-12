@@ -73,6 +73,12 @@ def admin_headers():
 
 
 @pytest.fixture
+def owner_headers():
+    _, headers = _make_user(["owner"], email=core.admin_email())
+    return headers
+
+
+@pytest.fixture
 def user_headers():
     _, headers = _make_user(["user"])
     return headers
@@ -158,11 +164,11 @@ class TestSystemHostOps:
         assert "AUTHENTICATION_ERROR" in body["error"].get("code", "")
         assert command not in r.text
 
-    def test_shutdown_lockdown_even_for_owner(self, client, admin_headers):
+    def test_shutdown_lockdown_even_for_owner(self, client, owner_headers):
         # Once an owner reaches the handler, the destructive-command deny-list
         # still rejects the command before any process can be launched.
         r = client.post("/api/v1/system/launch",
-                        json={"app": "shutdown"}, headers=admin_headers)
+                        json={"app": "shutdown"}, headers=owner_headers)
         assert r.status_code == 403
 
     def test_non_admin_cannot_launch(self, client, user_headers):
@@ -184,37 +190,45 @@ class TestSystemHostOps:
         assert response.status_code == 403
         assert launched == []
 
-    def test_admin_can_launch_non_destructive(self, client, admin_headers, monkeypatch):
+    def test_owner_can_launch_non_destructive(self, client, owner_headers, monkeypatch):
         import subprocess
 
         launched = []
         monkeypatch.setattr(subprocess, "Popen", lambda args, **kwargs: launched.append((args, kwargs)))
         r = client.post("/api/v1/system/launch",
-                        json={"app": "notepad.exe"}, headers=admin_headers)
+                        json={"app": "notepad.exe"}, headers=owner_headers)
         assert r.status_code == 200, r.text
         assert r.json()["app"] == "notepad.exe"
         assert launched == [(["notepad.exe"], {"shell": False})]
 
-    def test_admin_can_read_processes(self, client, admin_headers):
-        r = client.get("/api/v1/system/processes", headers=admin_headers)
+    def test_owner_can_read_processes(self, client, owner_headers):
+        r = client.get("/api/v1/system/processes", headers=owner_headers)
         assert r.status_code == 200
+
+    def test_nonowner_admin_cannot_read_owner_surfaces(self, client):
+        _, headers = _make_user(["admin"])
+        for path in (
+            "/api/v1/system/processes",
+            "/api/v1/system/provider-settings",
+        ):
+            assert client.get(path, headers=headers).status_code == 403
 
 
 # --------------------------------------------------------------------------- #
 # P4: path-traversal confinement for file APIs
 # --------------------------------------------------------------------------- #
 class TestFileBoundary:
-    def test_file_read_confined_to_root(self, client, admin_headers):
+    def test_file_read_confined_to_root(self, client, owner_headers):
         for bad in ("/etc/passwd", "..\\..\\..\\windows\\win.ini", "../../../etc/hosts"):
             r = client.post("/api/v1/system/files/read",
-                            json={"path": bad}, headers=admin_headers)
+                            json={"path": bad}, headers=owner_headers)
             assert r.status_code == 403, (bad, r.status_code, r.text)
             # Structured error format
             body = r.json()
             assert "error" in body or "detail" in body
 
-    def test_file_list_confined_to_root(self, client, admin_headers):
-        r = client.get("/api/v1/system/files?path=..\\..\\..\\etc", headers=admin_headers)
+    def test_file_list_confined_to_root(self, client, owner_headers):
+        r = client.get("/api/v1/system/files?path=..\\..\\..\\etc", headers=owner_headers)
         assert r.status_code == 403
 
 
@@ -222,7 +236,7 @@ class TestFileBoundary:
 # P6/P7: provider settings — scrubbed read, secret-shape rejection, migration
 # --------------------------------------------------------------------------- #
 class TestProviderSettingsBoundary:
-    def test_put_saves_non_secret_provider_preferences(self, client, admin_headers):
+    def test_put_saves_non_secret_provider_preferences(self, client, owner_headers):
         response = client.put(
             "/api/v1/system/provider-settings",
             json={
@@ -230,7 +244,7 @@ class TestProviderSettingsBoundary:
                 "ollama_model": "mistral",
                 "aws_region": "eu-west-1",
             },
-            headers=admin_headers,
+            headers=owner_headers,
         )
 
         assert response.status_code == 200
@@ -240,21 +254,21 @@ class TestProviderSettingsBoundary:
         assert response.json()["settings"]["ollama_model"] == "mistral"
         assert response.json()["settings"]["openai_api_key"] is None
 
-    def test_put_rejects_secret_shaped_fields(self, client, admin_headers):
+    def test_put_rejects_secret_shaped_fields(self, client, owner_headers):
         for field in ("openai_api_key", "google_gemini_api_key", "aws_secret_token",
                       "anthropic_api_key"):
             r = client.put("/api/v1/system/provider-settings",
-                           json={field: "sk-test-value"}, headers=admin_headers)
+                           json={field: "sk-test-value"}, headers=owner_headers)
             assert r.status_code == 400, (field, r.status_code)
             assert "refusing" in r.text.lower()
 
-    def test_get_scrubs_secret_values(self, client, admin_headers):
+    def test_get_scrubs_secret_values(self, client, owner_headers):
         misc = get_store("misc").load()
         ps = misc.setdefault("provider_settings", {})
         ps["openai_api_key"] = "sk-super-secret-plain-123"
         ps["ollama_model"] = "llama3"
         get_store("misc").save()
-        r = client.get("/api/v1/system/provider-settings", headers=admin_headers)
+        r = client.get("/api/v1/system/provider-settings", headers=owner_headers)
         assert r.status_code == 200
         text = r.text
         assert "sk-super-secret-plain-123" not in text  # value never returned
@@ -326,9 +340,9 @@ class TestSecurityHeaders:
 # P10: no exception / path leakage in error responses
 # --------------------------------------------------------------------------- #
 class TestErrorSanitization:
-    def test_file_read_error_is_generic(self, client, admin_headers):
+    def test_file_read_error_is_generic(self, client, owner_headers):
         r = client.post("/api/v1/system/files/read",
-                        json={"path": "nonexistent_file.txt"}, headers=admin_headers)
+                        json={"path": "nonexistent_file.txt"}, headers=owner_headers)
         # confined path exists check -> 404 "File not found", never a traceback
         assert r.status_code in (403, 404)
         body = r.json()
@@ -337,9 +351,9 @@ class TestErrorSanitization:
         assert "traceback" not in body_str
         assert "errno" not in body_str
 
-    def test_no_strace_in_provider_settings_error(self, client, admin_headers):
+    def test_no_strace_in_provider_settings_error(self, client, owner_headers):
         r = client.put("/api/v1/system/provider-settings",
-                       json={"openai_api_key": "sk-should-not-echo"}, headers=admin_headers)
+                       json={"openai_api_key": "sk-should-not-echo"}, headers=owner_headers)
         assert r.status_code == 400
         body = r.json()
         # Structured error format: {"error": {"message": "..."}}

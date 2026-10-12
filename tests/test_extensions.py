@@ -332,6 +332,7 @@ async def test_oauth_callback_encrypts_tokens_and_binds_extension_owner(monkeypa
             "path": "README.md",
             "content": "approved change",
             "message": "Update README",
+            "branch": "jarvis/recovery-test",
         },
     )
     with pytest.raises(HTTPException) as confirmation:

@@ -275,6 +275,34 @@ class TestExecutionGraphProgress:
         assert second == set()
         assert g.nodes["n1"].status == ExecutionNodeStatus.FAILED
 
+    def test_failed_root_still_cascades_to_pending_descendants(self) -> None:
+        g = ExecutionGraph("t1")
+        n0 = ExecutionNode("n0", "t1", "cap.a")
+        n1 = ExecutionNode("n1", "t1", "cap.b", dependencies=["n0"])
+        n2 = ExecutionNode("n2", "t1", "cap.c", dependencies=["n1"])
+        for node in (n0, n1, n2):
+            g.add_node(node)
+        g.mark_failed("n0", "capability failed", FailureClass.CAPABILITY_FAILURE)
+
+        skipped = g.skip_dependent_of("n0")
+
+        assert skipped == {"n0", "n1", "n2"}
+        assert g.nodes["n0"].error == "capability failed"
+        assert g.nodes["n1"].status == ExecutionNodeStatus.FAILED
+        assert g.nodes["n2"].status == ExecutionNodeStatus.FAILED
+        assert g.skip_dependent_of("n0") == set()
+
+    def test_completed_root_does_not_cascade_failure(self) -> None:
+        g = ExecutionGraph("t1")
+        n0 = ExecutionNode("n0", "t1", "cap.a")
+        n1 = ExecutionNode("n1", "t1", "cap.b", dependencies=["n0"])
+        g.add_node(n0)
+        g.add_node(n1)
+        g.mark_completed("n0")
+
+        assert g.skip_dependent_of("n0") == set()
+        assert g.nodes["n1"].status == ExecutionNodeStatus.PENDING
+
 
 # --------------------------------------------------------------------------- #
 # ExecutionGraph — checkpoint / resume

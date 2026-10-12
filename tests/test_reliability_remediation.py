@@ -15,6 +15,40 @@ from jarvis_backend.path_security import resolve_confined_path
 from jarvis_backend.routers import health
 
 
+def _register_verified_user(client, account_email_outbox, email, username):
+    registered = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": email,
+            "username": username,
+            "password": "Secure-password-123!",
+        },
+    )
+    assert registered.status_code == 200
+    assert registered.json()["status"] == "verification_required"
+    token = account_email_outbox[-1][2]
+    assert client.post(
+        "/api/v1/auth/verify-email",
+        json={"token": token},
+    ).status_code == 200
+
+    from jarvis_backend.core import get_store
+
+    users = get_store("users")
+    user = next(
+        item for item in users.load().values()
+        if item.get("email", "").lower() == email.lower()
+    )
+    user["status"] = "active"
+    users.save()
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": email, "password": "Secure-password-123!"},
+    )
+    assert login.status_code == 200
+    return login
+
+
 @pytest.mark.asyncio
 async def test_private_routers_reject_anonymous_requests():
     from jarvis_backend.main import app
@@ -30,17 +64,15 @@ async def test_private_routers_reject_anonymous_requests():
     assert improvements.status_code == 401
 
 
-def test_refresh_tokens_rotate_once_and_logout_revokes_session(client):
-    registration = client.post(
-        "/api/v1/auth/register",
-        json={
-            "email": "session-test@example.test",
-            "username": "session-test",
-            "password": "Secure-password-123!",
-        },
-    ).json()
-    original_access = registration["access_token"]
-    original_refresh = registration["refresh_token"]
+def test_refresh_tokens_rotate_once_and_logout_revokes_session(
+    client, account_email_outbox
+):
+    _register_verified_user(
+        client, account_email_outbox, "session-test@example.test", "session-test"
+    )
+    original_access = client.cookies.get("jarvis_access_token")
+    original_refresh = client.cookies.get("jarvis_refresh_token")
+    assert original_access and original_refresh
     headers = {"Authorization": f"Bearer {original_access}"}
 
     sessions = client.get("/api/v1/auth/sessions", headers=headers).json()
@@ -52,13 +84,18 @@ def test_refresh_tokens_rotate_once_and_logout_revokes_session(client):
     rotated = client.post(
         "/api/v1/auth/refresh",
         json={"refresh_token": original_refresh},
+        headers={"Origin": "http://localhost:3000"},
     )
     assert rotated.status_code == 200
-    tokens = rotated.json()
-    assert tokens["refresh_token"] != original_refresh
+    tokens = {
+        "access_token": client.cookies.get("jarvis_access_token"),
+        "refresh_token": client.cookies.get("jarvis_refresh_token"),
+    }
+    assert tokens["access_token"] and tokens["refresh_token"] != original_refresh
     assert client.post(
         "/api/v1/auth/refresh",
         json={"refresh_token": original_refresh},
+        headers={"Origin": "http://localhost:3000"},
     ).status_code == 401
     assert client.get(
         "/api/v1/auth/me",
@@ -67,7 +104,10 @@ def test_refresh_tokens_rotate_once_and_logout_revokes_session(client):
 
     assert client.post(
         "/api/v1/auth/logout",
-        headers={"Authorization": f"Bearer {tokens['access_token']}"},
+        headers={
+            "Authorization": f"Bearer {tokens['access_token']}",
+            "Origin": "http://localhost:3000",
+        },
         json={"refresh_token": tokens["refresh_token"]},
     ).status_code == 200
     assert client.get(
@@ -80,17 +120,14 @@ def test_refresh_tokens_rotate_once_and_logout_revokes_session(client):
     ).status_code == 401
 
 
-def test_websocket_ticket_is_origin_bound_and_single_use(client):
-    registration = client.post(
-        "/api/v1/auth/register",
-        json={
-            "email": "ws-ticket-test@example.test",
-            "username": "ws-ticket-test",
-            "password": "Secure-password-123!",
-        },
-    ).json()
+def test_websocket_ticket_is_origin_bound_and_single_use(
+    client, account_email_outbox
+):
+    _register_verified_user(
+        client, account_email_outbox, "ws-ticket-test@example.test", "ws-ticket-test"
+    )
     headers = {
-        "Authorization": f"Bearer {registration['access_token']}",
+        "Authorization": f"Bearer {client.cookies.get('jarvis_access_token')}",
         "Origin": "https://jarvis.example.test",
     }
     ticket_response = client.post("/api/v1/auth/ws-ticket", headers=headers)
@@ -355,6 +392,9 @@ def test_cognitive_memory_requires_auth_and_is_scoped_to_its_owner(client, auth_
     get_store("users").save()
     other_headers = {"Authorization": f"******"}
 
+    other_headers.update({
+        "Authorization": f"Bearer {create_token({'sub': other_id, 'user_id': other_id})}"
+    })
     recall = client.get(
         "/api/v1/cognitive/memory/recall",
         headers=other_headers,
@@ -380,10 +420,14 @@ def test_cognitive_memory_requires_auth_and_is_scoped_to_its_owner(client, auth_
     assert owner_record["user_id"] == "testuser"
 
 
-def test_voice_asr_never_returns_synthetic_empty_success(client):
-    result = client.post("/api/v1/voice/listen", json={"timeout": 1})
+def test_voice_asr_never_returns_synthetic_empty_success(client, auth_headers):
+    result = client.post(
+        "/api/v1/voice/listen",
+        json={"timeout": 1},
+        headers=auth_headers,
+    )
     assert result.status_code == 503
-    assert result.json()["detail"]["code"] == "NOT_CONFIGURED"
+    assert result.json()["error"]["code"] == "SERVICE_UNAVAILABLE"
 
     status = client.get("/api/v1/voice/status")
     assert status.status_code == 200

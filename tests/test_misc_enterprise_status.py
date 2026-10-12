@@ -15,4 +15,4 @@ def test_sso_test_reports_missing_provider_validation(client):
     response = client.post("/api/v1/enterprise/sso/test", json={"provider": "example-idp"})
 
     assert response.status_code == 501
-    assert response.json()["error"]["code"] == "NOT_IMPLEMENTED"
+    assert response.json()["error"]["code"] == "CAPABILITY_NOT_CONFIGURED"

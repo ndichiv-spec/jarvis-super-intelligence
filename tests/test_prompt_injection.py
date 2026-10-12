@@ -110,11 +110,13 @@ def test_oauth_callback_rejects_bad_state(client, monkeypatch):
                   "token_url": "https://oauth2.googleapis.com/token",
                   "scope": "https://www.googleapis.com/auth/gmail.readonly",
                   "is_google": True}}))
-    r = client.get("/api/v1/connectors/oauth/callback/gmail?code=x&state=bogus")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["ok"] is False
-    assert "state" in body["error"].lower() or "signature" in body["error"].lower()
+    r = client.get(
+        "/api/v1/connectors/oauth/callback/gmail?code=x&state=bogus",
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert "oauth_error=invalid_state" in r.headers["location"]
+    assert "state=bogus" not in r.headers["location"]
 
 
 def test_oauth_callback_unknown_kind(client):

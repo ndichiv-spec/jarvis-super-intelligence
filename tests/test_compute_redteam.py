@@ -53,6 +53,12 @@ COMPUTE_CAPS = [
     "compute.resource_health",
 ]
 
+
+@pytest.fixture(autouse=True)
+def _offline_cloud_snapshots(isolated_cloud_fabric):
+    return isolated_cloud_fabric
+
+
 # Patterns that would indicate credential leakage.
 SECRET_PATTERNS = {
     "api_key": re.compile(r"(?i)api[_-]?key\s*[:=]\s*\S+"),

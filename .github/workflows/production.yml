@@ -26,7 +26,7 @@ jobs:
       - name: Check Python syntax
         run: |
           python -m py_compile tests/test_page.py
-          python -m compileall -q jarvis_backend infrastructure tests
+          python -m compileall -q jarvis_backend infrastructure silverwing-backend tests
       - name: Check collection without services
         run: python -m pytest --collect-only -q
         env:
@@ -47,10 +47,38 @@ jobs:
         env:
           JARVIS_TEST_MODE: "1"
           JARVIS_SECRET_KEY: test-only-key-not-used-for-production
-      - run: pytest -q tests/test_celery_runtime.py tests/test_command_runtime_api.py tests/test_readiness.py tests/test_phase2_persistence.py tests/test_production_migrations.py tests/test_security_regression.py
+      - name: Run backend and critical security regressions
+        run: >
+          python -m pytest -q -m "not integration"
+          tests/test_celery_runtime.py
+          tests/test_command_runtime_api.py
+          tests/test_readiness.py
+          tests/test_phase2_persistence.py
+          tests/test_production_migrations.py
+          tests/test_test_database_isolation.py
+          tests/test_security_regression.py
+          tests/test_sec1_security.py
+          tests/test_auth_email_security.py
+          tests/test_reliability_remediation.py
+          tests/test_secret_leakage.py
+          tests/test_platform_identity.py
+          tests/test_phase6_verification.py
+          tests/test_oauth_framework.py
+          tests/test_oauth_disconnect_route.py
+          tests/test_extensions.py
+          tests/test_prompt_injection.py
+          tests/test_connectors.py
+          tests/test_connector_truthfulness.py
+          tests/test_github_connector.py
+          tests/test_gmail_oauth_connector.py
+          tests/test_search_navigation.py
+          tests/test_sandbox_api.py
+          tests/api/test_endpoints.py
+          tests/infrastructure/test_security.py
         env:
           JARVIS_TEST_MODE: "1"
           JARVIS_SECRET_KEY: test-only-key-not-used-for-production
+          JARVIS_TEST_DATABASE_PATH: ${{ runner.temp }}/jarvis-backend.sqlite
       - uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: fs

@@ -436,6 +436,20 @@ def _kaggle_probe() -> dict[str, Any]:
         "read_only": True,
         "submitted": False,
     }
+    if (os.environ.get("JARVIS_TEST_MODE") == "1"
+            and os.environ.get("JARVIS_LIVE_PROVIDER_TEST_ACTIVE") != "1"):
+        out.update({
+            "credential_file_present": False,
+            "access_token_present": False,
+            "key_present": False,
+            "cli_installed": False,
+            "connected": False,
+            "state": "NOT_CONFIGURED",
+            "error": "provider probes are disabled in test mode",
+            "note": "Read-only status probe; training was not submitted.",
+        })
+        return out
+
     # Kaggle CLI 2.x authenticates from ~/.kaggle/access_token (OAuth-style
     # token). Legacy kaggle.json keys are no longer accepted by the CLI, so both
     # are checked and their PRESENCE is reported without exposing values.
@@ -524,24 +538,37 @@ def _hf_probe() -> dict[str, Any]:
 
     from dotenv import load_dotenv
 
-    try:
-        load_dotenv(WORKSPACE / ".env")
-    except Exception:  # noqa: BLE001
-        pass
+    out: dict[str, Any] = {
+        "source": "huggingface.co API",
+        "token_present": False,
+        "token_length": 0,
+        "connected": False,
+        "repositories": {},
+    }
+    test_mode = os.environ.get("JARVIS_TEST_MODE") == "1"
+    live_probe_opt_in = (
+        os.environ.get("JARVIS_LIVE_PROVIDER_TEST_ACTIVE") == "1")
+    if test_mode and not live_probe_opt_in:
+        out.update({
+            "state": "NOT_CONFIGURED",
+            "error": "provider probes are disabled in test mode",
+        })
+        return out
+
+    if not test_mode:
+        try:
+            load_dotenv(WORKSPACE / ".env")
+        except Exception:  # noqa: BLE001
+            pass
+
     token = ""
     for var in ("HF_TOKEN", "HUGGINGFACEHUB_API_TOKEN", "JARVIS_HF_TOKEN"):
         val = (os.environ.get(var) or "").strip()
         if val:
             token = val
             break
-
-    out: dict[str, Any] = {
-        "source": "huggingface.co API",
-        "token_present": bool(token),
-        "token_length": len(token),
-        "connected": False,
-        "repositories": {},
-    }
+    out["token_present"] = bool(token)
+    out["token_length"] = len(token)
     if not token:
         out["state"] = "NOT_CONFIGURED"
         out["error"] = "no Hugging Face token in environment or .env"

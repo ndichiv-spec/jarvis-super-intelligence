@@ -133,7 +133,9 @@ def test_github_not_configured_without_token(monkeypatch) -> None:
     assert inv["github.search"]["state"] == NOT_CONFIGURED
 
 
-def test_provider_status_is_live_not_static() -> None:
+@pytest.mark.integration
+@pytest.mark.live_provider
+def test_provider_status_is_live_not_static(live_provider_credentials) -> None:
     status = live_provider_status()
     assert status, "provider status must return real data"
     if "_error" in status:

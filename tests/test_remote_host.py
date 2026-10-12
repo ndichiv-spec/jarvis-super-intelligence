@@ -29,9 +29,10 @@ STATES = ("configured", "authenticated", "reachable", "healthy",
 
 
 @pytest.fixture(autouse=True)
-def _no_remote_env(monkeypatch):
+def _no_remote_env(monkeypatch, isolated_cloud_fabric):
     for var in (rh.ENV_HOST, rh.ENV_USER, rh.ENV_IDENTITY):
         monkeypatch.delenv(var, raising=False)
+    return isolated_cloud_fabric
 
 
 # --------------------------------------------------------------------------- #

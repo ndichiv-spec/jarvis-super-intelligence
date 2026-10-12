@@ -11,6 +11,16 @@ import pytest
 from jarvis_backend.routers.search import router as search_router, SearchDomain
 
 
+@pytest.fixture
+def test_client():
+    from starlette.testclient import TestClient
+
+    from jarvis_backend.main import app
+
+    with TestClient(app) as client:
+        yield client
+
+
 # --------------------------------------------------------------------------- #
 # Navigation Context classification (spec §7)
 # --------------------------------------------------------------------------- #
@@ -64,17 +74,14 @@ class TestNavigationContext:
         assert data["presentation"] == "top_level"
         assert "frame-ancestors" in data["reason"].lower() or "none" in data["reason"].lower()
 
-    def test_classify_unsupported_protocol(self, test_client, auth_headers):
-        """Non-HTTP protocols should classify as top_level."""
+    def test_unsupported_protocol_is_rejected(self, test_client, auth_headers):
+        """Navigation refuses non-HTTP protocols before attempting a fetch."""
         resp = test_client.post(
             "/api/v1/browser/navigate/context",
             json={"url": "ftp://example.com/file"},
             headers=auth_headers,
         )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["presentation"] == "top_level"
-        assert "ftp" in data["reason"].lower()
+        assert resp.status_code == 403
 
     def test_classify_blocked_domain(self, test_client, auth_headers):
         """Blocked domains (localhost, etc.) should return 403."""
@@ -305,7 +312,7 @@ class TestFederatedSearch:
 
     def test_search_empty_query(self, test_client, auth_headers):
         """Empty query should return 0 results."""
-        resp = test_client.get("/api/v1/search?q=", headers=auth_headers)
+        resp = test_client.get("/api/v1/search/?q=", headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
         assert data["total_results"] == 0
@@ -327,7 +334,7 @@ class TestFederatedSearch:
     def test_search_specific_domain(self, test_client, auth_headers):
         """Search within a specific domain."""
         resp = test_client.get(
-            "/api/v1/search?q=test&domain=browser&limit=5",
+            "/api/v1/search/?q=test&domain=browser&limit=5",
             headers=auth_headers,
         )
         assert resp.status_code == 200
@@ -353,7 +360,7 @@ class TestFederatedSearch:
         }
         store.save()
 
-        resp = test_client.get("/api/v1/search?q=test+search&domain=knowledge&limit=5",
+        resp = test_client.get("/api/v1/search/?q=test+search&domain=knowledge&limit=5",
                                headers=auth_headers)
         assert resp.status_code == 200
         result_data = resp.json()
@@ -373,7 +380,7 @@ class TestFederatedSearch:
         """Search should never return fabricated results."""
         unique = f"xyzzy_nothing_here_{int(time.time())}"
         resp = test_client.get(
-            f"/api/v1/search?q={urllib.parse.quote(unique)}&include_web=false",
+            f"/api/v1/search/?q={urllib.parse.quote(unique)}&include_web=false",
             headers=auth_headers,
         )
         assert resp.status_code == 200
@@ -835,7 +842,7 @@ class TestSemanticSearch:
     def test_semantic_param_accepted(self, test_client, auth_headers):
         """semantic=True should return a valid response with ranking info."""
         resp = test_client.get(
-            "/api/v1/search?q=test&semantic=true&include_web=false",
+            "/api/v1/search/?q=test&semantic=true&include_web=false",
             headers=auth_headers,
         )
         assert resp.status_code == 200
@@ -862,7 +869,7 @@ class TestSemanticSearch:
 
         try:
             resp = test_client.get(
-                "/api/v1/search?q=neural+network+pruning&domain=knowledge&semantic=true&include_web=false",
+                "/api/v1/search/?q=neural+network+pruning&domain=knowledge&semantic=true&include_web=false",
                 headers=auth_headers,
             )
             assert resp.status_code == 200
@@ -900,7 +907,7 @@ class TestLearningSearch:
     def test_learning_domain_searchable(self, test_client, auth_headers):
         """Searching the learning domain should not error."""
         resp = test_client.get(
-            "/api/v1/search?q=model&domain=learning&include_web=false",
+            "/api/v1/search/?q=model&domain=learning&include_web=false",
             headers=auth_headers,
         )
         assert resp.status_code == 200
@@ -927,7 +934,7 @@ class TestSearchHistory:
         hist_store = get_store("search_history")
         hist_store.load()
         resp = test_client.get(
-            "/api/v1/search?q=history_marker_test&include_web=false",
+            "/api/v1/search/?q=history_marker_test&include_web=false",
             headers=auth_headers,
         )
         assert resp.status_code == 200
@@ -1045,25 +1052,3 @@ class TestWhatsAppClassification:
         assert isinstance(result, dict)
         assert "reached" in result
         assert "error" in result
-
-    def test_whatsapp_check_script_parses(self):
-        """The _whatsapp_check.py scratch script must be syntactically valid."""
-        import ast
-        src = open("../../../_whatsapp_check.py", encoding="utf-8").read() if False else None
-        # The script lives above the repo root at F:\AI/_whatsapp_check.py.
-        import os
-        candidates = ["_whatsapp_check.py", "../../_whatsapp_check.py",
-                      "../../../_whatsapp_check.py"]
-        found = None
-        for c in candidates:
-            if os.path.exists(c):
-                found = c
-                break
-        if found is None:
-            # Locate via known workspace root.
-            for c in ["F:/AI/_whatsapp_check.py"]:
-                if os.path.exists(c):
-                    found = c
-                    break
-        assert found is not None, "_whatsapp_check.py not found"
-        ast.parse(open(found, encoding="utf-8").read())

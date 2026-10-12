@@ -111,7 +111,7 @@ def test_chat_session_with_messages_survives_restart():
     svc = chat_service.ChatService()
     svc.create_session("user-1", "sess-restart", "Restart test")
     # Persist a message into the session (mirrors send_message's store usage).
-    sessions = core.get_store("chat_sessions").load()
+    sessions = core.get_store("chat_sessions").reload()
     sessions["sess-restart"]["messages"].append(
         {"id": "m1", "role": "user", "content": "hello", "status": "COMPLETED"}
     )

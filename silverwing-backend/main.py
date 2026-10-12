@@ -910,7 +910,8 @@ async def _tool_code_executor(input_data: Dict[str, Any]) -> Dict[str, Any]:
     lang = input_data.get("language", "python")
     timeout = float(input_data.get("timeout", 5))
 
-    import sandbox as sw
+    from silverwing_sandbox_loader import load_sandbox
+    sw = load_sandbox()
     try:
         result = await asyncio.to_thread(sw.run_code, code, timeout)
     except Exception as e:
@@ -1966,7 +1967,8 @@ async def _run_evaluation() -> Dict[str, Any]:
         return f"memory_retrieve ok ({len(mem.get('results', []))} results)"
 
     async def check_sandbox():
-        import sandbox as sw
+        from silverwing_sandbox_loader import load_sandbox
+        sw = load_sandbox()
         good = await asyncio.to_thread(sw.run_code, "print(21 * 2)")
         if not good.get("ok"):
             raise RuntimeError(f"sandbox basic exec failed: {good.get('error')}")
@@ -3471,7 +3473,6 @@ if __name__ == "__main__":
         stacklevel=2,
     )
     uvicorn.run(app, host="0.0.0.0", port=8091)
-
 
 
 

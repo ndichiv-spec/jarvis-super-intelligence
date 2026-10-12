@@ -150,8 +150,10 @@ def test_sandbox_writes_audit_trail(client, auth_headers):
     assert after == before + 1
 
 
-def test_coder_agent_has_execute_capability(client):
-    agent = client.get("/api/v1/agents/coder").json()
+def test_coder_agent_has_execute_capability(client, auth_headers):
+    response = client.get("/api/v1/agents/coder", headers=auth_headers)
+    assert response.status_code == 200
+    agent = response.json()
     assert "execute" in agent.get("capabilities", [])
 
 
