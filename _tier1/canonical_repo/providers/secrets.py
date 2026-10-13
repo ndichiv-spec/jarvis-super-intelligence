@@ -147,6 +147,19 @@ class SecretManager:
         for candidate in (name, name.upper(), f"JARVIS_{name.upper()}"):
             if candidate in self._env:
                 return self._env[candidate]
+        # Support orchestrator-mounted secrets (for example Docker/Kubernetes
+        # *_FILE variables) without copying secret contents into environment
+        # values. The path is configuration; only the file contents are a
+        # credential. Read failures fail closed as an absent credential.
+        for candidate in (name, name.upper(), f"JARVIS_{name.upper()}"):
+            secret_path = self._env.get(f"{candidate}_FILE")
+            if secret_path:
+                try:
+                    value = Path(secret_path).read_text(encoding="utf-8").strip()
+                except OSError:
+                    value = ""
+                if value:
+                    return value
         for candidate in (name, name.upper(), f"JARVIS_{name.upper()}"):
             value = self._dotenv.get(candidate)
             if value:
@@ -168,7 +181,16 @@ class SecretManager:
         result: dict[str, str] = {}
         candidates: set[str] = set()
         candidates.update(self._overrides)
-        candidates.update(k for k in self._env if "KEY" in k.upper() or "TOKEN" in k.upper() or "SECRET" in k.upper())
+        candidates.update(
+            k for k in self._env
+            if not k.upper().endswith("_FILE")
+            and ("KEY" in k.upper() or "TOKEN" in k.upper() or "SECRET" in k.upper())
+        )
+        candidates.update(
+            k[:-5] for k in self._env
+            if k.upper().endswith("_FILE")
+            and ("KEY" in k.upper() or "TOKEN" in k.upper() or "SECRET" in k.upper())
+        )
         candidates.update(self._dotenv)
         if self._vault is not None:
             candidates.update(self._vault.keys())

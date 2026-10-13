@@ -90,6 +90,9 @@ services:
       JARVIS_ADMIN_PASSWORD_FILE: /run/secrets/jarvis_admin_password
       JARVIS_IMAGE_PROVIDER: ${JARVIS_IMAGE_PROVIDER:-}
       JARVIS_IMAGE_PROVIDER_API_KEY_FILE: /run/secrets/image_provider_api_key
+      JARVIS_BROWSER_SEARCH_ENABLED: ${JARVIS_BROWSER_SEARCH_ENABLED:-0}
+      OPENAI_API_KEY_FILE: /run/secrets/research_openai_api_key
+      GOOGLE_API_KEY_FILE: /run/secrets/research_google_api_key
       JARVIS_REQUIRE_PREMIGRATED_SCHEMA: "1"
       JARVIS_CORS_ORIGINS: https://${DOMAIN:?Set DOMAIN}
       DATABASE_URL_FILE: /run/secrets/database_url
@@ -105,6 +108,8 @@ services:
       - database_url
       - redis_url
       - image_provider_api_key
+      - research_openai_api_key
+      - research_google_api_key
     volumes:
       - jarvis_data:/app/jarvis_data
       - jarvis_uploads:/app/jarvis_uploads
@@ -259,3 +264,7 @@ secrets:
     file: ${REDIS_URL_FILE_SOURCE:?Set REDIS_URL_FILE_SOURCE}
   image_provider_api_key:
     file: ${JARVIS_IMAGE_PROVIDER_KEY_FILE_SOURCE:-/dev/null}
+  research_openai_api_key:
+    file: ${JARVIS_RESEARCH_OPENAI_KEY_FILE_SOURCE:-/dev/null}
+  research_google_api_key:
+    file: ${JARVIS_RESEARCH_GOOGLE_KEY_FILE_SOURCE:-/dev/null}

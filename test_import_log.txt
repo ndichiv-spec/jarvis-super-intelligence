@@ -1,0 +1,17 @@
+Starting...
+Module loaded successfully
+Has SilverwingModel: True
+Has BPETokenizer: True
+Has save_checkpoint: True
+Has evaluate_model: True
+Has get_lr: True
+Has compute_hash: True
+Default config: n_layers=12, d_model=768
+ERROR: No such file or directory: silverwing/local_run/final/model.safetensors
+Traceback (most recent call last):
+  File "F:\AI\Jarvis-super-intelligence-\test_import2.py", line 42, in <module>
+    state_dict = load_file('silverwing/local_run/final/model.safetensors')
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python313\Lib\site-packages\safetensors\torch.py", line 359, in load_file
+    with safe_open(filename, framework="pt", device=device, backend=backend) as f:
+         ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: No such file or directory: silverwing/local_run/final/model.safetensors

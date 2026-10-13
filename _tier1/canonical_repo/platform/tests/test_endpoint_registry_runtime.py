@@ -134,6 +134,11 @@ def test_endpoint_api_reconnect_and_revoke_are_authenticated(client, auth_header
         headers=auth_headers,
     )
     assert revoked.json()["endpoint"]["status"] == "revoked"
+    assert client.post(
+        f"/api/v1/endpoints/{endpoint_id}/negotiate",
+        headers=auth_headers,
+        json={},
+    ).status_code == 403
     assert client.get(
         f"/api/v1/endpoints/{endpoint_id}/events",
         headers=auth_headers,
