@@ -1,5 +1,16 @@
 # JARVIS deployment and portless access assessment
 
+## 2026-10-13 verification update
+
+Static verification passed for 12 tests in `tests/deployment/test_validation.py`.
+The production Compose file and Caddy configuration remain deployment
+templates; this session had no Docker executable/daemon, host, domain, DNS,
+certificate, production secret store, or credentials. Therefore the private
+port topology was not exercised at runtime, and no deployment, public URL,
+HTTPS, restart recovery, device login, or rollback is claimed. See the
+standalone `JARVIS_DEPLOYMENT_VERIFICATION.md` for the per-criterion status
+and exact infrastructure requirements.
+
 ## Intended and implemented topology
 
 The checked-in `deployment/production/docker-compose.prod.yml` describes

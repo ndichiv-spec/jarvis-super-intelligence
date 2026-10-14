@@ -124,7 +124,7 @@ _BUILTIN_BINDINGS: dict[str, dict[str, Any]] = {
     "voice": {
         "environments": [("voice", "primary", 100), ("conversation", "secondary", 70)],
         "visualizations": [("audio", ["audio"], 100), ("text", ["text"], 70)],
-        "modalities": ["voice", "text", "audio"],
+        "modalities": ["voice", "text"],
     },
     "vision": {
         "environments": [("visual", "primary", 100), ("conversation", "secondary", 70)],
@@ -224,9 +224,25 @@ class PresentationRegistry:
         if validated.renderer_id not in self._renderer_by_type:
             raise ValueError(f"Renderer is not approved: {validated.renderer_id}")
         existing = self._visualizations.get(validated.type)
-        if existing is not None and existing != validated:
-            raise ValueError(
-                f"Visualization already registered with a different definition: {validated.type}",
+        if existing is not None:
+            if existing.renderer_id != validated.renderer_id:
+                raise ValueError(
+                    f"Visualization already registered with a different renderer: {validated.type}",
+                )
+            # Data requirements describe individual capability bindings too;
+            # the registry-level visualization definition is their shared union.
+            requirements = {}
+            for requirement in (*existing.data_requirements, *validated.data_requirements):
+                key = (
+                    requirement.output_type,
+                    requirement.required,
+                    requirement.freshness_ms,
+                    tuple(requirement.authorization),
+                    requirement.fallback,
+                )
+                requirements[key] = requirement
+            validated = validated.model_copy(
+                update={"data_requirements": list(requirements.values())},
             )
         self._visualizations[validated.type] = validated
 
@@ -266,7 +282,8 @@ class PresentationRegistry:
         undeclared_outputs = used_outputs - declared_outputs
         if undeclared_outputs:
             raise ValueError(
-                f"Presentation binding references undeclared outputs: {sorted(undeclared_outputs)}",
+                f"Capability {capability_id} presentation binding references undeclared outputs: "
+                f"{sorted(undeclared_outputs)}",
             )
         registered_types = {
             presentation_type
@@ -283,7 +300,7 @@ class PresentationRegistry:
         for environment in validated.environments:
             self.register_environment(EnvironmentDefinition(
                 id=environment.environment,
-                description=f"Environment for capability {capability_id}.",
+                description=f"Shared presentation environment: {environment.environment}.",
             ))
         for visualization in validated.visualizations:
             renderer = next(
@@ -339,7 +356,7 @@ _BUILTIN_OUTPUTS: dict[str, tuple[str, ...]] = {
         "location.current": ("location",),
         "task": ("task", "event"),
         "memory": ("text", "structured_data"),
-        "knowledge.search": ("text", "structured_data"),
+        "knowledge.search": ("document", "text", "structured_data"),
         "tool": ("structured_data", "event"),
         "research.cortex": ("document", "event"),
         "science.engine": ("structured_data", "text"),

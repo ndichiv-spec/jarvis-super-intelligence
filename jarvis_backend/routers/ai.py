@@ -216,6 +216,7 @@ async def ai_process(
             model=model,
             client_message_id=getattr(body, "client_message_id", None),
             request_id=request_id,
+            principal=user,
         )
     except ChatError as e:
         raise HTTPException(status_code=502, detail=str(e))
@@ -231,6 +232,11 @@ async def ai_process(
         "message_id": result.get("message_id"),
         "request_id": result.get("request_id") or request_id,
         "status": result.get("status", "COMPLETED"),
+        "execution_status": result.get("execution_status"),
+        "metadata": result.get("metadata") or {},
+        "sources": result.get("sources") or [],
+        "tool_calls": result.get("tool_calls") or [],
+        "runtime_events": result.get("runtime_events") or [],
     }
 
 

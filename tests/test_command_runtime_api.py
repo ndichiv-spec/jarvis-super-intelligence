@@ -260,6 +260,64 @@ async def test_rejected_command_authorization_is_terminal(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_multi_action_authorization_waits_until_every_pending_action_is_approved(monkeypatch):
+    command = {
+        "command_id": "command-multi-approval",
+        "user_id": "owner-1",
+        "goal": "Inspect two services",
+        "autonomy": "SUPERVISED",
+        "status": "AWAITING_AUTHORIZATION",
+        "authorization": {
+            "required": True,
+            "node_ids": ["node-a", "node-b"],
+            "actions": [
+                {"node_id": "node-a", "capability": "github.inspect", "risk_level": "network"},
+                {"node_id": "node-b", "capability": "cloud.inspect", "risk_level": "network"},
+            ],
+        },
+    }
+    records = {command["command_id"]: command}
+    dispatched = []
+
+    class Store:
+        def load(self):
+            return records
+
+        def save(self):
+            return None
+
+    monkeypatch.setattr(command_router, "_commands_store", Store)
+    monkeypatch.setattr(command_router, "_append_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(command_router, "is_production", lambda: True)
+    from jarvis_backend import celery_tasks
+
+    monkeypatch.setattr(
+        celery_tasks,
+        "enqueue_command",
+        lambda **kwargs: dispatched.append(kwargs) or "resume-task-1",
+    )
+
+    first = await command_router.authorize_command(
+        command["command_id"],
+        command_router.CommandAuthorization(approved=True, node_id="node-a"),
+        {"id": "owner-1"},
+    )
+    assert first["status"] == "AWAITING_AUTHORIZATION"
+    assert first["authorization"]["approved_node_ids"] == ["node-a"]
+    assert dispatched == []
+
+    second = await command_router.authorize_command(
+        command["command_id"],
+        command_router.CommandAuthorization(approved=True, node_id="node-b"),
+        {"id": "owner-1"},
+    )
+    assert second["status"] == "READY"
+    assert second["authorization"]["approved"] is True
+    assert len(dispatched) == 1
+    assert dispatched[0]["resume"] is True
+
+
+@pytest.mark.asyncio
 async def test_command_metrics_only_include_authenticated_owner(monkeypatch):
     class Store:
         def load(self):

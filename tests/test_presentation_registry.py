@@ -75,6 +75,21 @@ def test_builtin_bindings_extend_existing_registered_capabilities():
     assert definition.operational_status == "unavailable"
 
 
+def test_builtin_bindings_allow_capabilities_to_share_environment_definitions():
+    capabilities = CapabilityRegistry()
+    capabilities.register(BrainCapabilityStub(), {"description": "Reasoning"})
+
+    class ConversationStub(GeographyCapability):
+        name = "conversation"
+        category = "conversation"
+
+    capabilities.register(ConversationStub(), {"description": "Conversation"})
+    register_builtin_capability_bindings(capabilities)
+
+    assert capabilities.get_metadata("brain")["presentation"]["environments"][0]["environment"] == "conversation"
+    assert capabilities.get_metadata("conversation")["presentation"]["environments"][0]["environment"] == "conversation"
+
+
 @pytest.mark.asyncio
 async def test_resolver_selects_only_registered_supported_renderers_and_real_output_types():
     registry = _registry()

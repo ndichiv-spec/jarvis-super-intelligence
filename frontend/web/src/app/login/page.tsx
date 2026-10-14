@@ -1,16 +1,25 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowRight, Eye, EyeOff, KeyRound, MessageSquareText, UserRound } from 'lucide-react';
 import { jarvisAPI } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 
+const subscribeToHydration = () => () => {};
+const getHydratedSnapshot = () => true;
+const getServerHydrationSnapshot = () => false;
+
 export default function LoginPage() {
   const router = useRouter();
   const authLogin = useAuthStore((state) => state.login);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isReady = useSyncExternalStore(
+    subscribeToHydration,
+    getHydratedSnapshot,
+    getServerHydrationSnapshot,
+  );
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -23,6 +32,7 @@ export default function LoginPage() {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!isReady || loading) return;
     setError('');
     setLoading(true);
 
@@ -89,7 +99,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5 border-l border-blue-300/20 pl-8">
+          <form method="post" onSubmit={handleSubmit} className="space-y-5 border-l border-blue-300/20 pl-8">
             <div className="relative">
               <span
                 aria-hidden="true"
@@ -110,7 +120,7 @@ export default function LoginPage() {
                 placeholder="you@example.com"
                 required
                 autoComplete="username"
-                disabled={loading}
+                disabled={!isReady || loading}
               />
             </div>
 
@@ -143,7 +153,7 @@ export default function LoginPage() {
                   placeholder="Enter your password"
                   required
                   autoComplete="current-password"
-                  disabled={loading}
+                  disabled={!isReady || loading}
                 />
                 <button
                   type="button"
@@ -151,7 +161,7 @@ export default function LoginPage() {
                   className="absolute right-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-slate-400 transition hover:bg-white/[0.05] hover:text-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-300 disabled:opacity-50"
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                   aria-pressed={showPassword}
-                  disabled={loading}
+                  disabled={!isReady || loading}
                 >
                   {showPassword
                     ? <EyeOff aria-hidden="true" className="h-4 w-4" />
@@ -169,7 +179,7 @@ export default function LoginPage() {
               </span>
               <button
                 type="submit"
-                disabled={loading}
+                disabled={!isReady || loading}
                 className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-blue-300/25 bg-blue-600/90 px-4 text-sm font-semibold text-white transition hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300 disabled:cursor-not-allowed disabled:opacity-55"
               >
                 {loading ? 'Signing in…' : 'Continue'}

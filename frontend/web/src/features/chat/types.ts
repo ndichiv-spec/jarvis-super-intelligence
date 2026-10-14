@@ -71,6 +71,8 @@ export interface ChatResponse {
   provider?: string;
   confidence?: number;
   sources?: string[];
+  execution_status?: 'completed' | 'partially_completed' | 'blocked' | 'failed';
+  metadata?: Record<string, unknown>;
   intent?: string;
   processing_time?: number;
   timestamp?: string;

@@ -66,7 +66,7 @@ peft>=0.13.0
 
 # ==================== AI/ML - EXTERNAL APIs ====================
 openai>=1.54.0
-google-generativeai>=0.8.3
+google-genai>=1.0.0,<3
 anthropic==0.42.0
 replicate>=1.0.0
 
@@ -287,7 +287,7 @@ opentelemetry-exporter-otlp>=1.25.0
 opentelemetry-instrumentation-fastapi>=0.48b0
 
 # Protocol Buffers + gRPC (typed internal service mesh, matches Codex app-server-protocol)
-protobuf>=4.21.0
+protobuf>=7.35.1,<8
 grpcio>=1.60.0
 grpcio-tools>=1.60.0
 

@@ -221,6 +221,7 @@ async def run_task(task_id: str, user: Dict[str, Any] = Depends(_require_auth)):
         session_id,
         task.get("description") or task.get("name") or "Run task",
         client_message_id=f"agent-task:{task_id}:{task['run_count']}",
+        principal=user,
     )
     task["status"] = "completed" if result.get("status") == "COMPLETED" else "failed"
     task["completed_at"] = now_iso()
@@ -358,6 +359,7 @@ async def collab_task_execute(body: CollabExecuteIn, user: Dict[str, Any] = Depe
         session_id,
         task.get("description") or "Execute the requested collaboration.",
         client_message_id=f"collab-task:{body.task_id}",
+        principal=user,
     )
     task["status"] = "completed" if result.get("status") == "COMPLETED" else "failed"
     task["completed_at"] = now_iso()

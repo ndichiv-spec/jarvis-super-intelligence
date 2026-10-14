@@ -1,5 +1,7 @@
 fastapi>=0.115,<1
 uvicorn[standard]>=0.32,<1
+grpcio>=1.60,<2
+protobuf>=7.35.1,<8
 sqlalchemy>=2.0.36,<3
 psycopg2-binary>=2.9.10,<3
 python-dotenv>=1.0.1,<2
@@ -21,5 +23,5 @@ structlog>=24.4,<26
 prometheus-client>=0.21,<1
 openai>=1.54,<3
 anthropic>=0.42,<1
-google-generativeai>=0.8,<1
+google-genai>=1.0,<3
 PyYAML>=6,<7

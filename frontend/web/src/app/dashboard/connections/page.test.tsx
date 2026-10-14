@@ -107,9 +107,8 @@ describe('ConnectionsPage', () => {
   it('keeps initial email setup accessible when no connector is configured', async () => {
     render(<ConnectionsPage />);
 
-    const configureButton = await screen.findByRole('button', { name: 'Configure' });
-    expect(configureButton).toBeEnabled();
-    expect(screen.getByText('The API reports no configured connectors yet. Set up a provider below to begin.')).toBeInTheDocument();
+    expect(await screen.findByText('The API reports no configured connectors yet. Set up a provider below to begin.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Configure' })).toBeEnabled();
     expect(screen.getByRole('textbox', { name: 'IMAP Host' })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Username (email address)' })).toBeInTheDocument();
     expect(screen.getByLabelText('App Password')).toBeInTheDocument();
@@ -158,6 +157,7 @@ describe('ConnectionsPage', () => {
     confirmDialog.mockReturnValue(false);
     render(<ConnectionsPage />);
 
+    await screen.findByText('The API reports no configured connectors yet. Set up a provider below to begin.');
     fireEvent.click((await screen.findAllByRole('button', { name: 'Connect account' }))[0]);
 
     expect(confirmDialog).toHaveBeenCalledWith(expect.stringContaining('review and approve'));

@@ -1,4 +1,8 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 /** @type {import('next').NextConfig} */
+const frontendRoot = path.dirname(fileURLToPath(import.meta.url));
 const backendOrigin = process.env.JARVIS_API_INTERNAL_URL
   || process.env.NEXT_PUBLIC_API_URL
   || (process.env.NODE_ENV === 'development' ? 'http://127.0.0.1:8000' : '');
@@ -8,6 +12,9 @@ const basePath = configuredBasePath === '/' ? '' : `/${configuredBasePath.split(
 const nextConfig = {
   reactStrictMode: false,
   output: 'standalone',
+  // Keep builds isolated from unrelated lockfiles above this checkout (for
+  // example, when building an integration worktree inside a larger workspace).
+  turbopack: { root: frontendRoot },
   ...(basePath ? { basePath } : {}),
   // Type errors now fail the build.
   //

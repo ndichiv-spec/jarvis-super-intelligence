@@ -1,6 +1,70 @@
 # JARVIS blocker resolution and verification
 
+## Current local execution — 2026-10-13
+
+**Baseline:** isolated worktree branch `integration/world-workspace-owner-deploy`,
+`HEAD=cf18e6eac930974af8fff76587ae456cd6d11eaa`. The existing staged World
+Workspace/provider/deployment changes were preserved. The tracked recovery tip
+is `0ad896d49b0d22624abf3038655f082c7ea83f09`; `origin/main` is
+`4d69fdc1fdd91596dbd174d6b2a029d78251a640`; histories have no merge base.
+No commit, merge, reset, rebase, push, or remote change was made.
+
+| Blocker / result | Root cause and current evidence | Disposition |
+|---|---|---|
+| Full offline backend suite | Final command `python -m pytest -m 'not integration' --tb=short -q`: **2,561 passed, 23 skipped, 13 deselected, 13 failed**, exit 1 (672.14s). Initial pre-correction run had 26 failures. | Remaining failures: 1 stale `/api/v1/agents/execute` expectation (405), 11 absent `/api/v1/control/*` expectations (404), and 1 semantic-reranking test because `sentence_transformers`/its model is unavailable. Declared pandas/matplotlib/tiktoken/openpyxl dependencies were installed in the local venv; Mongo unavailability and stream checkpoint test now behave truthfully/pass. |
+| MongoDB result truthfulness | With `pymongo` absent, schema/preview returned successful ToolResults containing `available:false`; invalid Mongo identifiers were not validated before that response. | Mongo schema/preview now return explicit failed ToolResults without the optional driver; preview rejects invalid identifiers first. Regression tests passed. No MongoDB service was available. |
+| Provider inference | Provider fabric modules are present and initialized, but live health is degraded, no provider is configured, and no provider credentials are available. | No model request was sent. Supply an authorized provider secret, then test a real round trip and redaction/cost controls. |
+| Queue/worker | Readiness reports `broker_reachable=false`; Celery against the available private Redis 3.0.504 failed because the client requires Redis `HELLO`. Docker is unavailable, and the shared Redis on 6379 was not touched. | Worker execution, concurrent claims, cancellation, and restart recovery remain blocked on a private supported Redis broker. |
+| Browser owner workflow | `/login` rendered in Chromium and unauthenticated dashboard access resolved to login. E2E results were 1 passed/5 failed because chat controls require an authenticated owner session. | Owner credentials or an authorized test fixture are required; no login bypass or weakened assertions was added. |
+| Ruff debt | Installing declared Ruff in `.venv` enabled `python scripts/check_ruff_debt.py --base HEAD`, which failed due to added findings in changed provider/research/runtime files. | Existing findings need scoped review; no whole-tree autofix. |
+| Local services and SQLite durability | Backend and frontend served over loopback; liveness and Silverwing health passed, DB was available, anonymous command GET/POST returned 401. A synthetic `ChatService` session survived a controlled backend restart against the same SQLite file and was deleted after verification. Startup also logged that optional gRPC could not start because `opentelemetry.exporter` is missing. | Local HTTP and chat-session persistence are verified; task-worker durability and production readiness are not. |
+| Whitespace checks | Unstaged continuation changes pass `git diff --check`; preserved staged changes fail the staged check with 5,179 trailing-whitespace lines across existing staged files. | No broad whitespace rewrite was applied to inherited staged work. |
+| External release prerequisites | No Docker, PostgreSQL service, owner/provider credentials, hosting target, domain, DNS, or deployment authorization. | Public deployment, real inference, owner login, and production database/worker validation remain blocked. |
+
+Additional command totals and exact scope are in
+`JARVIS_INTEGRATION_TEST_AND_RELEASE_EVIDENCE.md`. This current execution
+supersedes older suite and provider-fabric statements below where they differ.
+
+## Continuation update — 2026-10-13
+
+Work continued in isolated branch `integration/world-workspace-owner-deploy`
+from recovery tip `cf18e6eac930974af8fff76587ae456cd6d11eaa`; expected commit
+`19bd9622dff474e68ab47df46f0f88b78279e89d` remains in its ancestry. This
+addendum supersedes this document's earlier live-state counts and external
+`research_engine` blocker where they conflict.
+
+- Packaged the 13-module `research_engine` dependency into the integration
+  tree and added checkout-local import/root tests. A new remote clean clone
+  and Docker image build remain unverified.
+- Added natural-language dispatch from canonical `ChatService` through the
+  existing browser capability; opt-in real DuckDuckGo E2E passed and persisted
+  actual result URLs/provenance/runtime events. Page content was not fetched,
+  and claims are not independently checked.
+- Added a supervised World Workspace task panel using the existing durable
+  `/api/v1/commands` API, status polling, and explicit authorization action.
+- Backend focused selection: **149 passed, 2 skipped, 1 deselected** after
+  excluding the pre-existing `POST /api/v1/agents/execute` test expectation;
+  no such route exists in the recovery source. Frontend: **123 passed / 32 files**;
+  typecheck and production build pass. Changed-file frontend ESLint passes;
+  whole-tree ESLint remains 600 errors / 1,121 warnings.
+- Static deployment validation: **12 passed**. Docker, Supabase, provider
+  model calls, public HTTPS, production host, DNS and secrets were unavailable.
+- Provider fabric required for AI collaboration is still absent at the
+  recovery checkout's expected path; provider health is reported unavailable.
+  Supabase is still not configured. No history merge, push, or deployment was
+  performed.
+
+See `JARVIS_WORLD_WORKSPACE_IMPLEMENTATION.md`,
+`JARVIS_CLEAN_CHECKOUT_REPRODUCIBILITY.md`,
+`JARVIS_EXTERNAL_SERVICE_CAPABILITY_MATRIX.md`,
+`JARVIS_OWNER_ONLY_SECURITY_MODEL.md`,
+`JARVIS_GIT_HISTORY_RECONCILIATION.md`, and
+`JARVIS_DEPLOYMENT_VERIFICATION.md` for current evidence and precise limits.
+
 ## Repository baseline
+
+The following baseline record is historical and does not describe the current
+remote-tracking tips or integration worktree.
 
 This record was assembled after recovery work had started; it does not pretend
 to be a pre-edit snapshot. The original inspection recorded `F:\AI\Jarvis-super-intelligence-`

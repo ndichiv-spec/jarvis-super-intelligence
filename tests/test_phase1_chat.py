@@ -182,13 +182,13 @@ def test_interrupted_stream_reuses_persisted_turn_checkpoint():
     async def consume():
         first = [
             event async for event in svc.stream_message(
-                "u-checkpoint", session_id, "research this",
+                "u-checkpoint", session_id, "continue the interrupted response",
                 client_message_id=client_id,
             )
         ]
         second = [
             event async for event in svc.stream_message(
-                "u-checkpoint", session_id, "research this",
+                "u-checkpoint", session_id, "continue the interrupted response",
                 client_message_id=client_id,
             )
         ]

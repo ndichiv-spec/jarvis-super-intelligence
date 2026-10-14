@@ -1,5 +1,20 @@
 # JARVIS owner-only security model
 
+## 2026-10-13 World Workspace access update
+
+| Boundary | Implemented | Locally verified | Integration verified | Production verified | Blocked / limit |
+|---|---|---|---|---|---|
+| Canonical owner identity | Existing JARVIS auth/core policy remains authoritative; no Supabase or hardcoded owner identity was added. | Auth, email-security, cookie, owner, endpoint, command-owner, and runtime ownership tests pass in the latest selection (149 passed, 2 skipped, 1 stale legacy route test deselected). | The live search test called the service with a synthetic owner principal, not a real login session. | No. | Need an actual deployment-configured owner login and non-owner rejection test on staging PostgreSQL. |
+| Device enrollment/revocation | Existing authenticated endpoint gateway remains the device path; frontend does not grant access by hiding controls. | `tests/test_endpoint_gateway.py`: 5 passed, including owner-scoped registration/session attachment and disconnect/revocation behavior. | No real second device connected. | No. | Production enrollment/reconnect/revoke test requires HTTPS host and configured owner session. |
+| Task owner/approval | Existing `/api/v1/commands` checks task ownership; the task panel uses HttpOnly-cookie `apiClient` calls, shows pending capability/risk metadata, and only sends approval after an explicit click. Backend stays in `AWAITING_AUTHORIZATION` until every pending node is approved. | Component and command API tests cover single and multi-node approval; no worker resume occurs after only a partial approval. | No live task service/queue run. | No. | Staging owner approval and worker resume need verification; no delegated-user feature is exposed by this change. |
+| External data sharing | Search sends the user-requested query to DuckDuckGo. The implementation did not attach memory, files, unrelated conversation, or credentials. | Local tests prove direct prompt-to-query behavior and provider-unavailable fallback. | One non-sensitive documentation query was sent to real DuckDuckGo. | No. | There is no demonstrated classifier/redactor that blocks private or sensitive data embedded in a requested search query. Do not describe data-sharing policy as complete. Provider fabric is unavailable, so model privacy routing has not been exercised. |
+| Storage and database policies | JARVIS API/service ownership remains the enforcement layer; no frontend-supplied owner ID is used in the task panel. | Runtime/event/task ownership tests pass against local storage. | No external database/storage. | No. | Supabase RLS/storage policies and production multi-tenant isolation are not configured or tested. |
+
+This update covers only the current World Workspace integration work. The
+owner-only production policy and JARVIS identity design recorded below are
+inherited from the recovery branch; this mission did not establish production
+credentials or deploy the auth service.
+
 ## Canonical principal
 
 JARVIS retains its existing authentication system as the sole session and

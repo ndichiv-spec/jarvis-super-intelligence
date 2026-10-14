@@ -8,6 +8,7 @@ import re
 import sys
 import os
 from typing import Any, Dict, Optional
+from urllib.parse import urlsplit
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 
@@ -123,40 +124,48 @@ class BrowserTool(ToolBase):
                 return {'success': False, 'error': str(e), 'error_type': type(e).__name__}
 
         elif action == 'search':
-            query = params.get('query', '')
+            query = str(params.get('query', '')).strip()
             if not query:
                 return {'success': False, 'error': 'Query required', 'error_type': 'INVALID_INPUT'}
 
-            from urllib.parse import quote_plus
-            search_url = f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"
-
             try:
-                result = engine.fetch(search_url, {'timeout': 30})
-                page_error = self._failed_page_result(result)
-                if page_error:
-                    return page_error
-                content = result.get('html', '') if isinstance(result, dict) else str(result)
-
-                # Parse DuckDuckGo results
-                links = re.findall(
-                    r'<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>',
-                    content, re.DOTALL | re.IGNORECASE
-                )
-                snippets = re.findall(
-                    r'<a[^>]*class="result__snippet"[^>]*>(.*?)</a>',
-                    content, re.DOTALL | re.IGNORECASE
-                )
+                raw_results = engine.search(query, max_results=10, timeout=15)
+                if not isinstance(raw_results, list):
+                    return {
+                        'success': False,
+                        'error': 'Search provider returned an invalid result list',
+                        'error_type': 'INVALID_RESPONSE',
+                    }
 
                 results = []
-                for i, (url, title) in enumerate(links[:10]):
-                    title_text = re.sub(r'<[^>]+>', '', title).strip()
-                    snippet_text = re.sub(r'<[^>]+>', '',
-                                          snippets[i] if i < len(snippets) else '').strip()
+                for rank, item in enumerate(raw_results[:10], start=1):
+                    if not isinstance(item, dict):
+                        continue
+                    url = str(item.get('url') or '').strip()
+                    parsed = urlsplit(url)
+                    if (
+                        parsed.scheme.lower() not in {'http', 'https'}
+                        or not parsed.hostname
+                        or parsed.username is not None
+                        or parsed.password is not None
+                    ):
+                        continue
                     results.append({
-                        'title': title_text,
+                        'title': str(item.get('title') or '')[:500],
                         'url': url,
-                        'snippet': snippet_text,
+                        'snippet': str(item.get('snippet') or '')[:2000],
+                        'provider': str(item.get('provider') or item.get('source') or 'unknown'),
+                        'rank': int(item.get('rank') or rank),
                     })
+
+                if raw_results and not results:
+                    return {
+                        'success': False,
+                        'error': 'Search provider returned no links with a safe HTTP(S) destination',
+                        'error_type': 'INVALID_RESPONSE',
+                    }
+
+                providers = sorted({result['provider'] for result in results})
 
                 return {
                     'success': True,
@@ -164,6 +173,12 @@ class BrowserTool(ToolBase):
                         'query': query,
                         'results': results,
                         'result_count': len(results),
+                        'provenance': {
+                            'capability': 'HttpBrowserEngine.search',
+                            'providers': providers,
+                            'result_urls_validated': len(results),
+                            'page_content_fetched': False,
+                        },
                     },
                 }
             except Exception as e:

@@ -26,6 +26,7 @@ import time
 import uuid
 from collections.abc import AsyncIterator
 from typing import Any
+from urllib.parse import urlsplit
 
 from infrastructure.audit_events import AuditEvent, AuditEventService
 from infrastructure.usage_accounting import get_usage_accountant
@@ -981,6 +982,23 @@ class ChatService:
             re.I,
         )
         if not match:
+            # Natural-language research requests use the same registered,
+            # read-only browser capability as an explicit web-search request.
+            # Keep intent detection narrow so ordinary conversation does not
+            # send owner text to an external service implicitly.
+            research_patterns = (
+                r"^\s*(?:please\s+|can you\s+|could you\s+|i want you to\s+)?research\s+(.+)",
+                r"^\s*(?:please\s+|can you\s+|could you\s+)?look\s+up\s+(.+)",
+                r"^\s*(?:please\s+|can you\s+|could you\s+)?compare\s+(.+)",
+                r"^\s*(?:please\s+)?find\s+(?:me\s+)?a way\s+(?:for me\s+)?to\s+(.+)",
+                r"^\s*(?:please\s+)?find\s+(?:me\s+)?(?:the best|current|available|lawful|legal)\s+(.+)",
+                r"^\s*(?:please\s+)?what\s+are\s+(?:the\s+)?(?:best|latest|current|available)\s+(.+)",
+            )
+            for pattern in research_patterns:
+                match = re.search(pattern, prompt, re.I)
+                if match:
+                    break
+        if not match:
             return None
         query = re.split(
             r"\b(?:and then|and summarize|and tell me|please)\b",
@@ -1065,6 +1083,34 @@ class ChatService:
                 "message": message,
             })
 
+        from .core import has_permission
+
+        if not principal or not has_permission(principal, "tool.browser"):
+            _emit_runtime_event(
+                RuntimeEventType.CAPABILITY_FAILED,
+                user_id,
+                session_id,
+                request_id,
+                source=RuntimeEventSource.CAPABILITY_RUNTIME,
+                capability_id=selection["capability_id"],
+                execution_id=execution_id,
+                state=RuntimeState.FAILED,
+                data={"action": selection["action"], "reason": "permission_denied"},
+            )
+            await record(
+                "capability_authorization_denied",
+                "denied",
+                "The authenticated principal does not have permission to search the web.",
+            )
+            return {
+                "selection": selection,
+                "execution_id": execution_id,
+                "success": False,
+                "error": "Permission required: tool.browser",
+                "error_type": "AUTHORIZATION_FAILED",
+                "events": events,
+            }
+
         if orchestrator.registry.get("tool") is None:
             _emit_runtime_event(
                 RuntimeEventType.CAPABILITY_FAILED,
@@ -1113,16 +1159,22 @@ class ChatService:
             context,
         )
         success = bool(result.success)
+        result_data = result.data if isinstance(result.data, dict) else {}
+        result_count = result_data.get("result_count")
+        if isinstance(result_count, int) and result_count >= 0:
+            completion_message = f"Browser search returned {result_count} observed links."
+        else:
+            completion_message = "Browser search completed with a result from the registered capability."
         await record(
             "capability_action_completed" if success else "capability_failed",
             "completed" if success else "failed",
-            "Browser search returned a result." if success else (result.error or "Browser search failed."),
+            completion_message if success else (result.error or "Browser search failed."),
         )
         return {
             "selection": selection,
             "execution_id": execution_id,
             "success": success,
-            "data": result.data if success else None,
+            "data": result_data if success else None,
             "error": result.error,
             "error_type": result.error_type,
             "latency_ms": result.latency_ms,
@@ -1458,6 +1510,61 @@ class ChatService:
             f"<capability_execution>{serialized}</capability_execution>"
         )
 
+    @staticmethod
+    def _world_search_partial(runtime_action: dict[str, Any] | None) -> dict[str, Any] | None:
+        """Return a truthful discovery-only response when model synthesis is down."""
+        if not runtime_action or not runtime_action.get("success"):
+            return None
+        selection = runtime_action.get("selection") or {}
+        if selection.get("capability_id") != "web.search":
+            return None
+        data = runtime_action.get("data")
+        if not isinstance(data, dict):
+            return None
+
+        raw_results = data.get("results")
+        results = raw_results if isinstance(raw_results, list) else []
+        sources: list[str] = []
+        for result in results:
+            if not isinstance(result, dict):
+                continue
+            url = str(result.get("url") or "").strip()
+            try:
+                parsed = urlsplit(url)
+            except ValueError:
+                continue
+            if (
+                parsed.scheme.lower() in {"http", "https"}
+                and parsed.hostname
+                and parsed.username is None
+                and parsed.password is None
+            ):
+                sources.append(url)
+
+        count = data.get("result_count")
+        if not isinstance(count, int) or count < 0:
+            count = len(sources)
+        provenance = data.get("provenance")
+        providers = provenance.get("providers", []) if isinstance(provenance, dict) else []
+        provider_text = ", ".join(
+            str(provider) for provider in providers if isinstance(provider, str)
+        ) if isinstance(providers, list) else ""
+        provider_clause = f" from {provider_text}" if provider_text else ""
+        return {
+            "content": (
+                f"Web search returned {count} discovery result(s){provider_clause}. "
+                "I could not produce a synthesized recommendation because the AI "
+                "provider is unavailable. These links have not been independently "
+                "checked; the attached URLs are the search provider's observed results."
+            ),
+            "sources": list(dict.fromkeys(sources)),
+            "metadata": {
+                "execution_status": "partially_completed",
+                "verification": "search_provider_response_only",
+                "synthesis": "unavailable",
+            },
+        }
+
     # -- non-streaming send -------------------------------------------------- #
     async def send_message(self, user_id: str, session_id: str, content: str,
                            *, model: str | None = None,
@@ -1482,9 +1589,11 @@ class ChatService:
                         "backend": reply.get("backend"),
                         "device": reply.get("device"),
                         "latency_ms": reply.get("latency_ms"),
-                        "sources": reply.get("sources"),
                         "status": reply.get("status"),
                         "error": reply.get("error"),
+                        "metadata": reply.get("metadata") or {},
+                        "execution_status": (reply.get("metadata") or {}).get("execution_status"),
+                        "sources": reply.get("sources") or [],
                         "tool_calls": reply.get("tool_calls") or [],
                         "runtime_events": reply.get("runtime_events") or [],
                         "presentation": reply.get("presentation"),
@@ -1568,7 +1677,7 @@ class ChatService:
                 )
             else:
                 runtime_action = await self._execute_conversation_action(
-                    content, user_id, session_id, request_id,
+                    content, user_id, session_id, request_id, principal=principal,
                 )
             if runtime_action:
                 assistant_msg["runtime_events"] = runtime_action.get("events", [])
@@ -1583,6 +1692,10 @@ class ChatService:
                     },
                     "status": "completed" if runtime_action.get("success") else "failed",
                 }]
+                if runtime_action.get("success") and selection.get("capability_id") == "web.search":
+                    partial_search = self._world_search_partial(runtime_action)
+                    if partial_search:
+                        assistant_msg["sources"] = partial_search["sources"]
                 _save_session(session)
             is_location_action = bool(
                 runtime_action
@@ -1606,11 +1719,27 @@ class ChatService:
                 "provider": result.get("provider"),
                 "latency_ms": result.get("latency_ms"),
                 "tool_calls": assistant_msg.get("tool_calls") or result.get("tool_calls") or [],
+                "sources": result.get("sources") or assistant_msg.get("sources") or [],
             })
         except ChatError as exc:
             exc.request_id = request_id
-            assistant_msg["status"] = FAILED
-            assistant_msg["error"] = _error_card(exc, request_id)
+            partial = self._world_search_partial(runtime_action)
+            if partial and exc.category in {
+                ErrorCategory.PROVIDER_UNAVAILABLE,
+                ErrorCategory.NETWORK_ERROR,
+                ErrorCategory.TIMEOUT,
+                ErrorCategory.RATE_LIMITED,
+                ErrorCategory.RESOURCE_EXHAUSTED,
+            }:
+                assistant_msg.update({
+                    **partial,
+                    "status": COMPLETED,
+                    "provider": None,
+                    "error": None,
+                })
+            else:
+                assistant_msg["status"] = FAILED
+                assistant_msg["error"] = _error_card(exc, request_id)
         except Exception as exc:
             err = normalize_exception(exc, request_id=request_id)
             assistant_msg["status"] = FAILED
@@ -1711,6 +1840,8 @@ class ChatService:
             "sources": assistant_msg.get("sources"),
             "status": assistant_msg.get("status"),
             "error": assistant_msg.get("error"),
+            "metadata": assistant_msg.get("metadata") or {},
+            "execution_status": (assistant_msg.get("metadata") or {}).get("execution_status"),
             "tool_calls": assistant_msg.get("tool_calls") or [],
             "runtime_events": assistant_msg.get("runtime_events") or [],
             "presentation": assistant_msg.get("presentation"),
@@ -1730,7 +1861,7 @@ class ChatService:
                              location_error: str | None = None
                              ) -> AsyncIterator[dict[str, Any]]:
         location_action = self._discover_conversation_action(content)
-        if location_action and location_action["capability_id"] == "location.current":
+        if location_action and location_action["capability_id"] in {"location.current", "web.search"}:
             result = await self.send_message(
                 user_id,
                 session_id,
@@ -1748,6 +1879,9 @@ class ChatService:
                 "content": result.get("message") or "",
                 "status": result.get("status"),
                 "error": result.get("error"),
+                "execution_status": result.get("execution_status"),
+                "metadata": result.get("metadata") or {},
+                "sources": result.get("sources") or [],
                 "tool_calls": result.get("tool_calls") or [],
                 "runtime_events": result.get("runtime_events") or [],
                 "presentation": result.get("presentation"),
@@ -1909,7 +2043,7 @@ class ChatService:
             content_parts: list[str] = []
             terminal: dict[str, Any] | None = None
             runtime_action = await self._execute_conversation_action(
-                content, user_id, session_id, request_id_for_audit,
+                content, user_id, session_id, request_id_for_audit, principal=principal,
             )
             runtime_tool_calls: list[dict[str, Any]] = []
             if runtime_action:

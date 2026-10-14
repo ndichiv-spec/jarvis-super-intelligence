@@ -520,12 +520,16 @@ class HttpBrowserEngine(BrowserEngine):
         """
         max_results = max(1, min(int(max_results), 20))
         results: List[Dict[str, Any]] = []
+        successful_backends = 0
+        backend_errors: list[Exception] = []
 
         try:
             results.extend(self._ddg_lite_search(query, max_results, timeout))
-        except Exception:
+            successful_backends += 1
+        except Exception as error:
             # DDG may be blocked/interstitial; try the Wikipedia API fallback
             # only if DDG returned nothing or raised.
+            backend_errors.append(error)
             results = []
 
         if len(results) < max_results:
@@ -533,8 +537,12 @@ class HttpBrowserEngine(BrowserEngine):
                 results.extend(
                     self._wikipedia_search(query, max_results - len(results), timeout)
                 )
-            except Exception:
-                pass
+                successful_backends += 1
+            except Exception as error:
+                backend_errors.append(error)
+
+        if successful_backends == 0:
+            raise RuntimeError("All configured web-search providers failed") from backend_errors[-1]
 
         # Normalise ordering + provenance metadata.
         for i, r in enumerate(results):

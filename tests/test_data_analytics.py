@@ -18,6 +18,7 @@ from jarvis_runtime import bootstrap_runtime  # noqa: E402
 
 bootstrap_runtime()
 
+from research_engine import data_tools  # noqa: E402
 from research_engine.data_tools import (  # noqa: E402
     DATA_DISCOVER,
     DATA_EXPORT,
@@ -305,6 +306,13 @@ def test_mongodb_injection_rejected() -> None:
                                       "database": "a; drop",
                                       "collection": "c"})
     assert res.success is False
+
+
+def test_mongodb_schema_without_driver_is_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr(data_tools, "_mongo_client_instance", lambda: None)
+    res, _ = _invoke("data.schema", {"source": "mongodb"})
+    assert res.success is False
+    assert "MongoDB capability unavailable" in res.error
 
 
 # --------------------------------------------------------------------------- #

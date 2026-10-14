@@ -41,6 +41,21 @@ class CommandAuthorization(BaseModel):
     node_id: Optional[str] = None
 
 
+def _pending_authorization_actions(task: Optional[Task]) -> list[dict[str, str]]:
+    """Return the minimum plan detail an owner needs for an approval choice."""
+    if task is None or task.plan is None:
+        return []
+    return [
+        {
+            "node_id": node_id,
+            "capability": node.capability,
+            "risk_level": node.risk_level,
+        }
+        for node_id, node in task.plan.nodes.items()
+        if node.status == ExecutionNodeStatus.WAITING_FOR_USER
+    ]
+
+
 def _owner_id(user: dict[str, Any]) -> str:
     return str(user.get("id") or user.get("email") or user.get("user_id") or "anonymous")
 
@@ -390,6 +405,7 @@ async def _resume_command_execution(command_id: str, user: dict[str, Any]) -> No
         ]
         command["status"] = "AWAITING_AUTHORIZATION"
         authorization["node_ids"] = pending_node_ids
+        authorization["actions"] = _pending_authorization_actions(task)
         authorization["approved_node_ids"] = sorted(approved_node_ids)
         command["authorization"] = authorization
         command["result"] = None
@@ -471,6 +487,7 @@ async def _run_command(command_id: str, user: dict[str, Any], goal: str, autonom
                     if node.status == ExecutionNodeStatus.WAITING_FOR_USER
                 ],
             }
+            command["authorization"]["actions"] = _pending_authorization_actions(task)
             _save_command(command)
             _append_event(
                 command_id,
@@ -707,7 +724,9 @@ async def authorize_command(
         raise HTTPException(status_code=409, detail="Command is not awaiting authorization")
 
     authorization = command.setdefault("authorization", {"required": True})
-    pending_node_ids = authorization.get("node_ids", [])
+    all_node_ids = list(dict.fromkeys(authorization.get("node_ids", [])))
+    approved_node_ids = set(authorization.get("approved_node_ids", []))
+    pending_node_ids = [node_id for node_id in all_node_ids if node_id not in approved_node_ids]
     selected_node_id = body.node_id
     if selected_node_id is None and len(pending_node_ids) == 1:
         selected_node_id = pending_node_ids[0]
@@ -716,21 +735,31 @@ async def authorize_command(
             status_code=422,
             detail="Select one pending authorization node; only pending nodes can be approved",
         )
-    authorization["approved"] = body.approved
-    authorization["decided_at"] = time.time()
     authorization["node_id"] = selected_node_id
+    authorization["decided_at"] = time.time()
     if body.approved:
-        approved_node_ids = set(authorization.get("approved_node_ids", []))
         approved_node_ids.add(selected_node_id)
         authorization["approved_node_ids"] = sorted(approved_node_ids)
-    command["status"] = "READY" if body.approved else "CANCELLED"
+        still_pending = [node_id for node_id in all_node_ids if node_id not in approved_node_ids]
+        authorization["approved"] = not still_pending
+        command["status"] = "AWAITING_AUTHORIZATION" if still_pending else "READY"
+    else:
+        authorization["approved"] = False
+        command["status"] = "CANCELLED"
     if not body.approved:
         command["completed_at"] = time.time()
         command["errors"] = ["Authorization was rejected by the user."]
     _save_command(command)
-    _append_event(command_id, "authorization_decided", approved=body.approved, node_id=selected_node_id)
+    _append_event(
+        command_id,
+        "authorization_decided",
+        approved=body.approved,
+        node_id=selected_node_id,
+        approved_node_ids=sorted(approved_node_ids),
+        pending_node_ids=[node_id for node_id in all_node_ids if node_id not in approved_node_ids],
+    )
 
-    if body.approved:
+    if body.approved and command["status"] == "READY":
         if is_production():
             from ..celery_tasks import enqueue_command
 

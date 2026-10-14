@@ -1,5 +1,27 @@
 # JARVIS Git history reconciliation plan
 
+## 2026-10-13 verified continuation state
+
+- This mission uses the isolated branch
+  `integration/world-workspace-owner-deploy` at recovery-based parent
+  `cf18e6eac930974af8fff76587ae456cd6d11eaa`. The expected recovery tip
+  `19bd9622dff474e68ab47df46f0f88b78279e89d` remains an ancestor; the four
+  recovery commits and later remote recovery merge remain preserved.
+- Local remote-tracking state: `origin/recovery/integration-20261012` is
+  `0ad896d49b0d22624abf3038655f082c7ea83f09`; `origin/main` is
+  `4d69fdc1fdd91596dbd174d6b2a029d78251a640`. `main` was not checked out or
+  modified by this work.
+- `git merge-base HEAD origin/main` returns no common ancestor. No cherry-pick,
+  merge, reset, push, or remote ref update has been performed. This branch is a
+  reviewable implementation line based on recovery, not a reconciled history.
+- The worktree already contained staged integration implementation changes
+  before this continuation; those changes were preserved. The
+  `research_engine` package exists inside this branch to remove an import
+  dependency on sibling workspace source. No sibling source or `origin/main`
+  file was changed.
+- This report's earlier starting hashes below describe the prior recovery
+  audit and are historical, not the present remote-tracking state.
+
 ## Verified starting point
 
 At the mission baseline, the canonical checkout was
@@ -21,8 +43,10 @@ changes. Current mission changes are intentional uncommitted work; inspect
 - Preserve `origin/main` and its independent history.
 - Do not reset, force-push, blindly merge unrelated histories, or deploy a
   merge before review.
-- Do not include unrelated files from sibling `F:\AI` workspace paths,
-  including the external `research_engine` package.
+- Do not include unrelated files from sibling `F:\AI` workspace paths or
+  modify them. `research_engine/` is intentionally copied into this isolated
+  integration tree and will be reviewed as part of this branch's dependency
+  fix.
 - Preserve and commit only deliberate, reviewed changes from this mission;
   keep credentials and local environment files out of history.
 
@@ -54,5 +78,8 @@ changes. Current mission changes are intentional uncommitted work; inspect
 ## Current disposition
 
 No history reconciliation, merge, deployment, or push was performed as part
-of this audit. The source histories are unrelated and both contain valuable
-work; the isolated tree-comparison process above is the required next step.
+of this continuation. The source histories are unrelated and both contain
+valuable work; the isolated tree-comparison process above is still the
+required next step. The implementation branch is local and reversible; do
+not merge it into either history until the semantic comparison, clean-clone
+checks, integration review, and release gates in the procedure are complete.

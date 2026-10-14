@@ -1,6 +1,27 @@
 # JARVIS Supabase and service fabric baseline
 
-**Scope:** source and deployment configuration in this checkout on
+## 2026-10-13 capability and service update
+
+| Capability | Implemented | Locally verified | Integration verified | Production verified | Blocked / limits |
+|---|---|---|---|---|---|
+| Supabase PostgreSQL | Existing SQLAlchemy PostgreSQL URL support is compatible in principle; no Supabase-specific client/runtime was introduced. | Local SQL/persistence tests and dependency resolution only. | No Supabase project or endpoint. | No. | Needs project URL/secret, TLS and pooler validation, migration and restart tests, backup/restore. |
+| Supabase Auth | Not implemented; JARVIS-native identity remains canonical. | JARVIS auth/owner tests passed in focused batch. | No Supabase identity. | No. | Do not establish a second authority without explicit federation/migration design. |
+| Supabase Storage | Not implemented; existing private artifact paths remain. | No managed-storage test. | No. | No. | Needs bucket, default-deny owner paths, file restrictions/scanning, signed URL and revocation tests. |
+| Supabase Realtime | Not implemented; existing durable JARVIS event journal and SSE/WebSocket delivery remain authoritative. | Runtime replay/ownership tests passed. | Live search exercised saved runtime events, not Supabase Realtime. | No. | Additional channel is deferred unless a concrete need and reconnect/deduplication policy are established. |
+| Supabase Edge Functions | Not implemented. | No. | No. | No. | Central orchestration remains in JARVIS backend/worker; no edge-function use case or account exists. |
+| Provider fabric / AI cooperation | Existing gateway references its canonical provider-fabric delegation boundary; an absent fabric is now reported `UNAVAILABLE`. | Failure/status tests pass; no model call. | No AI provider request. | No. | Provider source is not at the path expected by this recovery checkout, and provider credentials were unavailable. Do not report multi-model execution as available. |
+| Local service dependencies | `research_engine` is included in the integration tree; existing Postgres, Redis, Celery and Caddy deployment artifacts remain. | Dependency/import tests, SQLite persistence tests, static deployment tests, and frontend checks passed. | A real DuckDuckGo search used the canonical chat runtime. | No. | No Docker, external DB, Redis/worker service, host or DNS. |
+
+`JARVIS_CLEAN_CHECKOUT_REPRODUCIBILITY.md`,
+`JARVIS_WORLD_WORKSPACE_IMPLEMENTATION.md`, and
+`JARVIS_DEPLOYMENT_VERIFICATION.md` contain the current scope and evidence.
+The older baseline below is retained as historical context; its statement that
+`research_engine` is an external sibling dependency is superseded by packaging
+13 modules inside this integration worktree. The provider fabric remains a
+separate unresolved dependency.
+
+**Scope:** source and deployment configuration in the isolated
+`integration/world-workspace-owner-deploy` checkout, based on
 `recovery/integration-20261012`. This report describes locally verified code
 and configuration; it does not claim access to a Supabase project, production
 environment, or external provider account.
@@ -68,7 +89,12 @@ Supabase.
 | Realtime | Do not duplicate by default | Durable JARVIS events already stream through the canonical runtime event service over SSE/WebSocket. Realtime is only justified for a precisely bounded complementary channel with authorization and reconnect/deduplication tests. |
 | Edge Functions | Defer | Central orchestration and long-running work belong in the existing backend/worker. A small function would need a separate concrete use case and auth, validation, timeout, secret, observability, and regression requirements. |
 
-## Evidence and unresolved gates
+## Historical evidence and unresolved gates
+
+The following test counts and dependency observations are from the earlier
+owner/database recovery baseline. They are not the current World Workspace
+test run; current evidence appears in the update above and in
+`JARVIS_INTEGRATION_TEST_AND_RELEASE_EVIDENCE.md`.
 
 - The focused owner/auth, security-regression, endpoint-gateway, and PostgreSQL
   pool selection passed **82 tests** after the production identity changes.
