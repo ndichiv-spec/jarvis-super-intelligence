@@ -1,18 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  motion,
-  MicOff,
-  Volume2,
-  Settings,
-  Brain,
-  MessageSquare,
-  MessageCircle,
-  Square,
-  Waves,
-  AudioLines,
-  Bot,
-  Volume,
-} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Mic, MicOff, Volume2, Settings, Brain, MessageSquare, MessageCircle, Waves, AudioLines, Bot } from 'lucide-react';
 
 interface VoiceCommand {
   id: string;
