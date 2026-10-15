@@ -27,6 +27,13 @@ _RESOURCE = "/api/v1/alerts/test-delivery"
 _ACTION = "alert_email_test_delivery"
 
 
+def get_alerting_engine():
+    """Lazily return the shared alert engine; patchable in endpoint tests."""
+    from monitoring.alerting_system import get_alerting_engine as _get_alerting_engine
+
+    return _get_alerting_engine()
+
+
 def _consume_request_slot() -> bool:
     now = time.monotonic()
     with _attempts_lock:
@@ -81,7 +88,6 @@ async def test_alert_email_delivery(admin: dict = Depends(_require_admin)):  # n
         AlertSeverity,
         AlertStatus,
         NotificationChannel,
-        get_alerting_engine,
     )
 
     # Ephemeral alert: do not register this diagnostic event as a real
