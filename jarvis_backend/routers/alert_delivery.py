@@ -12,14 +12,6 @@ import uuid
 from collections import deque
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from monitoring.alerting_system import (
-    Alert,
-    AlertSeverity,
-    AlertStatus,
-    NotificationChannel,
-    get_alerting_engine,
-)
-
 from ..core import _audit_system_action, _require_admin
 
 router = APIRouter(prefix="/api/v1/alerts", tags=["alerts"])
@@ -80,6 +72,16 @@ async def test_alert_email_delivery(admin: dict = Depends(_require_admin)):  # n
             detail={"code": "EXTERNAL_ALERT_DELIVERY_RATE_LIMITED"},
             headers={"Retry-After": str(_WINDOW_SECONDS)},
         )
+
+    # Import the sender only after authorization and the feature gate;
+    # disabled requests do not initialize the external-delivery subsystem.
+    from monitoring.alerting_system import (
+        Alert,
+        AlertSeverity,
+        AlertStatus,
+        NotificationChannel,
+        get_alerting_engine,
+    )
 
     # Ephemeral alert: do not register this diagnostic event as a real
     # monitoring alert or leave a fake active alert in persisted alert state.
