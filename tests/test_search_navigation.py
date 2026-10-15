@@ -917,7 +917,9 @@ class TestLearningSearch:
     def test_learning_bridge_exposes_arenas(self):
         """Expose all arenas when installed; degrade cleanly when optional package is absent."""
         from jarvis_backend.learning_bridge import (
-            get_learning_arenas, get_learning_items, reset_learning_arenas,
+            get_learning_arenas,
+            get_learning_items,
+            reset_learning_arenas,
         )
         reset_learning_arenas()
         arenas = get_learning_arenas()
