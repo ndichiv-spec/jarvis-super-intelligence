@@ -1,0 +1,90 @@
+name: M3D dependency lock refresh
+
+on:
+  push:
+    branches:
+      - hardening/m3d-external-alert-delivery
+
+permissions:
+  contents: write
+
+concurrency:
+  group: m3d-dependency-lock-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Regenerate and validate dependency locks
+    if: github.ref == 'refs/heads/hardening/m3d-external-alert-delivery'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout this branch
+        uses: actions/checkout@v4
+        with:
+          ref: hardening/m3d-external-alert-delivery
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "10.12.1"
+          run_install: false
+
+      - name: Regenerate pnpm lockfile with security overrides
+        run: pnpm install --lockfile-only --no-frozen-lockfile --ignore-scripts
+
+      - name: Refresh Next.js lockfile
+        working-directory: frontend/web
+        run: npm update --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Refresh Remix lockfile
+        working-directory: frontend/jarvis-remix
+        run: npm update --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Validate Next.js installation and build
+        working-directory: frontend/web
+        run: |
+          npm ci --no-audit --no-fund
+          npm run typecheck
+          npm test -- --run
+          npm run build
+
+      - name: Validate Remix installation and build
+        working-directory: frontend/jarvis-remix
+        run: |
+          npm ci --no-audit --no-fund
+          npm run typecheck
+          npm run build
+
+      - name: Check dependency lock changes
+        run: git diff --check
+
+      - name: Commit refreshed dependency locks
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if git diff --quiet -- pnpm-lock.yaml frontend/web/package-lock.json frontend/jarvis-remix/package-lock.json; then
+            echo "Dependency lockfiles are already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pnpm-lock.yaml frontend/web/package-lock.json frontend/jarvis-remix/package-lock.json
+          git commit -m "security(deps): refresh patched JavaScript lockfiles"
+          git push origin HEAD:hardening/m3d-external-alert-delivery
+
+      - name: Scan refreshed source dependencies
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
