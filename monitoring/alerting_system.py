@@ -10,6 +10,8 @@ import hmac
 import json
 import logging
 import os
+import re
+import smtplib
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -24,6 +26,10 @@ import uuid
 from performance.performance_optimizer import get_performance_monitor
 
 logger = logging.getLogger(__name__)
+
+# Simplified RFC-5322 email-address validator (sufficient for allow-list
+# verification of alert recipients / sender).
+_EMAIL_RE = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
 
 
 class AlertSeverity(Enum):
@@ -203,7 +209,7 @@ class AlertingEngine:
                 "threshold": 90.0,
                 "severity": "critical",
                 "duration": 180,
-                "notification_channels": ["webhook", "in_app"],
+                "notification_channels": ["webhook", "email", "in_app"],
                 "tags": ["system", "performance"]
             },
             {
@@ -225,7 +231,7 @@ class AlertingEngine:
                 "threshold": 5.0,
                 "severity": "error",
                 "duration": 120,
-                "notification_channels": ["webhook", "in_app"],
+                "notification_channels": ["webhook", "email", "in_app"],
                 "tags": ["application", "errors"]
             },
             {
@@ -419,7 +425,7 @@ class AlertingEngine:
                     await handler(alert)
                     if delivery.get("status") == "pending":
                         delivery.update(status="delivered", updated_at=datetime.now().isoformat())
-                    if delivery.get("status") == "delivered" and channel.value not in alert.notifications_sent:
+                    if delivery.get("status") in ("delivered", "accepted") and channel.value not in alert.notifications_sent:
                         alert.notifications_sent.append(channel.value)
                 else:
                     delivery.update(
@@ -434,16 +440,135 @@ class AlertingEngine:
                     updated_at=datetime.now().isoformat(),
                 )
             except (ValueError, RuntimeError, URLError, TimeoutError, OSError) as error:
-                delivery.update(
-                    status="failed",
-                    error=type(error).__name__,
-                    updated_at=datetime.now().isoformat(),
-                )
+                # Preserve a terminal status the handler already set (e.g.
+                # "failed" or "rejected") instead of clobbering it with a
+                # generic "failed".  Only flip still-pending / delivering
+                # states here.
+                if delivery.get("status") in ("pending", "delivering"):
+                    delivery.update(
+                        status="failed",
+                        error=type(error).__name__,
+                        updated_at=datetime.now().isoformat(),
+                    )
                 logger.error("Alert delivery failed for %s (%s)", channel.value, type(error).__name__)
             self._persist_alert_state()
 
     async def _send_email_notification(self, alert: Alert):
-        raise AlertDeliveryNotConfigured("Email alert delivery is not configured.")
+        """Deliver an alert as a real email via SMTP.
+
+        Credentials are read from environment variables (or a credential
+        file) and are never logged or committed.  Recipients are restricted
+        to the ``JARVIS_ALERT_EMAIL_TO`` allow-list.  Uses STARTTLS (or
+        SMTP-SSL) with a 15 s timeout and 3 bounded retries, mirroring the
+        webhook channel's delivery-state machine.
+
+        Only ``accepted`` (SMTP server accepted the message) is claimed on
+        success — end-to-end recipient delivery cannot be verified over SMTP.
+        """
+        host = os.environ.get("JARVIS_ALERT_EMAIL_SMTP_HOST", "").strip()
+        port_str = os.environ.get("JARVIS_ALERT_EMAIL_SMTP_PORT", "").strip()
+        user = os.environ.get("JARVIS_ALERT_EMAIL_SMTP_USER", "").strip()
+        password = self._read_email_password()
+        sender = os.environ.get("JARVIS_ALERT_EMAIL_FROM", "").strip() or user
+        recipients_env = os.environ.get("JARVIS_ALERT_EMAIL_TO", "").strip()
+        use_ssl = os.environ.get("JARVIS_ALERT_EMAIL_USE_SSL", "").lower() in {"1", "true", "yes"}
+
+        if not host or not password or not sender or not recipients_env:
+            raise AlertDeliveryNotConfigured("ALERT_DELIVERY_NOT_CONFIGURED")
+
+        # --- validate sender --------------------------------------------------
+        if not _EMAIL_RE.match(sender):
+            raise ValueError("ALERT_EMAIL_FROM is not a valid email address")
+
+        # --- validate port ----------------------------------------------------
+        try:
+            port = int(port_str) if port_str else 587
+        except ValueError:
+            raise ValueError("JARVIS_ALERT_EMAIL_SMTP_PORT is not a valid integer")
+        if not 1 <= port <= 65535:
+            raise ValueError("JARVIS_ALERT_EMAIL_SMTP_PORT is out of range")
+
+        # --- validate recipient allow-list ------------------------------------
+        allowed = [r.strip() for r in recipients_env.split(",") if r.strip()]
+        for addr in allowed:
+            if not _EMAIL_RE.match(addr):
+                raise ValueError(
+                    "ALERT_EMAIL_TO contains an invalid address — refusing to send"
+                )
+
+        # --- build the message ------------------------------------------------
+        subject = (
+            f"[JARVIS Alert] {alert.severity.value.upper()}: "
+            f"{alert.metric_name} = {alert.current_value} "
+            f"(threshold {alert.threshold})"
+        )
+        body = self._format_alert_email_body(alert)
+        message = self._build_email_message(sender, allowed, subject, body)
+
+        delivery = alert.delivery_status.setdefault("email", {})
+
+        # --- duplicate-delivery protection ------------------------------------
+        current_status = delivery.get("status")
+        if current_status in ("accepted", "delivered"):
+            logger.info(
+                "Alert %s email already accepted/delivered — skipping duplicate",
+                alert.id,
+            )
+            return
+
+        # --- bounded retry loop (mirrors webhook pattern) ---------------------
+        for attempt in range(1, 4):
+            delivery.update(
+                status="delivering",
+                attempts=attempt,
+                updated_at=datetime.now().isoformat(),
+            )
+            self._persist_alert_state()
+
+            try:
+                await asyncio.to_thread(
+                    self._smtp_send_attempt,
+                    host, port, user, password, sender, allowed, message, use_ssl,
+                )
+            except self._NON_RETRYABLE_SMTP_ERRORS as exc:
+                delivery.update(
+                    status="rejected",
+                    error=type(exc).__name__,
+                    smtp_response=str(getattr(exc, "smtp_error", exc))[:200],
+                    attempts=attempt,
+                    updated_at=datetime.now().isoformat(),
+                )
+                self._persist_alert_state()
+                raise RuntimeError(str(exc)) from exc
+            except (smtplib.SMTPException, OSError, TimeoutError) as exc:
+                if attempt < 3:
+                    await asyncio.sleep(min(2 ** (attempt - 1), 4))
+                    continue
+                delivery.update(
+                    status="failed",
+                    error=type(exc).__name__,
+                    attempts=attempt,
+                    error_detail=str(exc)[:200],
+                    updated_at=datetime.now().isoformat(),
+                )
+                self._persist_alert_state()
+                raise RuntimeError(f"SMTP send failed: {exc}") from exc
+
+            # Success — SMTP server accepted the message.
+            delivery.update(
+                status="accepted",
+                smtp_host=host,
+                smtp_port=port,
+                recipient_count=len(allowed),
+                attempts=attempt,
+                updated_at=datetime.now().isoformat(),
+            )
+            self._persist_alert_state()
+            logger.info(
+                "Alert %s email notification accepted by SMTP %s:%s",
+                alert.id, host, port,
+            )
+            return
 
     async def _send_slack_notification(self, alert: Alert):
         raise AlertDeliveryNotConfigured("Slack alert delivery is not configured.")
@@ -564,6 +689,112 @@ class AlertingEngine:
         if secret_file:
             return Path(secret_file).read_text(encoding="utf-8").strip()
         return None
+
+    # -------------------------------------------------------------------------
+    # Email (SMTP) notification helpers
+    # -------------------------------------------------------------------------
+    _NON_RETRYABLE_SMTP_ERRORS = (
+        smtplib.SMTPAuthenticationError,
+        smtplib.SMTPRecipientsRefused,
+        smtplib.SMTPSenderRefused,
+    )
+
+    @staticmethod
+    def _read_email_password() -> str:
+        """Read the SMTP password from env or a credential file.
+
+        The value is never logged or persisted to alert state.  When
+        ``JARVIS_ALERT_EMAIL_SMTP_PASSWORD`` is set it is used directly;
+        otherwise ``JARVIS_ALERT_EMAIL_SMTP_PASSWORD_FILE`` is read (a path
+        to a file containing the password, e.g. a Docker/K8s secret mount).
+        Returns an empty string when neither is available.
+        """
+        password = os.environ.get("JARVIS_ALERT_EMAIL_SMTP_PASSWORD", "").strip()
+        if password:
+            return password
+        password_file = os.environ.get("JARVIS_ALERT_EMAIL_SMTP_PASSWORD_FILE")
+        if password_file:
+            try:
+                return Path(password_file).read_text(encoding="utf-8").strip()
+            except OSError:
+                pass
+        return ""
+
+    @staticmethod
+    def _build_email_message(sender: str, recipients: List[str],
+                             subject: str, body: str) -> str:
+        """Build a standards-compliant RFC-822 email message string."""
+        from email.message import EmailMessage
+        from email.utils import formatdate, make_msgid
+
+        msg = EmailMessage()
+        msg["From"] = sender
+        msg["To"] = ", ".join(recipients)
+        msg["Subject"] = subject
+        msg["Date"] = formatdate()
+        msg["Message-ID"] = make_msgid()
+        msg.set_content(body)
+        return msg.as_string()
+
+    @staticmethod
+    def _format_alert_email_body(alert: Alert) -> str:
+        """Format the alert details as a plain-text email body."""
+        details = (
+            json.dumps(alert.details, sort_keys=True, indent=2)
+            if alert.details else "{}"
+        )
+        return (
+            "JARVIS Alert Notification\n"
+            "==========================\n\n"
+            f"Severity:    {alert.severity.value.upper()}\n"
+            f"Rule:        {alert.rule_id}\n"
+            f"Metric:      {alert.metric_name} = {alert.current_value}"
+            f" (threshold: {alert.threshold})\n"
+            f"Status:      {alert.status.value}\n"
+            f"Message:     {alert.message}\n"
+            f"Triggered:   {alert.triggered_at.isoformat()}\n"
+            f"Occurrences: {alert.occurrences}\n\n"
+            f"Details:\n{details}\n\n"
+            "---\n"
+            "This message was accepted by the SMTP server (JARVIS alerting).\n"
+            "End-to-end recipient delivery is not verified over SMTP.\n"
+        )
+
+    @staticmethod
+    def _smtp_send_attempt(
+        host: str, port: int, user: str, password: str,
+        sender: str, recipients: List[str], message: str, use_ssl: bool,
+    ) -> None:
+        """Perform a single SMTP send attempt.
+
+        Raises ``smtplib.SMTPException`` or ``OSError`` on failure.
+        Returns ``None`` on success (SMTP server accepted the message).
+        """
+        if use_ssl:
+            server = smtplib.SMTP_SSL(host, port, timeout=15)
+        else:
+            server = smtplib.SMTP(host, port, timeout=15)
+        try:
+            server.ehlo()
+            if not use_ssl:
+                try:
+                    server.starttls()
+                    server.ehlo()
+                except smtplib.SMTPException:
+                    # STARTTLS not supported — re-issue EHLO so esmtp_features
+                    # is consistent before AUTH, matching smtp_connector.py.
+                    try:
+                        server.ehlo()
+                    except smtplib.SMTPException:
+                        pass
+            if user and password:
+                server.login(user, password)
+            server.sendmail(sender, recipients, message)
+        finally:
+            try:
+                server.quit()
+            except Exception:
+                pass
 
     def _load_alert_state(self) -> None:
         if not self.state_file.exists():
