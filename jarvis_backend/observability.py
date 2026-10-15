@@ -517,7 +517,11 @@ def install_observability(app: FastAPI) -> None:
             method=request.method,
             request_id=rid,
         )
-        response = JSONResponse(status_code=exc.status_code, content=body)
+        # Preserve explicitly supplied protocol headers (for example Retry-After)
+        # while keeping the response body normalized and free of internal details.
+        response = JSONResponse(
+            status_code=exc.status_code, content=body, headers=exc.headers,
+        )
         response.headers["X-Request-ID"] = rid
         return response
 
