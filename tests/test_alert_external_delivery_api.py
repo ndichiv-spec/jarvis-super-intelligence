@@ -78,7 +78,7 @@ def test_feature_flag_fails_closed(client, admin_headers, monkeypatch, value):
     response = client.post("/api/v1/alerts/test-delivery", headers=admin_headers)
 
     assert response.status_code == 503
-    assert response.json()["detail"]["code"] == "EXTERNAL_ALERT_DELIVERY_DISABLED"
+    assert response.json()["error"]["code"] == "SERVICE_UNAVAILABLE"
     assert engine.calls == []
     assert audit
 
@@ -113,7 +113,7 @@ def test_delivery_failure_is_sanitized(client, admin_headers, monkeypatch):
     response = client.post("/api/v1/alerts/test-delivery", headers=admin_headers)
 
     assert response.status_code == 502
-    assert response.json()["detail"]["code"] == "ALERT_EMAIL_DELIVERY_FAILED"
+    assert response.json()["error"]["code"] == "REQUEST_ERROR"
     assert "password" not in response.text.lower()
     assert len(engine.calls) == 1
 
@@ -126,7 +126,7 @@ def test_missing_smtp_configuration_returns_503(client, admin_headers, monkeypat
     response = client.post("/api/v1/alerts/test-delivery", headers=admin_headers)
 
     assert response.status_code == 503
-    assert response.json()["detail"]["code"] == "ALERT_EMAIL_DELIVERY_NOT_CONFIGURED"
+    assert response.json()["error"]["code"] == "SERVICE_UNAVAILABLE"
 
 
 def test_endpoint_rate_limit_blocks_extra_dispatch(client, admin_headers, monkeypatch):
@@ -140,5 +140,6 @@ def test_endpoint_rate_limit_blocks_extra_dispatch(client, admin_headers, monkey
     response = client.post("/api/v1/alerts/test-delivery", headers=admin_headers)
 
     assert response.status_code == 429
+    assert response.json()["error"]["code"] == "RATE_LIMITED"
     assert response.headers.get("retry-after")
     assert engine.calls == []
