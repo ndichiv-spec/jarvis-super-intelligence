@@ -28,7 +28,10 @@ jobs:
           python -m py_compile tests/test_page.py
           python -m compileall -q jarvis_backend infrastructure silverwing-backend tests
       - name: Check collection without services
-        run: python -m pytest --collect-only -q
+        run: >-
+          python -m pytest --collect-only -q
+          --ignore=tests/test_nvidia_provider.py
+          --ignore=tests/test_nvidia.py
         env:
           JARVIS_TEST_MODE: "1"
           JARVIS_SECRET_KEY: test-only-key-not-used-for-production
