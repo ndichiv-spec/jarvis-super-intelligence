@@ -61,6 +61,8 @@ jobs:
           tests/test_auth_email_security.py
           tests/test_reliability_remediation.py
           tests/test_secret_leakage.py
+          tests/test_alert_email_delivery.py
+          tests/test_alert_external_delivery_api.py
           tests/test_platform_identity.py
           tests/test_phase6_verification.py
           tests/test_oauth_framework.py
