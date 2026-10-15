@@ -882,7 +882,13 @@ def _run_federated_search(
             from ..semantic_index import get_ranker
             ranker = get_ranker()
             if ranker.available():
-                candidates = [(r.title + " " + r.snippet) for r in all_results]
+                # Text-search snippets include display markup such as
+                # ==Pruning==pruning. Feed the ranker plain text so highlighting
+                # does not split or duplicate the tokens it compares.
+                candidates = [
+                    re.sub(r"==([^=]+)==[^\s]+", r"\1", f"{r.title} {r.snippet}")
+                    for r in all_results
+                ]
                 ranked = ranker.rerank(query, candidates, top_k=len(all_results))
                 if ranked:
                     new_order: List[SearchResult] = []
