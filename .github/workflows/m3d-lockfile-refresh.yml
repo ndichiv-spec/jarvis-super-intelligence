@@ -24,6 +24,7 @@ jobs:
         with:
           ref: hardening/m3d-external-alert-delivery
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -77,7 +78,9 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pnpm-lock.yaml frontend/web/package-lock.json frontend/jarvis-remix/package-lock.json
           git commit -m "security(deps): refresh patched JavaScript lockfiles"
-          git push origin HEAD:hardening/m3d-external-alert-delivery
+          token64="$(printf '%s' "x-access-token:${GITHUB_TOKEN}" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${token64}" \
+            push origin HEAD:hardening/m3d-external-alert-delivery
 
       - name: Scan refreshed source dependencies
         uses: aquasecurity/trivy-action@v0.36.0
