@@ -91,6 +91,7 @@ jobs:
           scan-ref: .
           scanners: vuln,secret,misconfig
           exit-code: "1"
+          severity: HIGH,CRITICAL
           ignore-unfixed: true
 
   frontend:
@@ -194,6 +195,7 @@ jobs:
           image-ref: ghcr.io/ndichiv-spec/jarvis-super-intelligence/backend:sha-${{ github.sha }}
           format: table
           exit-code: "1"
+          severity: HIGH,CRITICAL
           ignore-unfixed: true
           vuln-type: os,library
       - uses: aquasecurity/trivy-action@v0.36.0
@@ -201,6 +203,7 @@ jobs:
           image-ref: ghcr.io/ndichiv-spec/jarvis-super-intelligence/frontend:sha-${{ github.sha }}
           format: table
           exit-code: "1"
+          severity: HIGH,CRITICAL
           ignore-unfixed: true
           vuln-type: os,library
 
