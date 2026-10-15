@@ -13,6 +13,8 @@ class FakeAlertingEngine:
     def __init__(self, delivery_state: str = "accepted"):
         self.delivery_state = delivery_state
         self.calls = []
+        self.alerts = {}
+        self.alert_history = []
 
     async def _send_notifications(self, alert, channels, authorized=False):
         self.calls.append((alert, list(channels), authorized))
@@ -99,7 +101,8 @@ def test_admin_can_trigger_delivery_when_enabled(client, admin_headers, monkeypa
     assert alert.details == {"source": "admin_test_endpoint"}
     assert audit
     # The diagnostic alert must not be registered as a real monitoring alert.
-    assert not hasattr(engine, "alerts")
+    assert engine.alerts == {}
+    assert engine.alert_history == []
 
 
 def test_delivery_failure_is_sanitized(client, admin_headers, monkeypatch):
