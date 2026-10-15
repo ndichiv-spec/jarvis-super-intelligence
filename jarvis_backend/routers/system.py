@@ -14,7 +14,7 @@ import platform
 import socket
 import time
 from typing import Any, Dict, List, Optional
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -1487,10 +1487,19 @@ def _actor_from_request(request: Request) -> str:
 
 
 def _confined_path(requested: str) -> Path:
-    """SEC-1 §4 — confine file reads to ROOT to prevent path traversal."""
+    """SEC-1 §4 — confine file access to ROOT across POSIX and Windows paths."""
     base = ROOT.resolve()
-    raw = Path(requested)
-    candidate = raw.resolve() if raw.is_absolute() else (ROOT / requested).resolve()
+    # Path() follows the host OS rules. Reject Windows drives/UNC paths even
+    # when running on POSIX, and treat backslashes as separators so a Windows
+    # traversal payload cannot be misclassified as a harmless filename.
+    windows_path = PureWindowsPath(requested)
+    if windows_path.is_absolute() or windows_path.drive:
+        raise HTTPException(
+            status_code=403, detail="Path is outside the allowed root"
+        )
+    normalized = requested.replace("\\", "/")
+    raw = Path(normalized)
+    candidate = raw.resolve() if raw.is_absolute() else (ROOT / raw).resolve()
     try:
         candidate.relative_to(base)
     except ValueError:

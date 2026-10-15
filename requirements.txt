@@ -3,16 +3,16 @@
 
 # ==================== CORE ====================
 # Web Server (FastAPI)
-starlette==1.0.1
+starlette==1.3.1
 fastapi>=0.115.0
-python-multipart==0.0.20
+python-multipart==0.0.22
 
 # System Monitoring
 psutil>=5.9.0
 
 # ==================== SECURITY FIXES ====================
 # Vulnerability fixes for transitive dependencies
-gitpython==3.1.50
+gitpython==3.1.62
 idna==3.15
 jupyter-server>=2.18.0
 jupyterlab>=4.5.7
@@ -21,10 +21,10 @@ nbconvert>=7.17.1
 pip>=26.1
 pygments==2.20.0
 requests>=2.33.0
-urllib3==2.7.0
+urllib3==2.8.0
 banks==2.4.2
 ecdsa>=0.19.2
-pyasn1==0.6.3
+pyasn1==0.6.4
 uv==0.11.6
 
 # ==================== DATABASE ====================
@@ -57,7 +57,7 @@ ollama>=0.4.0
 
 # Serverless & Distributed Computing
 modal>=0.64.0
-ray[default]==2.40.0
+ray[default]==2.56.0
 
 # Advanced AI/ML Libraries
 accelerate>=1.1.0
@@ -71,24 +71,24 @@ anthropic==0.42.0
 replicate>=1.0.0
 
 # Advanced AI Frameworks
-langchain==0.3.14
-langchain-core==1.3.3
-langchain-openai==1.1.14
+langchain==1.4.6
+langchain-core==1.6.10
+langchain-openai==1.7.2
 langchain-anthropic>=0.2.0
-langchain-community==0.3.14
+langchain-community==0.4.2
 langchain-text-splitters==1.1.2
 langgraph==1.0.10rc1
 langsmith==0.8.0
-llama-index==0.12.2
+llama-index==0.12.28
 llama-index-llms-openai>=0.3.0
 llama-index-llms-anthropic>=0.3.0
 
 # ==================== AI/ML - VISION ====================
 opencv-python>=4.10.0
-Pillow==12.2.0
+Pillow==12.3.0
 transformers>=5.0.0rc3  # For CLIP and other vision models
-torch==2.5.1  # Required for transformers
-torchvision==0.20.1
+torch==2.6.0  # Required for transformers; patched baseline for CVE-2025-32434
+torchvision==0.21.0
 
 # ==================== AI/ML - AUDIO/SPEECH ====================
 openai-whisper>=20240930
@@ -116,7 +116,7 @@ python-docx>=1.1.2
 
 # ==================== WEB SEARCH & SCRAPING ====================
 duckduckgo-search>=6.3.0
-aiohttp==3.13.4
+aiohttp==3.14.3
 httpx>=0.28.0
 requests>=2.32.3
 beautifulsoup4>=4.12.3
@@ -187,7 +187,7 @@ bcrypt>=4.2.0
 
 # Advanced Auth
 authlib>=1.6.11
-python-multipart>=0.0.12
+python-multipart>=0.0.22
 
 # ==================== RATE LIMITING ====================
 slowapi>=0.1.9

@@ -169,8 +169,8 @@ environment at startup because existing provider integrations read
 environment variables. Connector-specific OAuth and GitHub authorization
 remain configured through the existing server-side connection flows. This
 deployment does not add full multi-tenant data isolation, device management,
-MFA, a universal connector vault, autonomous repository writes, or external
-alert delivery.
+MFA, a universal connector vault, autonomous repository writes, or an unrestricted
+external alert-delivery API.
 
 Account registration, verification, and password recovery require SMTP
 configuration (`SMTP_HOST`, `SMTP_USER`, `SMTP_FROM`, and the mounted
@@ -178,6 +178,16 @@ configuration (`SMTP_HOST`, `SMTP_USER`, `SMTP_FROM`, and the mounted
 recovery flow when delivery is unavailable; one-time tokens are never returned
 by the API. Configure `SMTP_USE_SSL=true` for implicit TLS (typically port
 465); otherwise STARTTLS is required (typically port 587).
+
+The alert-delivery test endpoint uses the same mounted SMTP password secret and
+requires an explicit destination allow-list in `JARVIS_ALERT_EMAIL_TO`. The
+endpoint `POST /api/v1/alerts/test-delivery` is administrator-only and disabled
+unless `JARVIS_ALERT_EMAIL_EXTERNAL_NOTIFY=true` is deliberately set in the
+backend environment. Keep it false by default. This switch gates the manual
+test endpoint; ordinary internal monitoring rules use their own configured
+notification channels. A successful endpoint response confirms SMTP acceptance
+only, not mailbox receipt. The endpoint's five-per-fifteen-minute limit is
+process-local, so use shared gateway throttling before multi-worker exposure.
 
 No VPS, domain, DNS, provider credentials, or deployment credentials were
 provided with this change. Do not report this service as live until a real

@@ -15,9 +15,22 @@ spec:
       labels:
         app: jarvis-redis
     spec:
+      securityContext:
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: redis
         image: redis:7-alpine
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 1000
+          runAsNonRoot: true
+          runAsUser: 999
         ports:
         - containerPort: 6379
         resources:
@@ -44,10 +57,14 @@ spec:
         volumeMounts:
         - name: redis-data
           mountPath: /data
+        - name: redis-tmp
+          mountPath: /tmp
       volumes:
       - name: redis-data
         persistentVolumeClaim:
           claimName: redis-pvc
+      - name: redis-tmp
+        emptyDir: {}
 
 ---
 # Redis Service
@@ -80,9 +97,22 @@ spec:
       labels:
         app: jarvis-postgres
     spec:
+      securityContext:
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: postgres
         image: postgres:15-alpine
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 70
+          runAsNonRoot: true
+          runAsUser: 70
         ports:
         - containerPort: 5432
         env:
@@ -121,10 +151,18 @@ spec:
         volumeMounts:
         - name: postgres-data
           mountPath: /var/lib/postgresql/data
+        - name: postgres-run
+          mountPath: /var/run/postgresql
+        - name: postgres-tmp
+          mountPath: /tmp
       volumes:
       - name: postgres-data
         persistentVolumeClaim:
           claimName: postgres-pvc
+      - name: postgres-run
+        emptyDir: {}
+      - name: postgres-tmp
+        emptyDir: {}
 
 ---
 # PostgreSQL Service

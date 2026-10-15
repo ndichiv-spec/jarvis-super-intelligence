@@ -153,8 +153,8 @@ export function NeuralInterface() {
 
       regions.forEach(region => {
         const gradient = ctx.createRadialGradient(region.x, region.y, 0, region.x, region.y, region.radius);
-        gradient.addColorSquare(0, `rgba(139, 92, 246, ${region.activity})`);
-        gradient.addColorSquare(1, 'rgba(139, 92, 246, 0)');
+        gradient.addColorStop(0, `rgba(139, 92, 246, ${region.activity})`);
+        gradient.addColorStop(1, 'rgba(139, 92, 246, 0)');
         ctx.fillStyle = gradient;
         ctx.beginPath();
         ctx.arc(region.x, region.y, region.radius, 0, Math.PI * 2);

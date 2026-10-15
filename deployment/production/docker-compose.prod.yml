@@ -112,12 +112,22 @@ services:
       OPENAI_API_KEY_FILE: /run/secrets/openai_api_key
       JARVIS_OAUTH_CLIENTS_FILE: /run/secrets/oauth_clients
       JARVIS_APP_URL: ${PUBLIC_BASE_URL:?Derive public URLs with public_urls.py}
+      # Existing generic SMTP variables remain for account mail. Map them
+      # explicitly to the names consumed by monitoring/alerting_system.py.
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_FROM: ${SMTP_FROM:-}
       SMTP_USE_SSL: ${SMTP_USE_SSL:-false}
       SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+      JARVIS_ALERT_EMAIL_SMTP_HOST: ${SMTP_HOST:-}
+      JARVIS_ALERT_EMAIL_SMTP_PORT: ${SMTP_PORT:-587}
+      JARVIS_ALERT_EMAIL_SMTP_USER: ${SMTP_USER:-}
+      JARVIS_ALERT_EMAIL_FROM: ${SMTP_FROM:-}
+      JARVIS_ALERT_EMAIL_TO: ${JARVIS_ALERT_EMAIL_TO:-}
+      JARVIS_ALERT_EMAIL_USE_SSL: ${SMTP_USE_SSL:-false}
+      JARVIS_ALERT_EMAIL_SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+      JARVIS_ALERT_EMAIL_EXTERNAL_NOTIFY: ${JARVIS_ALERT_EMAIL_EXTERNAL_NOTIFY:-false}
       DATABASE_URL_FILE: /run/secrets/database_url
       JARVIS_DB_POOL_SIZE: ${JARVIS_DB_POOL_SIZE:-5}
       JARVIS_DB_MAX_OVERFLOW: ${JARVIS_DB_MAX_OVERFLOW:-5}

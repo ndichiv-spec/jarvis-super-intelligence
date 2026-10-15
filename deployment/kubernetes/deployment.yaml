@@ -29,10 +29,23 @@ spec:
         prometheus.io/path: "/metrics"
     spec:
       serviceAccountName: jarvis-sa
+      securityContext:
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: api
         image: jarvis-ai:latest
         imagePullPolicy: Always
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsGroup: 1000
+          runAsNonRoot: true
+          runAsUser: 1000
         ports:
         - containerPort: 8000
           name: http
@@ -87,10 +100,26 @@ spec:
         - name: config
           mountPath: /app/config
           readOnly: true
+        - name: runtime-tmp
+          mountPath: /tmp
+        - name: app-data
+          mountPath: /app/data
+        - name: jarvis-data
+          mountPath: /app/jarvis_data
+        - name: jarvis-uploads
+          mountPath: /app/jarvis_uploads
       volumes:
       - name: config
         configMap:
           name: jarvis-config
+      - name: runtime-tmp
+        emptyDir: {}
+      - name: app-data
+        emptyDir: {}
+      - name: jarvis-data
+        emptyDir: {}
+      - name: jarvis-uploads
+        emptyDir: {}
       restartPolicy: Always
       terminationGracePeriodSeconds: 30
 

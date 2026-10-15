@@ -462,7 +462,7 @@ def _search_knowledge(user_id: Optional[str]) -> List[SearchResult]:
     return _search_text_in_items(
         items, [], "knowledge",
         search_fields=["content", "key", "value", "title"],
-        title_fields=["key", "title"],
+        title_fields=["title", "key"],
         snippet_fields=["value", "content"],
         timestamp_field="created_at",
     )
@@ -479,7 +479,7 @@ def _search_knowledge_with_query(query_terms: List[str], user_id: Optional[str])
         items, query_terms,
         search_fields=["content", "key", "value", "title", "tags"],
         source="knowledge",
-        title_fields=["key", "title"],
+        title_fields=["title", "key"],
         snippet_fields=["value", "content"],
         timestamp_field="created_at",
     )
@@ -882,7 +882,13 @@ def _run_federated_search(
             from ..semantic_index import get_ranker
             ranker = get_ranker()
             if ranker.available():
-                candidates = [(r.title + " " + r.snippet) for r in all_results]
+                # Text-search snippets include display markup such as
+                # ==Pruning==pruning. Feed the ranker plain text so highlighting
+                # does not split or duplicate the tokens it compares.
+                candidates = [
+                    re.sub(r"==([^=]+)==[^\s]+", r"\1", f"{r.title} {r.snippet}")
+                    for r in all_results
+                ]
                 ranked = ranker.rerank(query, candidates, top_k=len(all_results))
                 if ranked:
                     new_order: List[SearchResult] = []

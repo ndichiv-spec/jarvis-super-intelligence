@@ -684,7 +684,7 @@ export function JarvisNextGenDashboard({ initialData, healthStatus }: { initialD
               </div>
               <p className="text-gray-300 mb-2">{insight.description}</p>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-400">Confidence: {(insight.confidence * 100).toFixed(1)}%</div>
+                <span className="text-sm text-gray-400">Confidence: {(insight.confidence * 100).toFixed(1)}%</span>
                 <span className="text-xs text-gray-500">{new Date(insight.timestamp).toLocaleTimeString()}</span>
               </div>
               {insight.actions && (

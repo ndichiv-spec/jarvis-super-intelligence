@@ -32,6 +32,7 @@ from .presentation.router import router as presentation_router
 from .routers import (
     agents,
     ai,
+    alert_delivery,
     auth,
     automation,
     billing,
@@ -137,6 +138,7 @@ def setup_routers() -> None:
         stark.router,
         agents.router,
         monitoring.router,
+        alert_delivery.router,
         system.router,
         platform_identity.router,
         endpoint_gateway_router,
