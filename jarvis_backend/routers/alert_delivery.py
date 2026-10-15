@@ -10,14 +10,17 @@ import threading
 import time
 import uuid
 from collections import deque
-from typing import Deque
-
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from ..core import _audit_system_action, _require_admin
 from monitoring.alerting_system import (
-    Alert, AlertSeverity, AlertStatus, NotificationChannel, get_alerting_engine,
+    Alert,
+    AlertSeverity,
+    AlertStatus,
+    NotificationChannel,
+    get_alerting_engine,
 )
+
+from ..core import _audit_system_action, _require_admin
 
 router = APIRouter(prefix="/api/v1/alerts", tags=["alerts"])
 
@@ -25,7 +28,7 @@ router = APIRouter(prefix="/api/v1/alerts", tags=["alerts"])
 # also enforce a shared limit at the gateway or through a shared store.
 _REQUEST_LIMIT = 5
 _WINDOW_SECONDS = 15 * 60
-_attempts: Deque[float] = deque()
+_attempts: deque[float] = deque()
 _attempts_lock = threading.Lock()
 _RESOURCE = "/api/v1/alerts/test-delivery"
 _ACTION = "alert_email_test_delivery"
@@ -52,7 +55,7 @@ def _actor_label(admin: dict) -> str:
 
 
 @router.post("/test-delivery")
-async def test_alert_email_delivery(admin: dict = Depends(_require_admin)):
+async def test_alert_email_delivery(admin: dict = Depends(_require_admin)):  # noqa: B008
     """Send one test alert to the recipient configured in the SMTP allow-list."""
     actor = _actor_label(admin)
 
@@ -99,7 +102,7 @@ async def test_alert_email_delivery(admin: dict = Depends(_require_admin)):
         await get_alerting_engine()._send_notifications(
             alert, [NotificationChannel.EMAIL], authorized=True,
         )
-    except Exception as exc:  # noqa: BLE001 — never expose SMTP internals
+    except Exception as exc:
         _audit_system_action(
             "failed", _ACTION, _RESOURCE, user_email=actor,
             detail=f"dispatch_exception={type(exc).__name__}",
