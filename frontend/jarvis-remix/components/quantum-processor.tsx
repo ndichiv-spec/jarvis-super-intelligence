@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Brain, Cpu, Zap, Radio, BrainCircuit, Atom } from 'lucide-react';
+import { Zap, Radio, BrainCircuit, Atom } from 'lucide-react';
 
 interface QuantumState {
   entanglement: number;
