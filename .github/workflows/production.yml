@@ -36,6 +36,8 @@ jobs:
           JARVIS_TEST_MODE: "1"
           JARVIS_SECRET_KEY: test-only-key-not-used-for-production
           JARVIS_TEST_DATABASE_PATH: ${{ runner.temp }}/jarvis-collection.sqlite
+      - name: Diagnose Ruff import order in alert deployment test
+        run: python -m ruff check --select I001 --diff tests/test_alert_delivery_deployment_config.py || true
       - name: Prevent new Ruff debt
         if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
         run: python scripts/check_ruff_debt.py --base "$LINT_BASE" --committed
