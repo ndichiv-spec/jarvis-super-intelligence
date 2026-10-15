@@ -10,7 +10,11 @@
     "**/lib/**/*.ts"
   ],
   "compilerOptions": {
-    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ES2022"
+    ],
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
@@ -29,9 +33,16 @@
     "allowJs": true,
     "forceConsistentCasingInFileNames": true,
     "paths": {
-      "~/*": ["./app/*"],
-      "~components/*": ["./components/*"],
-      "~lib/*": ["./lib/*"]
-    }
+      "~/*": [
+        "./app/*"
+      ],
+      "~components/*": [
+        "./components/*"
+      ],
+      "~lib/*": [
+        "./lib/*"
+      ]
+    },
+    "skipLibCheck": true
   }
 }
