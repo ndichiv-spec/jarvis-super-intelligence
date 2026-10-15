@@ -462,7 +462,7 @@ def _search_knowledge(user_id: Optional[str]) -> List[SearchResult]:
     return _search_text_in_items(
         items, [], "knowledge",
         search_fields=["content", "key", "value", "title"],
-        title_fields=["key", "title"],
+        title_fields=["title", "key"],
         snippet_fields=["value", "content"],
         timestamp_field="created_at",
     )
@@ -479,7 +479,7 @@ def _search_knowledge_with_query(query_terms: List[str], user_id: Optional[str])
         items, query_terms,
         search_fields=["content", "key", "value", "title", "tags"],
         source="knowledge",
-        title_fields=["key", "title"],
+        title_fields=["title", "key"],
         snippet_fields=["value", "content"],
         timestamp_field="created_at",
     )
