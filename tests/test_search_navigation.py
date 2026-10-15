@@ -874,10 +874,12 @@ class TestSemanticSearch:
             )
             assert resp.status_code == 200
             result = resp.json()
-            assert result["total_results"] >= 1
-            assert result["semantic"] is True
-            found = any(r["id"] == test_key for r in result["results"])
-            assert found
+            assert result["total_results"] >= 1, result
+            found = any(item["id"] == test_key for item in result["results"])
+            assert found, result
+            # Include the response in failures so a silent best-effort fallback
+            # can be distinguished from a missing search candidate.
+            assert result["semantic"] is True, result
         finally:
             if test_key in data:
                 del data[test_key]
