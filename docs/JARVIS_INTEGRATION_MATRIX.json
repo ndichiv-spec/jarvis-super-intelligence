@@ -3,7 +3,7 @@
   "repository": "F:\\AI\\Jarvis-super-intelligence-",
   "observedHead": "fea7e17",
   "requestedBaseline": "c0c9ce76",
-  "scopeNote": "Observed current dirty worktree. Implementation presence does not imply configured, available, healthy, active, or visually verified.",
+  "scopeNote": "Baseline inventory captured from a prior source snapshot; alert-delivery inventory was added during the M3D branch review. Implementation presence does not imply configured, available, healthy, active, or used in production.",
   "runtimeObservation": {
     "frontendPort3000": "listening; browser showed unauthenticated sign-in shell",
     "backendPort8000": "not listening",
@@ -28,70 +28,149 @@
   "inventory": [
     {
       "area": "Authentication",
-      "currentFileModule": ["jarvis_backend/core.py", "jarvis_backend/routers/auth.py", "jarvis_backend/db.py"],
+      "currentFileModule": [
+        "jarvis_backend/core.py",
+        "jarvis_backend/routers/auth.py",
+        "jarvis_backend/db.py"
+      ],
       "currentOwner": "Backend core identity/session services and auth router",
-      "publicApi": ["/api/v1/auth/login", "/register", "/logout", "/refresh", "/me", "/forgot-password", "/reset-password", "/change-password", "/sessions", "/verify-email"],
+      "publicApi": [
+        "/api/v1/auth/login",
+        "/register",
+        "/logout",
+        "/refresh",
+        "/me",
+        "/forgot-password",
+        "/reset-password",
+        "/change-password",
+        "/sessions",
+        "/verify-email"
+      ],
       "dataFlow": "Argon2id password hashes; HS256 access JWT (1 hour); rotating/revocable refresh JWT (24 days); identity/session/token named collections stored through jarvis_kv.",
       "eventFlow": "Auth audit entries in audit_logs; not canonical runtime lifecycle events.",
       "authorization": "get_current_user validates bearer/API key or HttpOnly access cookie; verification/status/session checks; unsafe cookie requests validate origin.",
-      "frontendConsumer": ["frontend/web/src/lib/api-client.ts", "frontend/web/src/stores/authStore.ts", "frontend/web/src/components/auth/auth-guard.tsx", "frontend/web/src/app/login/page.tsx"],
-      "tests": ["tests/test_phase1_auth.py", "tests/test_auth.py", "frontend/web/src/stores/authStore.test.ts", "frontend/web/src/components/auth/auth-guard.test.tsx"],
+      "frontendConsumer": [
+        "frontend/web/src/lib/api-client.ts",
+        "frontend/web/src/stores/authStore.ts",
+        "frontend/web/src/components/auth/auth-guard.tsx",
+        "frontend/web/src/app/login/page.tsx"
+      ],
+      "tests": [
+        "tests/test_phase1_auth.py",
+        "tests/test_auth.py",
+        "frontend/web/src/stores/authStore.test.ts",
+        "frontend/web/src/components/auth/auth-guard.test.tsx"
+      ],
       "currentProblem": "Generic key/value persistence stores auth collections; full route-level authorization inventory and live login verification are not established by this audit.",
       "requiredExtension": "Keep backend as identity authority; retain cookie-origin/ownership checks and verify flows against a configured deployment.",
       "migrationStatus": "Implemented; live auth not verified."
     },
     {
       "area": "Authorization and ownership",
-      "currentFileModule": ["jarvis_backend/core.py", "jarvis_backend/capability.py", "jarvis_backend/routers/*.py", "jarvis_backend/routers/connectors.py", "jarvis_backend/mcp_server.py"],
+      "currentFileModule": [
+        "jarvis_backend/core.py",
+        "jarvis_backend/capability.py",
+        "jarvis_backend/routers/*.py",
+        "jarvis_backend/routers/connectors.py",
+        "jarvis_backend/mcp_server.py"
+      ],
       "currentOwner": "Backend route/service policies and capability-specific checks",
       "publicApi": "Route-specific APIs, RBAC, resource ownership, capability execution and connector/MCP operations.",
       "dataFlow": "Authenticated principal and scoped resource/action are checked at service or route boundaries.",
       "eventFlow": "Denials are returned as API errors; not all are represented in the canonical runtime stream.",
       "authorization": "Owner, role, tenant, API-key scope, confirmation and capability policies vary by endpoint; UI visibility is not enforcement.",
-      "frontendConsumer": ["auth guard", "admin/settings/connectors/tasks/chat feature APIs"],
-      "tests": ["tests/test_phase1_ownership.py", "tests/test_agent_task_ownership.py", "tests/test_control_plane_ownership.py", "tests/test_mcp_identity.py", "tests/test_connectors.py"],
+      "frontendConsumer": [
+        "auth guard",
+        "admin/settings/connectors/tasks/chat feature APIs"
+      ],
+      "tests": [
+        "tests/test_phase1_ownership.py",
+        "tests/test_agent_task_ownership.py",
+        "tests/test_control_plane_ownership.py",
+        "tests/test_mcp_identity.py",
+        "tests/test_connectors.py"
+      ],
       "currentProblem": "No single central policy authority was found covering every sensitive resource; route-level mapping is incomplete.",
       "requiredExtension": "Complete explicit route-by-route policy mapping for system/files/processes/devices/connectors/MCP/admin/user data.",
       "migrationStatus": "Partial; backend enforcement exists, full inventory remains."
     },
     {
       "area": "Users and administration",
-      "currentFileModule": ["jarvis_backend/routers/rbac.py", "jarvis_backend/routers/auth.py", "jarvis_backend/routers/control_plane.py"],
+      "currentFileModule": [
+        "jarvis_backend/routers/rbac.py",
+        "jarvis_backend/routers/auth.py",
+        "jarvis_backend/routers/control_plane.py"
+      ],
       "currentOwner": "User store, RBAC router and control plane",
-      "publicApi": ["/api/v1/auth/me", "/api/v1/rbac/*", "/api/v1/control-plane/*"],
+      "publicApi": [
+        "/api/v1/auth/me",
+        "/api/v1/rbac/*",
+        "/api/v1/control-plane/*"
+      ],
       "dataFlow": "User identity, roles, tenant and admin metadata live in backend stores/domain services.",
       "eventFlow": "Administrative changes are audited in selected paths; runtime events are not the audit authority.",
       "authorization": "Owner/admin/tenant checks on protected operations.",
-      "frontendConsumer": ["frontend/web/src/app/dashboard/admin/page.tsx", "frontend/web/src/stores/authStore.ts"],
-      "tests": ["tests/test_control_plane_ownership.py", "frontend/web/src/app/dashboard/admin/page.test.tsx"],
+      "frontendConsumer": [
+        "frontend/web/src/app/dashboard/admin/page.tsx",
+        "frontend/web/src/stores/authStore.ts"
+      ],
+      "tests": [
+        "tests/test_control_plane_ownership.py",
+        "frontend/web/src/app/dashboard/admin/page.test.tsx"
+      ],
       "currentProblem": "RBAC, owner policy and tenant configuration are separate related inventories.",
       "requiredExtension": "Keep all identity and mutations backend-authoritative; expose only scoped identity/status projections.",
       "migrationStatus": "Keep; inventory reconciliation partial."
     },
     {
       "area": "Conversations",
-      "currentFileModule": ["jarvis_backend/chat_service.py", "jarvis_backend/routers/legacy.py"],
+      "currentFileModule": [
+        "jarvis_backend/chat_service.py",
+        "jarvis_backend/routers/legacy.py"
+      ],
       "currentOwner": "ChatService and chat_sessions collection",
-      "publicApi": ["/api/chat/sessions", "/api/chat/sessions/{session_id}"],
+      "publicApi": [
+        "/api/chat/sessions",
+        "/api/chat/sessions/{session_id}"
+      ],
       "dataFlow": "Session ownership, metadata, ordering and conversation records persist through get_store(chat_sessions).",
       "eventFlow": "Conversation persistence is distinct from runtime journal and presentation history.",
       "authorization": "Authenticated user plus ChatService session ownership.",
-      "frontendConsumer": ["frontend/web/src/features/chat/api.ts", "frontend/web/src/features/chat/store.ts", "frontend/web/src/components/chat/chat-workspace.tsx"],
-      "tests": ["tests/test_phase1_ownership.py", "tests/test_phase1_chat.py"],
+      "frontendConsumer": [
+        "frontend/web/src/features/chat/api.ts",
+        "frontend/web/src/features/chat/store.ts",
+        "frontend/web/src/components/chat/chat-workspace.tsx"
+      ],
+      "tests": [
+        "tests/test_phase1_ownership.py",
+        "tests/test_phase1_chat.py"
+      ],
       "currentProblem": "Legacy ownerless record handling needs a defined migration policy.",
       "requiredExtension": "Preserve ChatService as sole conversation authority; correlate presentation/runtime without replacing transcript.",
       "migrationStatus": "Keep."
     },
     {
       "area": "Messages and streaming",
-      "currentFileModule": ["jarvis_backend/chat_service.py", "jarvis_backend/routers/legacy.py"],
+      "currentFileModule": [
+        "jarvis_backend/chat_service.py",
+        "jarvis_backend/routers/legacy.py"
+      ],
       "currentOwner": "ChatService",
-      "publicApi": ["/api/chat", "/api/chat/stream"],
+      "publicApi": [
+        "/api/chat",
+        "/api/chat/stream"
+      ],
       "dataFlow": "Client message ID → persisted user/assistant records → checkpointed stream → response payload.",
       "eventFlow": "Chat SSE carries message deltas; canonical SSE carries state transitions; same request identity is used when chat-originated.",
       "authorization": "Authenticated session owner.",
-      "frontendConsumer": ["frontend/web/src/features/chat/api.ts", "frontend/web/src/components/real-ai-chat.tsx"],
-      "tests": ["tests/test_phase1_chat.py", "tests/test_runtime_events.py"],
+      "frontendConsumer": [
+        "frontend/web/src/features/chat/api.ts",
+        "frontend/web/src/components/real-ai-chat.tsx"
+      ],
+      "tests": [
+        "tests/test_phase1_chat.py",
+        "tests/test_runtime_events.py"
+      ],
       "currentProblem": "Transcript streaming and runtime SSE are separate channels and need joint integration coverage.",
       "requiredExtension": "Preserve idempotency and request correlation; do not use UI timers to synthesize model output.",
       "migrationStatus": "Implemented; end-to-end live provider flow unverified."
@@ -104,8 +183,15 @@
       "dataFlow": "Conversation → context/memory → explicit capability path → ProviderGateway → persisted result/presentation.",
       "eventFlow": "Request/message/model/capability/presentation lifecycle published to RuntimeEventService.",
       "authorization": "Session ownership; capability/tool checks remain backend-side.",
-      "frontendConsumer": ["frontend/web/src/components/real-ai-chat.tsx", "frontend/web/src/features/runtime/runtime-bridge.tsx"],
-      "tests": ["tests/test_phase1_chat.py", "tests/test_chat_capability_runtime.py", "tests/test_runtime_events.py"],
+      "frontendConsumer": [
+        "frontend/web/src/components/real-ai-chat.tsx",
+        "frontend/web/src/features/runtime/runtime-bridge.tsx"
+      ],
+      "tests": [
+        "tests/test_phase1_chat.py",
+        "tests/test_chat_capability_runtime.py",
+        "tests/test_runtime_events.py"
+      ],
       "currentProblem": "General intent-to-capability dispatch is narrower than the registry; non-chat request paths are not all correlated.",
       "requiredExtension": "Keep service authority; expand only through existing authorized capability dispatch and verified event publishers.",
       "migrationStatus": "Chat vertical slice integrated; broader interaction partial."
@@ -118,554 +204,966 @@
       "dataFlow": "Provider fabric, Brain/Silverwing runtime or Silverwing model route returns normalized result/error.",
       "eventFlow": "Chat emits model completion/failure; provider selected/started are not uniformly emitted at actual routing decisions.",
       "authorization": "Server-side provider credentials/config; provider-specific access remains backend-side.",
-      "frontendConsumer": ["chat model selector", "provider settings/status pages"],
-      "tests": ["tests/test_phase1_chat.py", "tests/test_provider_fabric.py", "tests/test_silverwing_gateway.py"],
+      "frontendConsumer": [
+        "chat model selector",
+        "provider settings/status pages"
+      ],
+      "tests": [
+        "tests/test_phase1_chat.py",
+        "tests/test_provider_fabric.py",
+        "tests/test_silverwing_gateway.py"
+      ],
       "currentProblem": "Implemented provider, configured credentials, health, route selection and active use are distinct states.",
       "requiredExtension": "Emit sanitized selected/started events from actual route branch; do not infer activity from catalog.",
       "migrationStatus": "Partial event integration; providers not live verified."
     },
     {
       "area": "ModelRouter",
-      "currentFileModule": ["jarvis_backend/gateway.py", "Silverwing router/runtime modules"],
+      "currentFileModule": [
+        "jarvis_backend/gateway.py",
+        "Silverwing router/runtime modules"
+      ],
       "currentOwner": "Silverwing ModelRouter",
       "publicApi": "Internal route_and_chat and streaming calls.",
       "dataFlow": "Task/model request → model/provider decision → inference result.",
       "eventFlow": "Selection metadata is not uniformly canonicalized.",
       "authorization": "Server configuration and provider policy.",
-      "frontendConsumer": ["chat model selector", "operations/model surfaces"],
-      "tests": ["tests/test_brain_router.py", "tests/test_silverwing_gateway.py", "tests/test_silverwing_runtime.py"],
+      "frontendConsumer": [
+        "chat model selector",
+        "operations/model surfaces"
+      ],
+      "tests": [
+        "tests/test_brain_router.py",
+        "tests/test_silverwing_gateway.py",
+        "tests/test_silverwing_runtime.py"
+      ],
       "currentProblem": "Routing owns execution selection, not visual presentation; some gateway branches bypass one catalog.",
       "requiredExtension": "Keep router as routing authority and propagate request identity/sanitized decision metadata.",
       "migrationStatus": "Keep; observability partial."
     },
     {
       "area": "Model Registry and Catalog",
-      "currentFileModule": ["jarvis_backend/routers/ai.py", "jarvis_backend/routers/models.py", "jarvis_backend/routers/control_plane.py"],
+      "currentFileModule": [
+        "jarvis_backend/routers/ai.py",
+        "jarvis_backend/routers/models.py",
+        "jarvis_backend/routers/control_plane.py"
+      ],
       "currentOwner": "AI model catalog and control-plane governance services",
-      "publicApi": ["/api/v1/ai/models", "/api/v1/models", "/api/v1/control-plane/*"],
+      "publicApi": [
+        "/api/v1/ai/models",
+        "/api/v1/models",
+        "/api/v1/control-plane/*"
+      ],
       "dataFlow": "Model/provider metadata, approvals and health feed selectors and admin surfaces.",
       "eventFlow": "Availability/selection updates are not a single canonical event stream.",
       "authorization": "Authenticated reads; role/owner-gated governance writes.",
-      "frontendConsumer": ["chat model selector", "system/settings/admin pages"],
-      "tests": ["tests/test_model_lifecycle.py", "tests/test_provider_status.py", "tests/test_control_plane_phase7.py"],
+      "frontendConsumer": [
+        "chat model selector",
+        "system/settings/admin pages"
+      ],
+      "tests": [
+        "tests/test_model_lifecycle.py",
+        "tests/test_provider_status.py",
+        "tests/test_control_plane_phase7.py"
+      ],
       "currentProblem": "Catalogued/approved does not mean configured, healthy, routable or active.",
       "requiredExtension": "Keep one model authority per responsibility and label source/status truth explicitly.",
       "migrationStatus": "Partial; multiple inventories."
     },
     {
       "area": "Capability Registry",
-      "currentFileModule": ["jarvis_backend/capability.py", "jarvis_backend/capabilities/__init__.py"],
+      "currentFileModule": [
+        "jarvis_backend/capability.py",
+        "jarvis_backend/capabilities/__init__.py"
+      ],
       "currentOwner": "CapabilityRegistry and Orchestrator",
       "publicApi": "Registry/status/discovery endpoints plus internal execute_capability.",
       "dataFlow": "Capability + request + ExecutionContext → health/policy → execution result.",
       "eventFlow": "Capability local bus bridges selected lifecycle events into global event_fabric with request/execution IDs.",
       "authorization": "Backend ExecutionContext plus capability/tool-specific security.",
-      "frontendConsumer": ["features/runtime capability projection", "chat", "system capability view"],
-      "tests": ["tests/test_capability_contract.py", "tests/test_capability_fabric.py", "tests/test_chat_capability_runtime.py"],
+      "frontendConsumer": [
+        "features/runtime capability projection",
+        "chat",
+        "system capability view"
+      ],
+      "tests": [
+        "tests/test_capability_contract.py",
+        "tests/test_capability_fabric.py",
+        "tests/test_chat_capability_runtime.py"
+      ],
       "currentProblem": "Capability bus remains; chat dispatch currently covers limited explicitly selected actions.",
       "requiredExtension": "Add metadata and extend existing registry; do not introduce parallel capability inventory.",
       "migrationStatus": "Extended; general dispatch partial."
     },
     {
       "area": "Registered Capabilities",
-      "currentFileModule": ["jarvis_backend/capabilities/__init__.py", "jarvis_backend/capabilities/*.py"],
+      "currentFileModule": [
+        "jarvis_backend/capabilities/__init__.py",
+        "jarvis_backend/capabilities/*.py"
+      ],
       "currentOwner": "CapabilityRegistry",
       "publicApi": "Registry health/status and capability execution.",
       "dataFlow": "15 startup registration attempts: brain, conversation, voice, vision, image.generate, provider, browser, task, memory, knowledge, tool, research.cortex, science.engine, bio.learner, tech.evolution.",
       "eventFlow": "Orchestrator lifecycle plus capability-specific event producers.",
       "authorization": "ExecutionContext and each capability-specific backend boundary.",
-      "frontendConsumer": ["runtime capability view", "capability-specific feature surfaces"],
-      "tests": ["tests/test_capability_contract.py", "tests/test_image_generation_capability.py", "tests/test_voice_runtime_boundary.py"],
+      "frontendConsumer": [
+        "runtime capability view",
+        "capability-specific feature surfaces"
+      ],
+      "tests": [
+        "tests/test_capability_contract.py",
+        "tests/test_image_generation_capability.py",
+        "tests/test_voice_runtime_boundary.py"
+      ],
       "currentProblem": "Startup catches registration failures; file presence/registration attempt does not prove runtime availability.",
       "requiredExtension": "Expose actual successful registrations/readiness and outputs from the registry.",
       "migrationStatus": "Foundation exists; live readiness deployment-dependent."
     },
     {
       "area": "Tool Runtime",
-      "currentFileModule": ["jarvis_backend/capabilities/tools/__init__.py", "jarvis_backend/capability.py"],
+      "currentFileModule": [
+        "jarvis_backend/capabilities/tools/__init__.py",
+        "jarvis_backend/capability.py"
+      ],
       "currentOwner": "ToolCapability and Orchestrator",
       "publicApi": "Tool action registry and capability execution.",
       "dataFlow": "Action selection → input/risk checks → confirmation/authorization → connector → normalized result.",
       "eventFlow": "Orchestrator lifecycle bridged; individual tool output event coverage incomplete.",
       "authorization": "Backend capability policy, risk and confirmation gates.",
-      "frontendConsumer": ["browser/tool feature surfaces", "chat"],
-      "tests": ["tests/test_tool_registry.py", "tests/test_capability_fabric.py", "tests/test_chat_capability_runtime.py"],
+      "frontendConsumer": [
+        "browser/tool feature surfaces",
+        "chat"
+      ],
+      "tests": [
+        "tests/test_tool_registry.py",
+        "tests/test_capability_fabric.py",
+        "tests/test_chat_capability_runtime.py"
+      ],
       "currentProblem": "Tool catalogs and integration configuration may be mistaken for real availability.",
       "requiredExtension": "Publish minimal semantic lifecycle/result references from existing tool owner.",
       "migrationStatus": "Partial."
     },
     {
       "area": "MCP",
-      "currentFileModule": ["jarvis_backend/mcp_server.py", "jarvis_backend/mcp_client.py", "jarvis_backend/routers/mcp.py"],
+      "currentFileModule": [
+        "jarvis_backend/mcp_server.py",
+        "jarvis_backend/mcp_client.py",
+        "jarvis_backend/routers/mcp.py"
+      ],
       "currentOwner": "Backend MCP server/client and ToolCapability",
       "publicApi": "Authenticated HTTP/streamable HTTP and stdio discovery/invocation.",
       "dataFlow": "Server discovery → tool/resource discovery → authenticated invocation → normalized result.",
       "eventFlow": "Not all MCP calls enter chat-session runtime stream; synthetic session IDs may be used.",
       "authorization": "Identity bound server-side; client identity claims stripped; capability policy enforced.",
-      "frontendConsumer": ["MCP/extension settings and tool surfaces"],
-      "tests": ["tests/test_mcp_identity.py", "tests/test_mcp_identity_boundary.py"],
+      "frontendConsumer": [
+        "MCP/extension settings and tool surfaces"
+      ],
+      "tests": [
+        "tests/test_mcp_identity.py",
+        "tests/test_mcp_identity_boundary.py"
+      ],
       "currentProblem": "Independent execution/correlation plane for chat initiated MCP activity.",
       "requiredExtension": "Propagate authorized conversation/session/request context for chat-originated calls.",
       "migrationStatus": "Partial; standalone MCP integration exists."
     },
     {
       "area": "Memory",
-      "currentFileModule": ["jarvis_backend/capabilities/memory.py", "jarvis_backend/routers/memory.py", "jarvis_backend/chat_service.py"],
+      "currentFileModule": [
+        "jarvis_backend/capabilities/memory.py",
+        "jarvis_backend/routers/memory.py",
+        "jarvis_backend/chat_service.py"
+      ],
       "currentOwner": "Memory subsystem",
       "publicApi": "/api/v1/memory/* and MemoryCapability methods.",
       "dataFlow": "User-owned memory storage/retrieval; ChatService includes selected context internally.",
       "eventFlow": "No uniform canonical memory lifecycle coverage.",
       "authorization": "Authenticated and user-scoped data operations.",
-      "frontendConsumer": ["frontend/web/src/features/memory/*", "knowledge/memory UI"],
-      "tests": ["tests/test_memory.py", "tests/memory/test_persistence.py"],
+      "frontendConsumer": [
+        "frontend/web/src/features/memory/*",
+        "knowledge/memory UI"
+      ],
+      "tests": [
+        "tests/test_memory.py",
+        "tests/memory/test_persistence.py"
+      ],
       "currentProblem": "Chat lexical context path differs from standalone semantic/RAG retrieval.",
       "requiredExtension": "Integrate provenance-aware retrieval into chat without moving memory ownership to frontend.",
       "migrationStatus": "Partial."
     },
     {
       "area": "RAG",
-      "currentFileModule": ["jarvis_backend/embeddings.py", "jarvis_backend/semantic_index.py", "RAG modules"],
+      "currentFileModule": [
+        "jarvis_backend/embeddings.py",
+        "jarvis_backend/semantic_index.py",
+        "RAG modules"
+      ],
       "currentOwner": "Retrieval/index services",
       "publicApi": "Internal retrieval APIs and knowledge routes.",
       "dataFlow": "Document ingestion → chunks/embeddings/index → search/rank/evidence.",
       "eventFlow": "Producer-specific; incomplete canonical coverage.",
       "authorization": "User/tenant ownership enforced at route/repository boundaries; verify each query path.",
-      "frontendConsumer": ["knowledge hub", "global search", "chat evidence"],
-      "tests": ["tests/test_advanced_rag.py", "tests/test_rag_integration.py"],
+      "frontendConsumer": [
+        "knowledge hub",
+        "global search",
+        "chat evidence"
+      ],
+      "tests": [
+        "tests/test_advanced_rag.py",
+        "tests/test_rag_integration.py"
+      ],
       "currentProblem": "Not all richer retrieval is in ChatService's active context path.",
       "requiredExtension": "Connect retrieval evidence to planner under ownership and citation tests.",
       "migrationStatus": "Partial."
     },
     {
       "area": "Knowledge",
-      "currentFileModule": ["jarvis_backend/capabilities/knowledge.py", "jarvis_backend/routers/knowledge.py"],
+      "currentFileModule": [
+        "jarvis_backend/capabilities/knowledge.py",
+        "jarvis_backend/routers/knowledge.py"
+      ],
       "currentOwner": "KnowledgeCapability and knowledge store",
       "publicApi": "/api/v1/knowledge/*",
       "dataFlow": "User documents/entries → storage/search → optional context.",
       "eventFlow": "Selected knowledge search events adapted; source and result details constrained.",
       "authorization": "Authenticated and user-scoped operations.",
-      "frontendConsumer": ["knowledge hub", "global search"],
-      "tests": ["tests/test_advanced_rag.py", "tests/test_rag_integration.py"],
+      "frontendConsumer": [
+        "knowledge hub",
+        "global search"
+      ],
+      "tests": [
+        "tests/test_advanced_rag.py",
+        "tests/test_rag_integration.py"
+      ],
       "currentProblem": "Not all endpoints are connected to chat; adjacent advanced features may report unavailable.",
       "requiredExtension": "Present approved evidence references, not raw index/database structures.",
       "migrationStatus": "Partial."
     },
     {
       "area": "Tasks and Jobs",
-      "currentFileModule": ["jarvis_backend/capabilities/task.py", "jarvis_backend/routers/agents.py", "jarvis_backend/routers/control_plane.py", "infrastructure/job_registry.py"],
+      "currentFileModule": [
+        "jarvis_backend/capabilities/task.py",
+        "jarvis_backend/routers/agents.py",
+        "jarvis_backend/routers/control_plane.py",
+        "infrastructure/job_registry.py"
+      ],
       "currentOwner": "Task capability, agent task store and control-plane job registry by route",
-      "publicApi": ["/api/v1/agents/tasks", "/api/v1/control-plane/jobs", "TaskCapability actions"],
+      "publicApi": [
+        "/api/v1/agents/tasks",
+        "/api/v1/control-plane/jobs",
+        "TaskCapability actions"
+      ],
       "dataFlow": "Task/job records and execution/retry flows differ across services.",
       "eventFlow": "Some task lifecycle names map to canonical protocol; all producers/context IDs not confirmed.",
       "authorization": "Authenticated owner-scoped tasks; control-plane role policy for privileged jobs.",
-      "frontendConsumer": ["agents dashboard", "task surfaces"],
-      "tests": ["tests/test_agent_task_ownership.py", "tests/test_control_plane_ownership.py", "tests/test_task_budget.py"],
+      "frontendConsumer": [
+        "agents dashboard",
+        "task surfaces"
+      ],
+      "tests": [
+        "tests/test_agent_task_ownership.py",
+        "tests/test_control_plane_ownership.py",
+        "tests/test_task_budget.py"
+      ],
       "currentProblem": "Multiple task/job authorities; metadata creation alone does not prove a worker queued execution.",
       "requiredExtension": "Identify actual queue/worker per path and publish owner-produced real progress/terminal events.",
       "migrationStatus": "Partial; do not imply unavailable work is running."
     },
     {
       "area": "Scheduler and Automation",
-      "currentFileModule": ["jarvis_backend/routers/agents.py", "jarvis_backend/capabilities/task.py", "jarvis_backend/temporal_workflows.py"],
+      "currentFileModule": [
+        "jarvis_backend/routers/agents.py",
+        "jarvis_backend/capabilities/task.py",
+        "jarvis_backend/temporal_workflows.py"
+      ],
       "currentOwner": "Scheduler/workflow modules where configured",
       "publicApi": "Agent scheduler status/start/stop and workflow APIs.",
       "dataFlow": "Schedule → task trigger only for configured workers.",
       "eventFlow": "No verified active schedule lifecycle in current route; status may be NOT_CONFIGURED.",
       "authorization": "Authenticated owner/admin operations.",
-      "frontendConsumer": ["frontend/web/src/app/dashboard/agents/page.tsx"],
-      "tests": ["tests/test_agent_task_ownership.py", "workflow/scheduler tests"],
+      "frontendConsumer": [
+        "frontend/web/src/app/dashboard/agents/page.tsx"
+      ],
+      "tests": [
+        "tests/test_agent_task_ownership.py",
+        "workflow/scheduler tests"
+      ],
       "currentProblem": "UI/API explicitly report NOT_CONFIGURED for scheduler path.",
       "requiredExtension": "Only enable after persistent schedule, worker, retry, cancellation and notifications are verified.",
       "migrationStatus": "Not configured / partial."
     },
     {
       "area": "Browser",
-      "currentFileModule": ["jarvis_backend/routers/browser.py", "jarvis_backend/capabilities/browser.py", "jarvis_backend/routers/legacy.py"],
+      "currentFileModule": [
+        "jarvis_backend/routers/browser.py",
+        "jarvis_backend/capabilities/browser.py",
+        "jarvis_backend/routers/legacy.py"
+      ],
       "currentOwner": "Browser session service and BrowserCapability",
       "publicApi": "/api/v1/browser/*, browser tool actions, legacy endpoints.",
       "dataFlow": "Owned browser session/tab → navigation/content/evidence.",
       "eventFlow": "Some browser events mapped; lifecycle/correlation incomplete.",
       "authorization": "Authenticated owner-scoped sessions plus URL/content security checks.",
-      "frontendConsumer": ["frontend/web/src/features/browser/*", "BrowserApp", "chat"],
-      "tests": ["tests/test_browser_api.py", "tests/test_browser_adversarial.py", "tests/test_legacy_browser_truthfulness.py"],
+      "frontendConsumer": [
+        "frontend/web/src/features/browser/*",
+        "BrowserApp",
+        "chat"
+      ],
+      "tests": [
+        "tests/test_browser_api.py",
+        "tests/test_browser_adversarial.py",
+        "tests/test_legacy_browser_truthfulness.py"
+      ],
       "currentProblem": "Current browser API and legacy embedded-browser path are separate; session-to-chat linkage is partial.",
       "requiredExtension": "Correlate actual browser events and evidence references to originating request.",
       "migrationStatus": "Partial; legacy route may be unavailable."
     },
     {
       "area": "Web Search",
-      "currentFileModule": ["jarvis_backend/capabilities/tools/__init__.py", "jarvis_backend/capabilities/browser.py", "jarvis_backend/routers/search.py"],
+      "currentFileModule": [
+        "jarvis_backend/capabilities/tools/__init__.py",
+        "jarvis_backend/capabilities/browser.py",
+        "jarvis_backend/routers/search.py"
+      ],
       "currentOwner": "Tool/browser search and internal search services",
       "publicApi": "Explicit ChatService web-search path and search APIs.",
       "dataFlow": "Query → configured search/browser source → result/context.",
       "eventFlow": "Search/capability events partial; web vs internal knowledge search must remain distinguished.",
       "authorization": "Authenticated request plus tool/search capability policy.",
-      "frontendConsumer": ["chat", "global search", "browser feature"],
-      "tests": ["tests/test_browser_search_live.py", "tests/test_search_navigation.py", "tests/test_chat_capability_runtime.py"],
+      "frontendConsumer": [
+        "chat",
+        "global search",
+        "browser feature"
+      ],
+      "tests": [
+        "tests/test_browser_search_live.py",
+        "tests/test_search_navigation.py",
+        "tests/test_chat_capability_runtime.py"
+      ],
       "currentProblem": "Distinct search backends and configurations can be confused; live web provider not verified.",
       "requiredExtension": "Expose source/evidence references and actual search lifecycle to PIL.",
       "migrationStatus": "Partial; provider-dependent."
     },
     {
       "area": "Location",
-      "currentFileModule": ["jarvis_backend/routers/geography.py", "frontend/web/src/app/dashboard/geography/page.tsx"],
+      "currentFileModule": [
+        "jarvis_backend/routers/geography.py",
+        "frontend/web/src/app/dashboard/geography/page.tsx"
+      ],
       "currentOwner": "Client browser geolocation acquisition and backend geography APIs",
       "publicApi": "User-triggered navigator.geolocation plus geography API.",
       "dataFlow": "Explicit permission → coordinates/accuracy → geocode/route provider.",
       "eventFlow": "Location acquisition is not currently bridged as chat-session canonical events.",
       "authorization": "Explicit browser permission; backend APIs authenticated; no fabricated coordinate policy.",
-      "frontendConsumer": ["geography page"],
-      "tests": ["tests/test_geography.py", "frontend/web/src/app/dashboard/geography/page.test.tsx"],
+      "frontendConsumer": [
+        "geography page"
+      ],
+      "tests": [
+        "tests/test_geography.py",
+        "frontend/web/src/app/dashboard/geography/page.test.tsx"
+      ],
       "currentProblem": "No complete ChatService location capability → event → presentation vertical slice.",
       "requiredExtension": "Authorized location command handoff, received/denied event, real source and accuracy preservation.",
       "migrationStatus": "Not integrated end-to-end."
     },
     {
       "area": "Maps and Geospatial",
-      "currentFileModule": ["jarvis_backend/routers/geography.py", "frontend/web/src/app/dashboard/geography/page.tsx"],
+      "currentFileModule": [
+        "jarvis_backend/routers/geography.py",
+        "frontend/web/src/app/dashboard/geography/page.tsx"
+      ],
       "currentOwner": "Geography service/provider plus client renderer",
       "publicApi": "Geocode, routing, provider/status APIs.",
       "dataFlow": "Coordinates/query → provider → route/place result.",
       "eventFlow": "No verified map-created/updated chat runtime event path.",
       "authorization": "Authenticated APIs; location permission separated from visualization.",
-      "frontendConsumer": ["geography dashboard environment"],
-      "tests": ["tests/test_geography.py", "frontend/web/src/app/dashboard/geography/page.test.tsx"],
+      "frontendConsumer": [
+        "geography dashboard environment"
+      ],
+      "tests": [
+        "tests/test_geography.py",
+        "frontend/web/src/app/dashboard/geography/page.test.tsx"
+      ],
       "currentProblem": "Configured provider and semantic map renderer are not guaranteed by route availability.",
       "requiredExtension": "Implement map renderer and bind actual geospatial result to presentation; no dashboard navigation required.",
       "migrationStatus": "Partial; visual vertical slice not verified."
     },
     {
       "area": "Voice",
-      "currentFileModule": ["jarvis_backend/routers/voice.py", "jarvis_backend/capabilities/voice.py", "frontend/web/src/features/voice/*"],
+      "currentFileModule": [
+        "jarvis_backend/routers/voice.py",
+        "jarvis_backend/capabilities/voice.py",
+        "frontend/web/src/features/voice/*"
+      ],
       "currentOwner": "VoiceCapability plus browser audio/microphone APIs",
       "publicApi": "/api/v1/voice/speak, listen, transcribe, profiles/status and WS paths.",
       "dataFlow": "Microphone/audio → STT → conversation handoff → model → TTS/audio playback when configured.",
       "eventFlow": "Many voice.* producers exist; canonical mappings cover only a subset.",
       "authorization": "Authenticated backend APIs and explicit client microphone permission.",
-      "frontendConsumer": ["voice interface", "chat input/output"],
-      "tests": ["tests/test_voice_runtime_boundary.py", "voice capability tests"],
+      "frontendConsumer": [
+        "voice interface",
+        "chat input/output"
+      ],
+      "tests": [
+        "tests/test_voice_runtime_boundary.py",
+        "voice capability tests"
+      ],
       "currentProblem": "Listen/WS may be NOT_CONFIGURED; same chat session continuity and event coverage incomplete.",
       "requiredExtension": "Share conversation/runtime session and emit verified voice lifecycle transitions.",
       "migrationStatus": "Partial / provider-dependent."
     },
     {
       "area": "Image Generation",
-      "currentFileModule": ["jarvis_backend/capabilities/image_generation.py", "jarvis_backend/routers/media.py"],
+      "currentFileModule": [
+        "jarvis_backend/capabilities/image_generation.py",
+        "jarvis_backend/routers/media.py"
+      ],
       "currentOwner": "ImageGenerationCapability, configured image provider and ArtifactRepository",
       "publicApi": "Image generation and owner-checked artifact APIs.",
       "dataFlow": "Prompt → real configured provider → bytes → persisted owner/provenance artifact → reference.",
       "eventFlow": "Started/completed/failed events include owner/session/execution/artifact IDs; prompt excluded.",
       "authorization": "Server-side provider secret, rate limiting and artifact owner checks.",
-      "frontendConsumer": ["image-generation page", "chat attachments"],
-      "tests": ["tests/test_media.py", "tests/test_image_generation_capability.py", "tests/test_runtime_events.py"],
+      "frontendConsumer": [
+        "image-generation page",
+        "chat attachments"
+      ],
+      "tests": [
+        "tests/test_media.py",
+        "tests/test_image_generation_capability.py",
+        "tests/test_runtime_events.py"
+      ],
       "currentProblem": "Image generation route/page and conversational artifact rendering are not one verified flow.",
       "requiredExtension": "Attach artifact reference to conversation and render via ownership-checked fetch.",
       "migrationStatus": "Capability lifecycle integrated; presentation partial and provider-dependent."
     },
     {
       "area": "Vision",
-      "currentFileModule": ["jarvis_backend/capabilities/vision.py", "jarvis_backend/routers/multimodal.py"],
+      "currentFileModule": [
+        "jarvis_backend/capabilities/vision.py",
+        "jarvis_backend/routers/multimodal.py"
+      ],
       "currentOwner": "VisionCapability and multimodal upload service",
       "publicApi": "Vision capability and multimodal upload endpoints.",
       "dataFlow": "Image/frame upload → storage/provider analysis → normalized interpretation.",
       "eventFlow": "Existing vision event taxonomy; canonical mapping/continuity incomplete.",
       "authorization": "Authenticated upload; camera permission explicit; provider access server-side.",
-      "frontendConsumer": ["chat attachment UI", "media/vision surfaces"],
-      "tests": ["tests/test_media_capabilities.py", "vision tests"],
+      "frontendConsumer": [
+        "chat attachment UI",
+        "media/vision surfaces"
+      ],
+      "tests": [
+        "tests/test_media_capabilities.py",
+        "vision tests"
+      ],
       "currentProblem": "Upload-to-ChatService VisionCapability execution is not verified.",
       "requiredExtension": "Use same chat request/session, artifact ownership and safe analysis references.",
       "migrationStatus": "Partial."
     },
     {
       "area": "Media and Artifacts",
-      "currentFileModule": ["jarvis_backend/routers/media.py", "jarvis_backend/persistence.py", "artifact repositories"],
+      "currentFileModule": [
+        "jarvis_backend/routers/media.py",
+        "jarvis_backend/persistence.py",
+        "artifact repositories"
+      ],
       "currentOwner": "Media router and artifact repository",
       "publicApi": "Upload, generation and owner-scoped artifact retrieval.",
       "dataFlow": "Binary asset + owner/provenance metadata → persisted reference.",
       "eventFlow": "Image generation bridged; other media events incomplete; video returns unavailable in inspected paths.",
       "authorization": "Owner verification and media/provider controls.",
-      "frontendConsumer": ["media/image pages", "chat attachments"],
-      "tests": ["tests/test_media.py", "tests/test_media_capabilities.py"],
+      "frontendConsumer": [
+        "media/image pages",
+        "chat attachments"
+      ],
+      "tests": [
+        "tests/test_media.py",
+        "tests/test_media_capabilities.py"
+      ],
       "currentProblem": "Media entry points and conversation artifacts are separate; video unavailable.",
       "requiredExtension": "Use approved artifact references rather than embedding private binary data into events.",
       "migrationStatus": "Partial."
     },
     {
       "area": "Devices and System Control",
-      "currentFileModule": ["jarvis_backend/routers/system.py", "device-related capability modules", "jarvis_backend/routers/browser.py"],
+      "currentFileModule": [
+        "jarvis_backend/routers/system.py",
+        "device-related capability modules",
+        "jarvis_backend/routers/browser.py"
+      ],
       "currentOwner": "System router and device subsystem where configured",
       "publicApi": "System process/file/clipboard/screenshot APIs and device-specific routes.",
       "dataFlow": "Authenticated command → backend policy → operation → verified result.",
       "eventFlow": "Canonical device event types exist; broad producer coverage is not verified.",
       "authorization": "Owner/admin and endpoint-specific policy; UI is not authority.",
-      "frontendConsumer": ["system/admin/device surfaces"],
-      "tests": ["system, security, ownership and device route tests where present"],
+      "frontendConsumer": [
+        "system/admin/device surfaces"
+      ],
+      "tests": [
+        "system, security, ownership and device route tests where present"
+      ],
       "currentProblem": "Device discovery/pairing/action state varies; no shared-session device runtime verified.",
       "requiredExtension": "Emit only confirmed device state/action outcomes and require backend authorization/confirmation.",
       "migrationStatus": "Partial / not verified end-to-end."
     },
     {
       "area": "Connectors",
-      "currentFileModule": ["jarvis_backend/routers/connectors.py", "connector services", "jarvis_backend/capabilities/tools/__init__.py"],
+      "currentFileModule": [
+        "jarvis_backend/routers/connectors.py",
+        "connector services",
+        "jarvis_backend/capabilities/tools/__init__.py"
+      ],
       "currentOwner": "Connector registry/service and ToolCapability",
       "publicApi": "/api/v1/connectors/* OAuth/configuration/status/action operations.",
       "dataFlow": "Server-held credentials → consented connector → authorized action → normalized result.",
       "eventFlow": "Connector audit exists; canonical runtime linkage incomplete.",
       "authorization": "User/tenant owner checks, explicit action/confirmation, secrets server-side.",
-      "frontendConsumer": ["connections page", "settings", "Copilot"],
-      "tests": ["tests/test_connectors.py", "connector ownership tests"],
+      "frontendConsumer": [
+        "connections page",
+        "settings",
+        "Copilot"
+      ],
+      "tests": [
+        "tests/test_connectors.py",
+        "connector ownership tests"
+      ],
       "currentProblem": "Connectors and MCP/tool invocation are separate planes; readiness varies per connector.",
       "requiredExtension": "Expose true capability/health and correlate chat-originated connector actions.",
       "migrationStatus": "Partial; provider-specific."
     },
     {
       "area": "GitHub and Projects",
-      "currentFileModule": ["GitHub tool integration", "jarvis_backend/chat_service.py project intelligence", "project routes"],
+      "currentFileModule": [
+        "GitHub tool integration",
+        "jarvis_backend/chat_service.py project intelligence",
+        "project routes"
+      ],
       "currentOwner": "GitHub client/tool and project intelligence",
       "publicApi": "Tool actions and project/repository APIs.",
       "dataFlow": "Permissioned repository data → analysis/context/evidence.",
       "eventFlow": "Project activity may appear on chat stream; canonical lifecycle not universal.",
       "authorization": "Server-side GitHub credential and repository/tool permission.",
-      "frontendConsumer": ["project/repository pages", "chat"],
-      "tests": ["GitHub/tool and project-intelligence tests"],
+      "frontendConsumer": [
+        "project/repository pages",
+        "chat"
+      ],
+      "tests": [
+        "GitHub/tool and project-intelligence tests"
+      ],
       "currentProblem": "Project awareness, GitHub actions and project UI are not one registered interaction flow.",
       "requiredExtension": "Define project.inspect/search/diff/test/analyze outputs and request correlation.",
       "migrationStatus": "Partial."
     },
     {
       "area": "Silverwing",
-      "currentFileModule": ["jarvis_backend/gateway.py", "Silverwing runtime/client modules"],
+      "currentFileModule": [
+        "jarvis_backend/gateway.py",
+        "Silverwing runtime/client modules"
+      ],
       "currentOwner": "Silverwing runtime and model router",
       "publicApi": "Configured runtime endpoint, health and inference interfaces.",
       "dataFlow": "Gateway → runtime/model → normalized response.",
       "eventFlow": "Chat model lifecycle covers some execution; active backend details incomplete.",
       "authorization": "Server-side endpoint/provider configuration.",
-      "frontendConsumer": ["chat", "provider/runtime status"],
-      "tests": ["tests/test_silverwing_gateway.py", "tests/test_silverwing_runtime.py", "tests/test_silverwing_integration.py"],
+      "frontendConsumer": [
+        "chat",
+        "provider/runtime status"
+      ],
+      "tests": [
+        "tests/test_silverwing_gateway.py",
+        "tests/test_silverwing_runtime.py",
+        "tests/test_silverwing_integration.py"
+      ],
       "currentProblem": "Installed artifact or implemented client does not prove a serving process; port 8010 was not listening during inspection.",
       "requiredExtension": "Report configured/healthy/active separately and emit route-specific request correlation.",
       "migrationStatus": "Implemented integration; runtime not active at inspection."
     },
     {
       "area": "JARVIS Brain",
-      "currentFileModule": ["jarvis_backend/brain*.py", "Brain gateway/client modules", "jarvis_backend/gateway.py"],
+      "currentFileModule": [
+        "jarvis_backend/brain*.py",
+        "Brain gateway/client modules",
+        "jarvis_backend/gateway.py"
+      ],
       "currentOwner": "Brain service/orchestrator as a gateway intelligence resource",
       "publicApi": "Local/remote Brain gateway and inference contracts.",
       "dataFlow": "Request → reasoning/provider → normalized result.",
       "eventFlow": "Canonical lifecycle depends on selected ChatService/gateway path.",
       "authorization": "Backend configuration and route security.",
-      "frontendConsumer": ["chat", "learning and operations surfaces"],
-      "tests": ["tests/test_brain_contract.py", "tests/test_brain_router.py", "tests/test_jarvis_brain_gateway.py", "tests/test_jarvis_brain_runtime.py"],
+      "frontendConsumer": [
+        "chat",
+        "learning and operations surfaces"
+      ],
+      "tests": [
+        "tests/test_brain_contract.py",
+        "tests/test_brain_router.py",
+        "tests/test_jarvis_brain_gateway.py",
+        "tests/test_jarvis_brain_runtime.py"
+      ],
       "currentProblem": "Brain interfaces coexist with ProviderGateway; it must remain a resource, not another frontend assistant product.",
       "requiredExtension": "Route through existing gateway and publish actual selected execution metadata.",
       "migrationStatus": "Partial integration."
     },
     {
       "area": "Runtime Events and InteractionRuntime",
-      "currentFileModule": ["jarvis_backend/event_fabric.py", "jarvis_backend/runtime_events.py", "jarvis_backend/routers/runtime_events.py"],
+      "currentFileModule": [
+        "jarvis_backend/event_fabric.py",
+        "jarvis_backend/runtime_events.py",
+        "jarvis_backend/routers/runtime_events.py"
+      ],
       "currentOwner": "Existing global EventBus plus RuntimeEventService canonical projection",
-      "publicApi": ["GET /api/v1/runtime/snapshot/{session_id}", "GET /api/v1/runtime/events?session_id=&after="],
+      "publicApi": [
+        "GET /api/v1/runtime/snapshot/{session_id}",
+        "GET /api/v1/runtime/events?session_id=&after="
+      ],
       "dataFlow": "Existing source Event → sanitized canonical envelope → per-user/session sequence, snapshot and bounded replay.",
       "eventFlow": "Chat and selected capability/source producers; repository search found no active InteractionRuntime as the chat request/event authority.",
       "authorization": "get_current_user plus ChatService owned-session validation for snapshot and SSE.",
-      "frontendConsumer": ["frontend/web/src/features/runtime/runtime-event-adapter.ts", "runtime-bridge.tsx", "store.ts"],
-      "tests": ["tests/test_runtime_events.py"],
+      "frontendConsumer": [
+        "frontend/web/src/features/runtime/runtime-event-adapter.ts",
+        "runtime-bridge.tsx",
+        "store.ts"
+      ],
+      "tests": [
+        "tests/test_runtime_events.py"
+      ],
       "currentProblem": "Runtime journal and sequences are in-process only; CapabilityRegistry still has a local bus; source coverage and restart/multi-worker replay are incomplete.",
       "requiredExtension": "Complete existing event-fabric producer coverage; test reconnect/gaps; only add shared persistence if deployment requires it.",
       "migrationStatus": "Protocol implemented; durability and source coverage partial."
     },
     {
       "area": "Observability",
-      "currentFileModule": ["jarvis_backend/observability.py", "jarvis_backend/main.py", "jarvis_backend/capability.py"],
+      "currentFileModule": [
+        "jarvis_backend/observability.py",
+        "jarvis_backend/main.py",
+        "jarvis_backend/capability.py"
+      ],
       "currentOwner": "Request middleware, metrics and OpenTelemetry instrumentation",
       "publicApi": "X-Request-ID, metrics and trace infrastructure.",
       "dataFlow": "HTTP context → logs/metrics/spans; capability execution adds trace attributes.",
       "eventFlow": "Legacy chat now passes HTTP request ID through ChatService and provider context; other entry points vary.",
       "authorization": "Telemetry is not permission; sensitive data must be redacted.",
-      "frontendConsumer": ["monitoring/runtime-status/admin pages"],
-      "tests": ["tests/test_phase2_observability.py", "tests/test_runtime_events.py"],
+      "frontendConsumer": [
+        "monitoring/runtime-status/admin pages"
+      ],
+      "tests": [
+        "tests/test_phase2_observability.py",
+        "tests/test_runtime_events.py"
+      ],
       "currentProblem": "Runtime, HTTP, task and audit IDs/stores are not globally unified.",
       "requiredExtension": "Propagate canonical ID through all interaction entry points and correlate traces without private content.",
       "migrationStatus": "Chat aligned; platform-wide partial."
     },
     {
       "area": "Audit",
-      "currentFileModule": ["infrastructure/audit_events.py", "jarvis_backend/persistence.py", "audit/control-plane/connector routes"],
+      "currentFileModule": [
+        "infrastructure/audit_events.py",
+        "jarvis_backend/persistence.py",
+        "audit/control-plane/connector routes"
+      ],
       "currentOwner": "Existing audit event service and route-specific audit logs",
       "publicApi": "Scoped audit query/admin APIs and internal record calls.",
       "dataFlow": "Action metadata → audit storage/domain tables.",
       "eventFlow": "Separate from RuntimeEventService; runtime event occurrence does not automatically mean durable audit.",
       "authorization": "Admin/owner and actor/resource scoping.",
-      "frontendConsumer": ["admin audit and monitoring surfaces"],
-      "tests": ["tests/test_phase2_observability.py", "tests/test_control_plane_ownership.py", "tests/test_connectors.py"],
+      "frontendConsumer": [
+        "admin audit and monitoring surfaces"
+      ],
+      "tests": [
+        "tests/test_phase2_observability.py",
+        "tests/test_control_plane_ownership.py",
+        "tests/test_connectors.py"
+      ],
       "currentProblem": "Separate audit and runtime stores/correlation joins; persistence varies.",
       "requiredExtension": "Correlate by request ID and explicitly select audit-worthy events; never persist sensitive event payloads indiscriminately.",
       "migrationStatus": "Implemented separately; integration partial."
     },
     {
       "area": "Presentation Intelligence",
-      "currentFileModule": ["jarvis_backend/presentation/planner.py", "policy.py", "schemas.py"],
+      "currentFileModule": [
+        "jarvis_backend/presentation/planner.py",
+        "policy.py",
+        "schemas.py"
+      ],
       "currentOwner": "Backend evidence-grounded planner and policy",
       "publicApi": "Presentation envelopes/events attached to chat responses; preference/state routes.",
       "dataFlow": "Real result/activity + client capabilities → validated semantic intent.",
       "eventFlow": "Presentation lifecycle emitted for selected chat flows; continuous event-driven planning incomplete.",
       "authorization": "Authenticated scoped endpoints; presentation intent grants no execution authority.",
-      "frontendConsumer": ["frontend/web/src/features/runtime/runtime-bridge.tsx", "chat workspace"],
-      "tests": ["tests/test_presentation_planner.py", "tests/test_presentation_runtime.py"],
+      "frontendConsumer": [
+        "frontend/web/src/features/runtime/runtime-bridge.tsx",
+        "chat workspace"
+      ],
+      "tests": [
+        "tests/test_presentation_planner.py",
+        "tests/test_presentation_runtime.py"
+      ],
       "currentProblem": "Presentation planner and live runtime event stream are not universally connected.",
       "requiredExtension": "Consume canonical event evidence and select only supported renderers.",
       "migrationStatus": "Foundation implemented; event integration partial."
     },
     {
       "area": "Presentation Runtime and Capability Bindings",
-      "currentFileModule": ["jarvis_backend/presentation/registry.py", "resolver.py", "router.py", "schemas.py", "jarvis_backend/capability.py"],
+      "currentFileModule": [
+        "jarvis_backend/presentation/registry.py",
+        "resolver.py",
+        "router.py",
+        "schemas.py",
+        "jarvis_backend/capability.py"
+      ],
       "currentOwner": "CapabilityRegistry extension plus semantic renderer negotiation",
       "publicApi": "Contract, capability discovery, client registration, renderer negotiation and preferences/state APIs.",
       "dataFlow": "Output declarations + binding + renderer capability → eligible presentation.",
       "eventFlow": "Presentation lifecycle is informational; interactions become separately authorized backend commands.",
       "authorization": "Authenticated discovery/preferences; capability permission remains backend-side.",
-      "frontendConsumer": ["RuntimeBridge registers text/status renderers"],
-      "tests": ["tests/test_presentation_registry.py", "tests/test_presentation_runtime.py"],
+      "frontendConsumer": [
+        "RuntimeBridge registers text/status renderers"
+      ],
+      "tests": [
+        "tests/test_presentation_registry.py",
+        "tests/test_presentation_runtime.py"
+      ],
       "currentProblem": "Web advertises conversation/text/status only; no verified map/media/research renderer.",
       "requiredExtension": "Implement/test real semantic renderers before advertising; wire preferences intentionally.",
       "migrationStatus": "Foundation implemented; visual runtime partial."
     },
     {
       "area": "Frontend Runtime and State",
-      "currentFileModule": ["frontend/web/src/features/runtime/runtime-bridge.tsx", "runtime-event-adapter.ts", "store.ts"],
+      "currentFileModule": [
+        "frontend/web/src/features/runtime/runtime-bridge.tsx",
+        "runtime-event-adapter.ts",
+        "store.ts"
+      ],
       "currentOwner": "Backend is authoritative; Zustand is runtime projection.",
       "publicApi": "Snapshot fetch, resumable authenticated SSE, presentation/client registration.",
       "dataFlow": "Snapshot/events → client reducer/store → semantic environment/presence state.",
       "eventFlow": "Canonical runtime SSE plus legacy chat/websocket activity ingestion methods.",
       "authorization": "Cookie credentials; backend verifies session ownership.",
-      "frontendConsumer": ["root app layout", "chat workspace", "environment renderers"],
-      "tests": ["frontend/web/src/features/runtime/store.test.ts", "frontend/web/src/components/chat/chat-workspace.test.tsx"],
+      "frontendConsumer": [
+        "root app layout",
+        "chat workspace",
+        "environment renderers"
+      ],
+      "tests": [
+        "frontend/web/src/features/runtime/store.test.ts",
+        "frontend/web/src/components/chat/chat-workspace.test.tsx"
+      ],
       "currentProblem": "SSE does not yet own all activity UI; old polling/socket paths remain.",
       "requiredExtension": "Use one runtime projection for activity and display stream errors, stale state and gaps.",
       "migrationStatus": "Partial migration."
     },
     {
       "area": "Dashboards",
-      "currentFileModule": ["frontend/web/src/app/dashboard/**", "frontend/web/src/components/layout/dashboard-shell.tsx"],
+      "currentFileModule": [
+        "frontend/web/src/app/dashboard/**",
+        "frontend/web/src/components/layout/dashboard-shell.tsx"
+      ],
       "currentOwner": "React route components own page-local view composition; APIs own business state.",
       "publicApi": "Route-specific API wrappers and feature endpoints.",
       "dataFlow": "Pages fetch domain APIs and hold presentation-local state.",
       "eventFlow": "Polling and monitoring WebSockets coexist with canonical runtime SSE.",
       "authorization": "Server endpoint authorization; route and hidden buttons are not security.",
       "frontendConsumer": "Next.js App Router and DashboardShell.",
-      "tests": ["Route-specific frontend tests; no complete page classification suite."],
+      "tests": [
+        "Route-specific frontend tests; no complete page classification suite."
+      ],
       "currentProblem": "Pages mix real capability, compatibility, duplicate, and unavailable surfaces.",
       "requiredExtension": "Classify each route and migrate by capability; retire only after dependent references are proven absent.",
       "migrationStatus": "In progress; per-page classification incomplete."
     },
     {
       "area": "Settings",
-      "currentFileModule": ["jarvis_backend/routers/system.py", "routers/control_plane.py", "routers/connectors.py", "routers/auth.py"],
+      "currentFileModule": [
+        "jarvis_backend/routers/system.py",
+        "routers/control_plane.py",
+        "routers/connectors.py",
+        "routers/auth.py"
+      ],
       "currentOwner": "Backend owner varies by provider, model, connector, account and system setting.",
       "publicApi": "Domain-specific configuration/status routes.",
       "dataFlow": "Authorized mutation → backend config/store/secret service.",
       "eventFlow": "Selected audit; not unified runtime event source.",
       "authorization": "Owner/admin/tenant and connector-specific policy.",
-      "frontendConsumer": ["settings pages", "admin", "system and connections stores"],
-      "tests": ["route-specific settings, ownership and connector tests"],
+      "frontendConsumer": [
+        "settings pages",
+        "admin",
+        "system and connections stores"
+      ],
+      "tests": [
+        "route-specific settings, ownership and connector tests"
+      ],
       "currentProblem": "Settings split across owners; presentation preferences only partially wired.",
       "requiredExtension": "Group by existing backend authority; keep secret material server-side and no UI-only setting.",
       "migrationStatus": "Partial."
     },
     {
       "area": "Frontend API Clients",
-      "currentFileModule": ["frontend/web/src/lib/api-client.ts", "lib/api.ts", "features/*/api.ts"],
+      "currentFileModule": [
+        "frontend/web/src/lib/api-client.ts",
+        "lib/api.ts",
+        "features/*/api.ts"
+      ],
       "currentOwner": "Transport clients only; domain services remain backend owners.",
       "publicApi": "REST fetch, chat SSE, runtime SSE, authenticated WebSocket helper.",
       "dataFlow": "Cookie credentials, request/retry/error handling, stream cancellation.",
       "eventFlow": "Multiple transport adapters; only runtime-event-adapter consumes canonical runtime SSE.",
       "authorization": "HttpOnly cookie and backend auth.",
       "frontendConsumer": "All feature modules.",
-      "tests": ["frontend/web/src/lib/api-client.test.ts", "api-contract.test.ts", "features/chat/api.test.ts"],
+      "tests": [
+        "frontend/web/src/lib/api-client.test.ts",
+        "api-contract.test.ts",
+        "features/chat/api.test.ts"
+      ],
       "currentProblem": "Different retry/cancel/request-ID contracts and multiple transport abstractions.",
       "requiredExtension": "Consolidate shared transport primitives only after tests; avoid moving business decisions into clients.",
       "migrationStatus": "Partial."
     },
     {
       "area": "Database and Persistence",
-      "currentFileModule": ["jarvis_backend/db.py", "jarvis_backend/core.py", "jarvis_backend/persistence.py", "infrastructure/job_registry.py"],
+      "currentFileModule": [
+        "jarvis_backend/db.py",
+        "jarvis_backend/core.py",
+        "jarvis_backend/persistence.py",
+        "infrastructure/job_registry.py"
+      ],
       "currentOwner": "SQLAlchemy engine, jarvis_kv Store adapter and domain repositories",
       "publicApi": "Store load/save and domain repository/service methods.",
       "dataFlow": "SQLite default or DATABASE_URL; generic named collection KV table plus domain tables and command event table.",
       "eventFlow": "Durable command events exist; runtime journal is not persisted/shared.",
       "authorization": "Repository/service and route ownership filters; no general RLS guarantee assumed.",
       "frontendConsumer": "None directly; APIs only.",
-      "tests": ["tests/test_persistence.py", "tests/memory/test_persistence.py", "ownership tests"],
+      "tests": [
+        "tests/test_persistence.py",
+        "tests/memory/test_persistence.py",
+        "ownership tests"
+      ],
       "currentProblem": "Generic KV and relational domain tables coexist; route-wide raw SQL/ownership audit not exhaustive here.",
       "requiredExtension": "Continue parameterized SQL/ORM and scoped repository queries; schema changes via migration.",
       "migrationStatus": "Implemented; audit coverage partial."
     },
     {
       "area": "Secrets and Logging",
-      "currentFileModule": ["jarvis_backend/secret_config.py", "jarvis_backend/observability.py", "provider/connector config modules"],
+      "currentFileModule": [
+        "jarvis_backend/secret_config.py",
+        "jarvis_backend/observability.py",
+        "provider/connector config modules"
+      ],
       "currentOwner": "Backend secret configuration and logging/telemetry services",
       "publicApi": "Server configuration APIs with masked outputs where implemented.",
       "dataFlow": "Environment/secret source → backend provider/connector client.",
       "eventFlow": "Runtime payload sanitizer drops credential-like keys; all historical logs not exhaustively scanned.",
       "authorization": "Secrets never belong in ordinary frontend responses; privileged config policy applies.",
-      "frontendConsumer": ["masked provider/connector settings"],
-      "tests": ["auth/provider/security tests; event redaction tests"],
+      "frontendConsumer": [
+        "masked provider/connector settings"
+      ],
+      "tests": [
+        "auth/provider/security tests; event redaction tests"
+      ],
       "currentProblem": "This inventory is not a full Git history, deployment, CI or log secret scan.",
       "requiredExtension": "Run a separate approved secret/log audit without exposing secret values.",
       "migrationStatus": "Partial audit; no secret values collected."
     },
     {
+      "area": "Alerts and SMTP delivery",
+      "currentFileModule": [
+        "monitoring/alerting_system.py",
+        "jarvis_backend/routers/alert_delivery.py",
+        "deployment/production/docker-compose.prod.yml"
+      ],
+      "currentOwner": "AlertingEngine owns SMTP sends; the dedicated alerts router owns manual administrator test dispatch.",
+      "publicApi": "POST /api/v1/alerts/test-delivery",
+      "dataFlow": "Alert → configured sender → SMTP with mandatory TLS → the configured JARVIS_ALERT_EMAIL_TO recipient allow-list. The caller cannot supply arbitrary recipients or message content.",
+      "eventFlow": "Per-alert delivery status plus _audit_system_action audit entries; canonical runtime-event correlation is not yet implemented.",
+      "authorization": "Manual test endpoint uses the existing _require_admin dependency and requires JARVIS_ALERT_EMAIL_EXTERNAL_NOTIFY=true. Internal monitoring rule notifications retain their existing trusted internal path.",
+      "frontendConsumer": "No frontend action is wired yet; endpoint is administrator/API-only.",
+      "tests": [
+        "tests/test_alert_email_delivery.py",
+        "tests/test_alert_external_delivery_api.py"
+      ],
+      "currentProblem": "Real SMTP provider and mailbox delivery are not verified; endpoint throttle is process-local; deployment must map the environment variables consumed by the SMTP engine.",
+      "requiredExtension": "Keep disabled by default; validate CI and perform a controlled live test to an approved mailbox; add shared gateway throttling before multi-worker or multi-replica exposure.",
+      "migrationStatus": "Implemented on M3D draft branch; CI and live-provider validation pending."
+    },
+    {
       "area": "Notifications",
-      "currentFileModule": ["notification routes/services", "frontend/web/src/components/layout/header.tsx"],
+      "currentFileModule": [
+        "notification routes/services",
+        "frontend/web/src/components/layout/header.tsx"
+      ],
       "currentOwner": "Notification service and per-user frontend view",
       "publicApi": "Notification list/read APIs.",
       "dataFlow": "Stored user notifications → header refresh.",
       "eventFlow": "Header polls; task/runtime event policy is not universal.",
       "authorization": "Per-user authenticated API.",
-      "frontendConsumer": ["frontend/web/src/components/layout/header.tsx"],
-      "tests": ["notification route tests where present"],
+      "frontendConsumer": [
+        "frontend/web/src/components/layout/header.tsx"
+      ],
+      "tests": [
+        "notification route tests where present"
+      ],
       "currentProblem": "Polling is separate from canonical durable event notifications.",
       "requiredExtension": "Connect eligible durable events through notification policy, not direct task polling.",
       "migrationStatus": "Partial."
     },
     {
       "area": "Devices and Multi-surface",
-      "currentFileModule": ["device-related backend routes/capabilities", "frontend platform/runtime metadata"],
+      "currentFileModule": [
+        "device-related backend routes/capabilities",
+        "frontend platform/runtime metadata"
+      ],
       "currentOwner": "Backend device service per integration; renderer per client surface.",
       "publicApi": "Integration-specific device APIs; no single verified device runtime API.",
       "dataFlow": "Discovery/pairing/state/action varies by device provider.",
       "eventFlow": "Device taxonomy exists; producer coverage unverified.",
       "authorization": "Pairing, principal/resource policy and confirmation must be backend-enforced.",
-      "frontendConsumer": ["web/desktop/mobile/device surfaces"],
-      "tests": ["device/system route tests where present"],
+      "frontendConsumer": [
+        "web/desktop/mobile/device surfaces"
+      ],
+      "tests": [
+        "device/system route tests where present"
+      ],
       "currentProblem": "No verified cross-device shared JARVIS session/action lifecycle.",
       "requiredExtension": "Define device identity/pairing, command confirmation and confirmed result events.",
       "migrationStatus": "Not verified end-to-end."
     },
     {
       "area": "Training and Learning",
-      "currentFileModule": ["jarvis_backend/capabilities/bio_learner.py", "research/training/evaluator/curriculum modules", "control plane"],
+      "currentFileModule": [
+        "jarvis_backend/capabilities/bio_learner.py",
+        "research/training/evaluator/curriculum modules",
+        "control plane"
+      ],
       "currentOwner": "Learning capability and training/evaluation/job services",
       "publicApi": "Curriculum, evaluator, dataset, artifact and control-plane APIs.",
       "dataFlow": "Dataset/task → training/evaluation → artifacts/metrics where configured.",
       "eventFlow": "Canonical task/learning lifecycle is incomplete.",
       "authorization": "Dataset ownership and privileged training/deployment operations.",
-      "frontendConsumer": ["bio-growth, learning and model operations pages"],
-      "tests": ["tests/test_learning_loop.py", "tests/test_evaluator.py", "tests/test_jarvis_brain_training.py"],
+      "frontendConsumer": [
+        "bio-growth, learning and model operations pages"
+      ],
+      "tests": [
+        "tests/test_learning_loop.py",
+        "tests/test_evaluator.py",
+        "tests/test_jarvis_brain_training.py"
+      ],
       "currentProblem": "Code or artifact presence does not mean learning job is active.",
       "requiredExtension": "Publish lifecycle only from actual task owner; correlate artifact and evaluation result.",
       "migrationStatus": "Partial; deployment-dependent."
     },
     {
       "area": "Backend and Presentation Runtime Verification",
-      "currentFileModule": ["jarvis_backend/main.py", "frontend/web/src/app/layout.tsx", "frontend/web/src/features/runtime/*"],
+      "currentFileModule": [
+        "jarvis_backend/main.py",
+        "frontend/web/src/app/layout.tsx",
+        "frontend/web/src/features/runtime/*"
+      ],
       "currentOwner": "FastAPI backend, Next.js delivery shell and React renderers.",
       "publicApi": "Backend REST/SSE and frontend Next routes.",
       "dataFlow": "Frontend port 3000 served sign-in shell; backend/Silverwing endpoints not listening during inspection.",
       "eventFlow": "No live runtime stream could be tested without backend.",
       "authorization": "No login performed; no credentials used.",
       "frontendConsumer": "Agent-browser visual inspection of localhost:3000.",
-      "tests": ["Frontend runtime store tests and backend runtime tests; no live provider verification."],
+      "tests": [
+        "Frontend runtime store tests and backend runtime tests; no live provider verification."
+      ],
       "currentProblem": "Only unauthenticated login shell was visually verified; desktop/tablet/mobile and runtime renderer states remain unknown.",
       "requiredExtension": "Start in approved configured environment and test real provider/capability flows with authorized test account and provider.",
       "migrationStatus": "Visual shell verified only; live vertical slices unverified."
