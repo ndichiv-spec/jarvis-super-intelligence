@@ -12,9 +12,14 @@ connectors use.  Messages are held in memory (nothing touches disk).
 
 from __future__ import annotations
 
+import ipaddress
+import os
 import socketserver
+import ssl as _ssl
+import tempfile
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from email.utils import formatdate, make_msgid
 from typing import Dict, List
 
@@ -144,6 +149,159 @@ class FakeSMTPServer(socketserver.ThreadingTCPServer):
     def stop(self) -> None:
         self.shutdown()
         self.server_close()
+
+
+# --------------------------------------------------------------------------- #
+# SMTP with STARTTLS / SMTP_SSL support
+# --------------------------------------------------------------------------- #
+class _SMTPHandlerSTARTTLS(_SMTPHandler):
+    """SMTP handler that supports the STARTTLS command.
+
+    After the client issues STARTTLS, the handler wraps the socket with SSL
+    (server-side) and the conversation continues encrypted.
+    """
+
+    def handle(self) -> None:  # noqa: C901 - tiny protocol interpreter
+        sink = self.server.sink  # type: ignore[attr-defined]
+        self._send(b"220 fake-smtp ESMTP ready")
+        while True:
+            line = self._readline()
+            if line is None:
+                return
+            verb, _, rest = line.partition(b" ")
+            verb = verb.upper()
+            rest = rest.rstrip(b"\r\n")
+            if verb in (b"HELO", b"EHLO"):
+                self._send(b"250-fake-smtp")
+                self._send(b"250-AUTH PLAIN")
+                self._send(b"250-STARTTLS")
+                self._send(b"250 PIPELINING")
+            elif verb == b"STARTTLS":
+                self._send(b"220 Ready to start TLS")
+                self.request = self.server._ssl_context.wrap_socket(  # type: ignore[attr-defined]
+                    self.request, server_side=True
+                )
+                # Recreate file objects over the encrypted socket.
+                self.rfile = self.request.makefile("rb")
+                self.wfile = self.request.makefile("wb")
+            elif verb == b"AUTH":
+                self._send(b"235 2.7.0 Authentication successful")
+            elif verb == b"MAIL":
+                self._send(b"250 OK")
+            elif verb == b"RCPT":
+                self._send(b"250 OK")
+            elif verb == b"DATA":
+                self._send(b"354 End data with <CR><LF>.<CR><LF>")
+                data_parts = [self._readline()]
+                while True:
+                    chunk = self._readline()
+                    if chunk == b".":
+                        break
+                    data_parts.append(chunk)
+                sink.append(b"\r\n".join(data_parts))
+                self._send(b"250 OK message accepted")
+            elif verb == b"RSET":
+                self._send(b"250 OK")
+            elif verb == b"NOOP":
+                self._send(b"250 OK")
+            elif verb == b"QUIT":
+                self._send(b"221 Bye")
+                return
+            else:
+                self._send(b"500 Command unrecognized")
+
+
+class FakeSMTPServerSTARTTLS(FakeSMTPServer):
+    """Fake SMTP server that supports STARTTLS **and** SMTP_SSL.
+
+    Generates a self-signed certificate (via ``cryptography``) for
+    ``localhost`` / ``127.0.0.1``.  Tests that want the client to trust this
+    cert should monkey-patch ``ssl.create_default_context`` to return
+    ``fake.client_ssl_context``:
+
+    .. code-block:: python
+
+        monkeypatch.setattr(
+            alerting_system.ssl, "create_default_context",
+            lambda: fake.client_ssl_context,
+        )
+    """
+
+    def __init__(self, use_ssl: bool = False):
+        self.use_ssl = use_ssl
+        cert_pem, key_pem = self._generate_self_signed_cert()
+        # Write combined cert+key to a temp file (load_cert_chain needs a path).
+        self._cert_fd, self._cert_path = tempfile.mkstemp(suffix=".pem")
+        with os.fdopen(self._cert_fd, "wb") as f:
+            f.write(cert_pem + key_pem)
+        # Server-side SSL context
+        self._ssl_context = _ssl.SSLContext(_ssl.PROTOCOL_TLS_SERVER)
+        self._ssl_context.load_cert_chain(self._cert_path)
+        # Client-side SSL context that trusts the self-signed cert
+        self._client_context = _ssl.SSLContext(_ssl.PROTOCOL_TLS_CLIENT)
+        self._client_context.load_verify_locations(cadata=cert_pem.decode("ascii"))
+        self._client_context.check_hostname = False
+        self._client_context.verify_mode = _ssl.CERT_REQUIRED
+        # Initialise parent server, then swap the handler class
+        super().__init__()
+        self.RequestHandlerClass = _SMTPHandlerSTARTTLS
+
+    @staticmethod
+    def _generate_self_signed_cert() -> tuple[bytes, bytes]:
+        """Generate a self-signed cert/key pair (PEM) for localhost."""
+        from cryptography import x509
+        from cryptography.x509.oid import NameOID
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import rsa
+
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        now = datetime.now(timezone.utc)
+        subject = issuer = x509.Name([
+            x509.NameAttribute(NameOID.COMMON_NAME, "localhost"),
+        ])
+        cert = (
+            x509.CertificateBuilder()
+            .subject_name(subject)
+            .issuer_name(issuer)
+            .public_key(key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now)
+            .not_valid_after(now + timedelta(days=365))
+            .add_extension(
+                x509.SubjectAlternativeName([
+                    x509.DNSName("localhost"),
+                    x509.IPAddress(ipaddress.ip_address("127.0.0.1")),
+                ]),
+                critical=False,
+            )
+            .sign(key, hashes.SHA256())
+        )
+        cert_pem = cert.public_bytes(serialization.Encoding.PEM)
+        key_pem = key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.TraditionalOpenSSL,
+            serialization.NoEncryption(),
+        )
+        return cert_pem, key_pem
+
+    @property
+    def client_ssl_context(self) -> _ssl.SSLContext:
+        """SSLContext that trusts the self-signed cert (for monkey-patching)."""
+        return self._client_context
+
+    def get_request(self):
+        """Wrap the socket with SSL if SMTP_SSL mode is enabled."""
+        sock, addr = super().get_request()
+        if self.use_ssl:
+            sock = self._ssl_context.wrap_socket(sock, server_side=True)
+        return sock, addr
+
+    def stop(self) -> None:
+        super().stop()
+        try:
+            os.unlink(self._cert_path)
+        except (OSError, AttributeError):
+            pass
 
 
 # --------------------------------------------------------------------------- #

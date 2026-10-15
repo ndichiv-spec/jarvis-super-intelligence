@@ -12,7 +12,9 @@ import logging
 import os
 import re
 import smtplib
+import ssl
 import tempfile
+import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Callable
@@ -403,8 +405,8 @@ class AlertingEngine:
         # Update rule last triggered
         rule.last_triggered = datetime.now()
         
-        # Send notifications
-        await self._send_notifications(alert, rule.notification_channels)
+        # Send notifications (monitoring loop is a trusted internal service)
+        await self._send_notifications(alert, rule.notification_channels, authorized=True)
         
         # Create incident if critical
         if rule.severity == AlertSeverity.CRITICAL:
@@ -412,8 +414,15 @@ class AlertingEngine:
         
         logger.warning(f"Alert created: {alert.message}")
     
-    async def _send_notifications(self, alert: Alert, channels: List[NotificationChannel]):
-        """Send alert notifications"""
+    async def _send_notifications(self, alert: Alert, channels: List[NotificationChannel], authorized: bool = False):
+        """Send alert notifications.
+
+        ``authorized`` gates external (email/SMS/webhook) delivery: only the
+        internal monitoring loop — or an API endpoint that has already
+        verified administrator identity — may pass ``authorized=True``.
+        Unauthenticated or non-admin callers receive a ``blocked`` delivery
+        status and no external message is dispatched.
+        """
         for channel in channels:
             delivery = alert.delivery_status.setdefault(
                 channel.value,
@@ -422,7 +431,10 @@ class AlertingEngine:
             try:
                 handler = self.notification_handlers.get(channel)
                 if handler:
-                    await handler(alert)
+                    if channel == NotificationChannel.EMAIL:
+                        await handler(alert, authorized=authorized)
+                    else:
+                        await handler(alert)
                     if delivery.get("status") == "pending":
                         delivery.update(status="delivered", updated_at=datetime.now().isoformat())
                     if delivery.get("status") in ("delivered", "accepted") and channel.value not in alert.notifications_sent:
@@ -453,7 +465,7 @@ class AlertingEngine:
                 logger.error("Alert delivery failed for %s (%s)", channel.value, type(error).__name__)
             self._persist_alert_state()
 
-    async def _send_email_notification(self, alert: Alert):
+    async def _send_email_notification(self, alert: Alert, authorized: bool = False):
         """Deliver an alert as a real email via SMTP.
 
         Credentials are read from environment variables (or a credential
@@ -464,7 +476,25 @@ class AlertingEngine:
 
         Only ``accepted`` (SMTP server accepted the message) is claimed on
         success — end-to-end recipient delivery cannot be verified over SMTP.
+
+        ``authorized`` must be ``True`` — set by the internal monitoring loop
+        or by an API endpoint that has verified administrator identity.
+        Unauthorised callers receive a ``blocked`` status.
         """
+        if not authorized:
+            delivery = alert.delivery_status.setdefault("email", {})
+            delivery.update(
+                status="blocked",
+                error="EMAIL_DELIVERY_UNAUTHORIZED",
+                updated_at=datetime.now().isoformat(),
+            )
+            self._persist_alert_state()
+            logger.warning(
+                "Alert %s email delivery blocked — caller not authorized",
+                alert.id,
+            )
+            return
+
         host = os.environ.get("JARVIS_ALERT_EMAIL_SMTP_HOST", "").strip()
         port_str = os.environ.get("JARVIS_ALERT_EMAIL_SMTP_PORT", "").strip()
         user = os.environ.get("JARVIS_ALERT_EMAIL_SMTP_USER", "").strip()
@@ -508,13 +538,23 @@ class AlertingEngine:
         delivery = alert.delivery_status.setdefault("email", {})
 
         # --- duplicate-delivery protection ------------------------------------
-        current_status = delivery.get("status")
-        if current_status in ("accepted", "delivered"):
-            logger.info(
-                "Alert %s email already accepted/delivered — skipping duplicate",
-                alert.id,
-            )
-            return
+        # The threading.Lock guards the check+ratenlimit+status-mark sequence
+        # (synchronous — no await inside the with-block) so that concurrent
+        # callers / threads cannot both pass the duplicate check.  After the
+        # status is atomically set to "delivering" the lock is released and
+        # the retry loop (which contains awaits) runs lock-free; any late
+        # caller will observe "delivering" and skip.
+        with self._email_delivery_lock:
+            current_status = delivery.get("status")
+            if current_status in ("accepted", "delivered", "delivering"):
+                logger.info(
+                    "Alert %s email already in progress/accepted — skipping duplicate",
+                    alert.id,
+                )
+                return
+
+            # --- rate limit (shared with smtp_connector / per-process) --------
+            self._enforce_email_rate_limit()
 
         # --- bounded retry loop (mirrors webhook pattern) ---------------------
         for attempt in range(1, 4):
@@ -540,7 +580,7 @@ class AlertingEngine:
                 )
                 self._persist_alert_state()
                 raise RuntimeError(str(exc)) from exc
-            except (smtplib.SMTPException, OSError, TimeoutError) as exc:
+            except (smtplib.SMTPException, ssl.SSLError, OSError, TimeoutError) as exc:
                 if attempt < 3:
                     await asyncio.sleep(min(2 ** (attempt - 1), 4))
                     continue
@@ -699,6 +739,32 @@ class AlertingEngine:
         smtplib.SMTPSenderRefused,
     )
 
+    #: Guards the duplicate-check + send sequence against concurrent threads.
+    _email_delivery_lock: threading.Lock = threading.Lock()
+
+    @staticmethod
+    def _enforce_email_rate_limit() -> None:
+        """Enforce the shared per-process SMTP send rate limit (20/hour).
+
+        Reuses ``_check_rate`` from ``jarvis_backend.connectors.mail.smtp_connector``
+        so the limit is global across the alerting engine and the mail
+        connector.  The limit is **per process** — each worker process has its
+        own counter.  If the connector module is unavailable (e.g. in a
+        minimal deployment), rate limiting is silently skipped.
+
+        A ``ConnectorError`` (rate limit exceeded) is re-raised as
+        ``RuntimeError`` so the state machine in ``_send_notifications``
+        classifies it as ``failed``.
+        """
+        try:
+            from jarvis_backend.connectors.base import ConnectorError
+            from jarvis_backend.connectors.mail.smtp_connector import _check_rate
+            _check_rate()
+        except ImportError:
+            pass
+        except ConnectorError as exc:
+            raise RuntimeError(f"SMTP rate limit exceeded: {exc}") from exc
+
     @staticmethod
     def _read_email_password() -> str:
         """Read the SMTP password from env or a credential file.
@@ -767,27 +833,38 @@ class AlertingEngine:
     ) -> None:
         """Perform a single SMTP send attempt.
 
-        Raises ``smtplib.SMTPException`` or ``OSError`` on failure.
-        Returns ``None`` on success (SMTP server accepted the message).
+        Raises ``smtplib.SMTPException`` or ``OSError`` (including
+        ``ssl.SSLError``) on failure.  Returns ``None`` on success (the SMTP
+        server accepted the message).
+
+        Security:
+        * ``SMTP_SSL`` connections use ``ssl.create_default_context()`` which
+          validates the server certificate and hostname by default.
+        * ``STARTTLS`` (plain ``SMTP``) connections *must* upgrade before any
+          authentication data is sent.  A failure to negotiate STARTTLS when
+          credentials are present is a hard error — the connection is closed
+          and the exception propagates (no silent fallback to plaintext).
         """
+        context = ssl.create_default_context()
+
         if use_ssl:
-            server = smtplib.SMTP_SSL(host, port, timeout=15)
+            server = smtplib.SMTP_SSL(host, port, timeout=15, context=context)
         else:
             server = smtplib.SMTP(host, port, timeout=15)
+
         try:
             server.ehlo()
             if not use_ssl:
-                try:
-                    server.starttls()
-                    server.ehlo()
-                except smtplib.SMTPException:
-                    # STARTTLS not supported — re-issue EHLO so esmtp_features
-                    # is consistent before AUTH, matching smtp_connector.py.
-                    try:
-                        server.ehlo()
-                    except smtplib.SMTPException:
-                        pass
+                # STARTTLS is mandatory before AUTH.  If it fails we do NOT
+                # fall back to plaintext — credentials must never traverse an
+                # unencrypted channel.
+                server.starttls(context=context)
+                server.ehlo()
             if user and password:
+                if "auth" not in server.esmtp_features:
+                    raise smtplib.SMTPAuthenticationError(
+                        535, b"5.7.8 SMTP AUTH not advertised over this connection"
+                    )
                 server.login(user, password)
             server.sendmail(sender, recipients, message)
         finally:
