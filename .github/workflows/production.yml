@@ -111,7 +111,7 @@ jobs:
       - name: Lint changed frontend source files
         if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
         run: node scripts/check_frontend_lint_debt.mjs "$LINT_BASE"
-        working-directory: ../..
+        working-directory: .
         env:
           LINT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
       - run: npm test -- --run
