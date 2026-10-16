@@ -27,12 +27,15 @@ WORKSPACE = Path(__file__).resolve().parent.parent
 if str(WORKSPACE) not in os.sys.path:
     os.sys.path.insert(0, str(WORKSPACE))
 
+pytest.importorskip("torch", reason="TorchBackend integration tests require torch")
+
 from silverwing_runtime.backends.architecture import (
     ModelConfig,
     build_silverwing,
     count_parameters,
     expected_parameter_count,
 )
+
 from silverwing_runtime.backends.torch_backend import TorchBackend, TorchBackendError
 from silverwing_runtime.config import RuntimeConfig
 from silverwing_runtime.generation import GenerationConfig, GenerationRequest

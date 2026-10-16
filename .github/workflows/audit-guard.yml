@@ -1,0 +1,24 @@
+name: Audit Guard
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  audit-guard:
+    name: Audit regression guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # The repository has no pinned root requirements file yet (documented
+      # in AUDIT.md, finding P2-3), so the guard installs exactly the minimal
+      # dependencies its checks need.
+      - name: Install guard dependencies
+        run: python -m pip install --upgrade pip pytest httpx pydantic
+      - name: Run audit guard
+        run: python -m pytest tests/test_audit_guard.py -q

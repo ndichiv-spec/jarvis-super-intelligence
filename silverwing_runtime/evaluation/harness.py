@@ -388,7 +388,12 @@ class EvaluationHarness:
     # Hardware info
     # ------------------------------------------------------------------ #
     def capture_hardware(self) -> HardwareInfo:
-        import torch
+        # torch is optional here: hardware capture must also work for
+        # non-torch backends (e.g. EchoBackend) in environments without torch.
+        try:
+            import torch
+        except ImportError:  # noqa: BLE001
+            torch = None
 
         backend_name = getattr(self.backend, "backend", "") or ""
         device = getattr(self.backend, "device", "") or ""
@@ -396,7 +401,7 @@ class EvaluationHarness:
 
         info = HardwareInfo(
             device=device, dtype=dtype, backend=backend_name,
-            torch_version=torch.__version__,
+            torch_version=torch.__version__ if torch is not None else "",
         )
         # CPU RAM
         try:
@@ -405,7 +410,7 @@ class EvaluationHarness:
         except ImportError:
             pass
         # GPU info
-        if torch.cuda.is_available():
+        if torch is not None and torch.cuda.is_available():
             try:
                 info.gpu_name = torch.cuda.get_device_name(0)
                 info.gpu_vram_gb = round(

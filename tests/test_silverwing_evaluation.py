@@ -17,6 +17,7 @@ against the real 120M model via :class:`TorchBackend`.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import re
@@ -236,6 +237,10 @@ class _MockDecoder:
         return torch.randn(batch, seq, 8192, dtype=torch.float32)
 
 
+@pytest.mark.skipif(
+    importlib.util.find_spec("torch") is None,
+    reason="perplexity tests require torch",
+)
 class TestPerplexity:
     def test_perplexity_on_synthetic_model(self):
         """Perplexity is computed and is finite + > 1 for random logits."""

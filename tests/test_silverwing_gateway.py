@@ -255,7 +255,7 @@ async def test_routing_selects_healthy_silverwing():
 
 
 @pytest.mark.asyncio
-async def test_routing_honest_failure_when_offline():
+async def test_routing_honest_failure_when_offline(monkeypatch):
     http = FakeAsyncHTTPClient()
     http.route("/v1/health", status=503, body={"status": "offline", "loaded": False})
     offline = SilverwingClient(
@@ -266,6 +266,17 @@ async def test_routing_honest_failure_when_offline():
         _httpx_client=http,
     )
     offline.mode = "remote"
+
+    # Force the platform fallback to be unavailable so this test is hermetic:
+    # ambient provider credentials must not let a unit test reach a live
+    # provider (the honest-failure path is what is under test here).
+    import jarvis_backend.gateway as _jarvis_gateway
+
+    async def _no_fallback(*_args, **_kwargs):
+        raise RuntimeError("no fallback provider configured (test)")
+
+    monkeypatch.setattr(_jarvis_gateway.provider_gateway, "chat", _no_fallback)
+
     gw = ModelGateway(silverwing=offline)
     with pytest.raises(GatewayError, match="gw_fallback_unavailable"):
         await gw.chat([{"role": "user", "content": "hi"}], task="chat")

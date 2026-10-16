@@ -266,6 +266,18 @@ class RateLimiter:
             )
         return result
 
+    def consume(
+        self,
+        key: str,
+        config: RateLimitConfig,
+    ) -> RateLimitResult:
+        """Consume a token for *key*; raises :class:`RateLimitExceeded` if denied.
+
+        Alias of :meth:`acquire`, kept for API compatibility with callers and
+        tests written against the original ``consume`` name.
+        """
+        return self.acquire(key, config)
+
     def _check_memory(
         self, key: str, config: RateLimitConfig
     ) -> RateLimitResult:
