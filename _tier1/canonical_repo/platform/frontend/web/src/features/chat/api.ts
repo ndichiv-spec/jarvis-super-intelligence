@@ -1,7 +1,6 @@
-import apiClient, { getAuthToken, ApiClientError } from '@/lib/api-client';
+import apiClient, { getAuthToken } from '@/lib/api-client';
 import API_ENDPOINTS from '@/config/api';
 import type {
-  ChatResponse,
   ChatRequest,
   SessionInfo,
   ChatStreamChunk,
@@ -11,6 +10,7 @@ import type {
   ToolCall,
   SemanticPresentationContract,
 } from './types';
+import { parseSseDataLine } from './sse';
 
 function newClientMessageId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -121,23 +121,16 @@ export const chatApi = {
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const chunk = JSON.parse(line.slice(6)) as ChatStreamChunk;
-              onChunk(chunk);
-            } catch {
-              // skip malformed chunks
-            }
+          const chunk = parseSseDataLine(line);
+          if (chunk) {
+            onChunk(chunk);
           }
         }
       }
 
-      if (buffer.startsWith('data: ')) {
-        try {
-          onChunk(JSON.parse(buffer.slice(6)) as ChatStreamChunk);
-        } catch {
-          // skip
-        }
+      const tail = parseSseDataLine(buffer);
+      if (tail) {
+        onChunk(tail);
       }
 
       onComplete();

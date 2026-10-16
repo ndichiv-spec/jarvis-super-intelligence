@@ -76,6 +76,17 @@ must preserve the wire contract (`@types`, API endpoints, store method names) an
 | `src/hooks/useApi.ts`, `useWebSocket.ts`, `useNavigationContext.ts` | Hook contracts |
 | `src/stores/index.ts` | Store barrel |
 
+### 1.7 Backend services & launch surfaces (preserve; route through canonical)
+
+| Surface | What it does | Preserve / action |
+| --- | --- | --- |
+| `_tier1/canonical_repo/platform/jarvis_backend/` | Canonical FastAPI app (44 routers incl. `legacy.py` chat SSE, `auth`, `ai`, `voice`, `monitoring`) | TRACKED canonical (only copy in git). Serve frontend contracts from here. |
+| `Jarvis-super-intelligence-/jarvis_backend/` | Richer live superset (celery/grpc/a2a/temporal/openai_compat + `secret_config.py` + `data/`) | GIT-IGNORED local super-set; do not modify/commit; MERGE FROM only via owner-supervised secret-scrub. |
+| `Jarvis-super-intelligence-/jarvis_api.py` | `uvicorn jarvis_backend.main:app :8000` bootstrap | Do not edit; canonical boot is `python start_jarvis.py`. |
+| `start_jarvis.py` (repo root) | Seeds `admin@jarvis.local`, writes JWT to `_token.txt`, boots uvicorn :8000 | Authoritative dev boot; NOT run without approval (writes token; needs Postgres + keys). |
+| `start_jarvis_unified.py`, `start_unified_jarvis.py` | Generate a STUB `unified_backend.py` (`/` + `/api/v1/status` only) that COLLIDES with the real app | Preserve (do not delete); **recommended for deprecation**; do NOT route real frontend traffic here. |
+| `start_backend.py` / `start_backend2.py` | Launch `python jarvis_api.py` in the op copy | Preserve; legacy launcher. |
+
 ## 2. Simulations & mock data (improvements must label honestly)
 
 Per the task: *"do not fabricate capabilities or live-service connections — label simulations

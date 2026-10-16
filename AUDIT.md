@@ -40,9 +40,13 @@ test or check confirms the fix.**
 | P2-6 | P2 | Lint / line-ending hygiene | 📄 DOCUMENTED | ruff 0.16.1 not configured at root; 54 findings on changed files (pre-existing legacy debt, not enforced by CI); pre-existing CRLF on tracked Python files retained — no mass normalization |
 | P3-1 | P3 | Secret scanning | ✅ COMPLETED (no real secrets) | One AWS-pattern in red-team fixture = documented example key; `.env*`/`.mcp.json` gitignored |
 | P3-2 | P3 | Env/config hygiene (`.env.bak`, `.env.bak2`, `.mcp.json.tmp`) | 📄 DOCUMENTED | gitignored or benign; no secrets committed |
-| FRONTEND-1 | P2 | Frontend lint/CI is effectively non-enforced: `npx eslint .` resolves to a stray EOL ESLint 10 (missing config) in this sandbox, and the local flat-config baseline is **937 problems** (450 errors / 487 warnings, dominated by `no-explicit-any`). No `frontend.yml` CI gate exists. | ⚠️ OPEN | `node_modules/.bin/eslint .` → 937 problems; `npx eslint .` → exit 2; `eslint.config.mjs` present |
-| FRONTEND-2 | P2 | Frontend has **no test runner**: `package.json` has no `test` script; no Jest/Vitest; only an orphaned `features/chat/presentation-adapter.test.mjs` not wired to any harness → no regression guard for frontend behavior. | ⚠️ OPEN | `grep '"test"' package.json` → none; single orphaned `.test.mjs` |
+| FRONTEND-1 | P2 | Frontend lint/CI is effectively non-enforced: `npx eslint .` resolves to a stray EOL ESLint 10 (missing config) in this sandbox, and the local flat-config baseline is **937 problems** (450 errors / 487 warnings, dominated by `no-explicit-any`). No `frontend.yml` CI gate exists. | ⚠️ OPEN | `node_modules/.bin/eslint .` → 937 problems; `npx eslint .` → exit 2; `eslint.config.mjs` present; `frontend.yml` CI gate added (tsc+vitest green) |
+| FRONTEND-2 | P2 | Frontend had **no test runner**: `package.json` had no `test` script; no Jest/Vitest; only an orphaned `features/chat/presentation-adapter.test.mjs` not wired to any harness → no regression guard for frontend behavior. | ✅ FIXED | `vitest ^1.6.1` added as devDep; `test`/`test:ci`/`test:watch` scripts; `vitest.config.ts`; regression tests for SSE parsing + API-contract (`sse.test.ts`, `api.test.ts`) — 12 passed; `tsc --noEmit` exit 0; `eslint` on touched files = 0 problems |
 | FRONTEND-3 | P2 | `useWebSocket` (`src/lib/websocket.ts`) returned `isConnected.current` (a ref read during render), flagged `react-hooks/refs` ("Cannot access refs during render"); affected `useHealthWebSocket`/`useAgentWebSocket` consumers (monitoring/voice real-time). | ✅ FIXED | `tsc --noEmit` → exit 0; `eslint src/lib/websocket.ts` → refs error removed (6→5 problems); public return shape unchanged |
+| BACKEND-1 | P1 | Two divergent `jarvis_backend` packages: canonical tracked (`_tier1/canonical_repo/platform/jarvis_backend/`) vs git-ignored operational superset (`Jarvis-super-intelligence-/jarvis_backend/`); `start_jarvis.py` imports the git-ignored copy, so the live backend cannot be reproduced from a clean checkout. | 📄 DOCUMENTED | `docs/backend/BACKEND_RECONCILIATION.md`; `diff -rq` -> 49 differ, 12 tracked-only, 37 op-only |
+| BACKEND-2 | P1 | Stub launcher route collision: `start_jarvis_unified.py` & `start_unified_jarvis.py` both write a synthetic `unified_backend.py` defining `GET /` and `GET /api/v1/status`, colliding with real `jarvis_backend/main.py:unified_status`. | 📄 DOCUMENTED | `docs/backend/BACKEND_RECONCILIATION.md` sec.4; stubs serve none of chat/auth/voice |
+| BACKEND-3 | P2 | No backend CI gate: only `.github/workflows/audit-guard.yml` (Python pytest); no backend unit/integration/CI, no frontend CI. | ⚠️ OPEN | exactly one CI workflow at `.github/workflows/` |
+| BACKEND-4 | P2 | Backup artifacts: committed `jarvis_backend/gateway.py.before-silverwing-http-fix` + corrupted `routers/system.py.corrupted-backup-20261001_133146` (op copy). | 📄 DOCUMENTED | `docs/backend/BACKEND_RECONCILIATION.md` sec.7; cleanup deferred (non-destructive pass) |
 
 Legend: ✅ = fixed & verified · 📄 = documented / partial · ⚠️ = open · ❓ = not verified here.
 
@@ -302,6 +306,10 @@ are implicit on every pytest invocation below.
 | Secret scan (tracked src) | regex over `git ls-files` | none (P3-1) |
 | Secret scan (git history) | `git log --all -p` regex | none real; one AWS-pattern = documented example key (P3-1) |
 | Env-file exposure | `git status --ignored` | `.env`/`.mcp.json`/`*_auth.txt`/`*.pem` gitignored, not tracked |
+| Frontend type-check | `node_modules/.bin/tsc --noEmit` (in `web/`) | **exit 0** (Next 16.2.4 / TS 6) |
+| Frontend unit tests | `node_modules/.bin/vitest run` (vitest 1.6.1) | **12 passed** (`sse.test.ts` 6 + `api.test.ts` 6) |
+| Frontend lint (touched files) | `node_modules/.bin/eslint <touched>` | **0 errors, 0 warnings** (sse.ts, sse.test.ts, api.test.ts, api.ts, vitest.config.ts) |
+| Frontend build (not run) | `next build` | NOT run - needs backend at 127.0.0.1:8000 (BLOCKED; BACKEND-1/BACKEND-2) |
 
 ---
 
@@ -365,3 +373,40 @@ not run.
 - Two auth layers to reconcile (F1) — cross-cutting, coordinate with backend.
 - Dashboard sub-routes (20+) + `desktop`/`holographic`/`embedded-browser` not sampled
   line-by-line; classified as present, detail-pending.
+
+
+---
+
+## Backend reconciliation (BACKEND-* findings)
+
+Authoritative full-platform architecture lives in `jarvis_backend/` (FastAPI). This `F:\AI` tree
+tracks the **canonical, reproducible** backend at `_tier1/canonical_repo/platform/jarvis_backend/`
+(`main.py` wires 44 routers, including `routers/legacy.py`, which serves the Next.js chat SSE
+contract: `/api/v1/chat/stream`, `/api/chat/sessions`, `/api/chat/history/{id}`, `/api/chat/switch`,
+...). The **operational** superset at the git-ignored `Jarvis-super-intelligence-/jarvis_backend/` is
+richer (celery/grpc/a2a/temporal/langsmith/phoenix/openai_compat + `secret_config.py` + `data/`) but
+is NOT reproducible from a clean checkout and is NOT committed. `start_jarvis.py` imports that
+git-ignored operational copy, so the live running backend cannot be reproduced from this git tree
+alone.
+
+- **Canonical backend (this tree):** `_tier1/canonical_repo/platform/jarvis_backend/` — only copy in git.
+- **Operational reference (git-ignored):** `Jarvis-super-intelligence-/jarvis_backend/` — richer superset to MERGE FROM, not copy wholesale; contains local secrets/data/`.venv`.
+- **File-by-file diff:** 49 differ, 12 tracked-only, 37 op-only. See `docs/backend/BACKEND_RECONCILIATION.md` sec.2.
+- **Startup conflict:** `start_jarvis_unified.py` & `start_unified_jarvis.py` are STUB generators that
+  write a synthetic `unified_backend.py` (routes `GET /`, `GET /api/v1/status`, `/components`,
+  `/metrics`, `/control/{action}`, `/drive/status`, `/ai/status`, `/monitoring/dashboard`), colliding
+  with the real app on `/` and `/api/v1/status`. Authoritative boot = `python start_jarvis.py`
+  (seeds `admin@jarvis.local`, writes JWT to `_token.txt`, `uvicorn jarvis_backend.main:app @127.0.0.1:8000`).
+  Stub launchers are **recommended for deprecation** (not deleted — preserve).
+- **API-contract alignment (verified):** tracked `routers/legacy.py` + `main.py` serve every route
+  the Next.js front end expects (chat SSE, sessions/history/regenerate/resend/feedback/switch, auth,
+  ai, voice, monitoring, status). The frontend<->backend link is real, not simulated.
+- **Reproducible-merge plan (owner-supervised, NOT executed this pass):** secret-scrub the operational
+  superset into a tracked location (exclude `secret_config.py`, `data/`, `.env`, `*.corrupted-backup`,
+  `__pycache__`, `.venv`); merge the 49 differing files + 37 op-only capability files one-by-one (gated
+  by `py_compile` + tests); add `openai_compat`/`notifications`/`runtime_events` routers; reconcile
+  `endpoint_registry.py` (tracked) vs `endpoint_gateway.py` (op); `git rm --cached` the committed
+  `gateway.py.before-silverwing-http-fix`; replace the two stub launchers with one authoritative entry.
+- **Status:** 📄 DOCUMENTED. Backend merge is deferred: the backend is not runnable in this sandbox
+  (no Postgres/provider keys/GPU/network; `start_jarvis.py` not authorized this pass) and the operational
+  copy is git-ignored with local secrets that must be scrubbed before any import.
