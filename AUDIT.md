@@ -40,6 +40,9 @@ test or check confirms the fix.**
 | P2-6 | P2 | Lint / line-ending hygiene | 📄 DOCUMENTED | ruff 0.16.1 not configured at root; 54 findings on changed files (pre-existing legacy debt, not enforced by CI); pre-existing CRLF on tracked Python files retained — no mass normalization |
 | P3-1 | P3 | Secret scanning | ✅ COMPLETED (no real secrets) | One AWS-pattern in red-team fixture = documented example key; `.env*`/`.mcp.json` gitignored |
 | P3-2 | P3 | Env/config hygiene (`.env.bak`, `.env.bak2`, `.mcp.json.tmp`) | 📄 DOCUMENTED | gitignored or benign; no secrets committed |
+| FRONTEND-1 | P2 | Frontend lint/CI is effectively non-enforced: `npx eslint .` resolves to a stray EOL ESLint 10 (missing config) in this sandbox, and the local flat-config baseline is **937 problems** (450 errors / 487 warnings, dominated by `no-explicit-any`). No `frontend.yml` CI gate exists. | ⚠️ OPEN | `node_modules/.bin/eslint .` → 937 problems; `npx eslint .` → exit 2; `eslint.config.mjs` present |
+| FRONTEND-2 | P2 | Frontend has **no test runner**: `package.json` has no `test` script; no Jest/Vitest; only an orphaned `features/chat/presentation-adapter.test.mjs` not wired to any harness → no regression guard for frontend behavior. | ⚠️ OPEN | `grep '"test"' package.json` → none; single orphaned `.test.mjs` |
+| FRONTEND-3 | P2 | `useWebSocket` (`src/lib/websocket.ts`) returned `isConnected.current` (a ref read during render), flagged `react-hooks/refs` ("Cannot access refs during render"); affected `useHealthWebSocket`/`useAgentWebSocket` consumers (monitoring/voice real-time). | ✅ FIXED | `tsc --noEmit` → exit 0; `eslint src/lib/websocket.ts` → refs error removed (6→5 problems); public return shape unchanged |
 
 Legend: ✅ = fixed & verified · 📄 = documented / partial · ⚠️ = open · ❓ = not verified here.
 
@@ -299,3 +302,66 @@ are implicit on every pytest invocation below.
 | Secret scan (tracked src) | regex over `git ls-files` | none (P3-1) |
 | Secret scan (git history) | `git log --all -p` regex | none real; one AWS-pattern = documented example key (P3-1) |
 | Env-file exposure | `git status --ignored` | `.env`/`.mcp.json`/`*_auth.txt`/`*.pem` gitignored, not tracked |
+
+---
+
+## Frontend reality audit (FRONTEND-* findings)
+
+A full, evidence-based reality audit of the canonical, Git-trackable frontend lives at
+`docs/frontend/FRONTEND_REALITY_AUDIT.md`. Summary of what was verified:
+
+- **Framework:** Next.js 16.2.4, React 19.2.5, TS 6.0.3, Tailwind 3.4 + `tailwindcss-animate`,
+  Radix UI, Zustand 4.5, `react-markdown` 9 + `remark-gfm`, `framer-motion`, `lucide-react`,
+  `recharts`, `maplibre-gl`, `socket.io-client`, `sonner`, CVA, `clsx`, `date-fns`, `uuid` 13,
+  `next-themes`. Shadcn-style `components/ui/*` primitives.
+- **Routes:** ~30 App Router routes (root, chat, dashboard/* with 20+ sub-routes, voice,
+  knowledge-hub, locations, image-generation, embedded-browser, workflows, stark-control, omega,
+  login/register/billing/oauth).
+- **Auth (LIVE, weak):** JWT login/refresh/logout against `/api/v1/auth/*`; token persisted in
+  `localStorage` (`jarvis-auth-storage`); 401→silent refresh. Two auth layers coexist
+  (`lib/api.ts` legacy `jarvisAPI` + `features/auth/api.ts`). Matches P1-2 weaknesses (localStorage
+  bearer, no refresh-token rotation, no HttpOnly cookies, no PKCE).
+- **Chat (LIVE):** `features/chat` — SSE streaming (`/api/v1/chat/stream`) w/ 120s abort,
+  placeholder + auto-scroll, model/provider selector (jarvis-brain Qwen3-4B, silverwing,
+  openai/claude/gemini/bedrock/ollama/…), session history, drafts persisted to `localStorage`,
+  edit-and-resend, feedback, export, `SemanticPresentationContract` typed rendering.
+- **Voice (LIVE):** backend-driven TTS/STT via `/api/v1/voice/*`; `VoiceInterface` mounts on
+  `app/voice`. Voice orb/visualizer exist **only as design tokens** (not yet rendered).
+- **Dashboard/monitoring (LIVE):** `dashboard/page.tsx` polls `/api/v1/status` (30s, AbortController
+  cleanup); widgets poll `/api/v1/dashboard/widgets/data/system-metrics` + `/api/v1/monitoring/*`.
+- **Theme (LIVE, distinctive):** `design-tokens.ts` (263 lines) + `globals.css` (~1.5k lines) wire
+  the holographic cyan/teal/JARVIS-mansion dark theme. Not a ChatGPT clone.
+- **Tests:** none configured (`package.json` has no `test` script; no Jest/Vitest); one orphaned
+  `features/chat/presentation-adapter.test.mjs`.
+
+### Frontend — validation evidence (this run)
+
+Environment: node v20.20.2, npm 10.8.2, local `node_modules` present. Backend at
+`127.0.0.1:8000` **not** available (git-ignored, needs Postgres + provider keys) → `next dev`/`build`
+not run.
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Type-check (full project) | `node_modules/.bin/tsc --noEmit` | exit 0 ✅ |
+| Lint (whole project) | `node_modules/.bin/eslint .` | 937 problems (450 errors / 487 warnings), exit 1 ⚠️ |
+| Lint (touched file) | `node_modules/.bin/eslint src/lib/websocket.ts` | refs error **gone** (6→5); 4× `no-explicit-any` + 1× pre-existing `immutability` remain (not introduced by this change) |
+| Build / dev server | `next dev` / `next build` | **not run** — backend unavailable; runtime verification deferred to owner 📛 |
+
+### Fixes landed on `feat/frontend-modernization`
+
+- **FRONTEND-3 ✅** `src/lib/websocket.ts`: replaced render-time ref read
+  (`isConnected: isConnected.current`) with `useState`; connection state is now reactive.
+  `tsc` clean; lint error removed; public API unchanged.
+- **AGENTS.md §9** (frontend area) + tracking-table row.
+- **AUDIT.md** tracking-table rows `FRONTEND-1/2/3` + this section + validation table.
+- `docs/frontend/{FRONTEND_REALITY_AUDIT,PRESERVATION_REGISTER,TRANSFORMATION_PLAN,CHANGELOG}.md`.
+
+### Remaining frontend risks (no owner action taken)
+
+- **FRONTEND-1** lint/CI not enforced; **FRONTEND-2** no test runner — both ⚠️ OPEN.
+- Streaming "stop" only flips a flag, does not abort the SSE `fetch` (chat store).
+- Voice Mic not wired into `/chat`; voice visualizer token-only.
+- Login page theme-inconsistent with the JARVIS holographic theme.
+- Two auth layers to reconcile (F1) — cross-cutting, coordinate with backend.
+- Dashboard sub-routes (20+) + `desktop`/`holographic`/`embedded-browser` not sampled
+  line-by-line; classified as present, detail-pending.

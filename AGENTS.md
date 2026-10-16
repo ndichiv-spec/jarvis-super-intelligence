@@ -36,6 +36,7 @@ your area, e.g.:
 | Code duplication / entry points | P1-5, P1-6 | `JARVIS_CODE_DUPLICATION_AND_CONSOLIDATION.md` |
 | Silverwing runtime / torch imports | P2-2 | (in-tree, kept import-safe) |
 | `diag_harvest.py` | P2-1 | (in-tree) |
+| Frontend (Next.js 16) | FRONTEND-1, FRONTEND-2, FRONTEND-3 | docs/frontend/FRONTEND_REALITY_AUDIT.md |
 
 **Do not merge by file name.** The code-duplication audit (line 9 of
 `JARVIS_CODE_DUPLICATION_AND_CONSOLIDATION.md`) warns that the same basename
@@ -133,3 +134,52 @@ F:\AI (this repo, git root)
 ├── AGENTS.md, AUDIT.md      # this file + findings tracker (ROOT, read first)
 └── Jarvis-super-intelligence-/  [GITIGNORED nested platform repo — do not commit]
 ```
+
+## 9. Frontend area
+
+The authoritative, **Git-trackable** frontend for this project lives at:
+
+```
+_tier1/canonical_repo/platform/frontend/web/   (Next.js 16.2.4, React 19, TS 6, Tailwind 3.4)
+```
+
+It is tracked in this `F:\AI` git tree (208 source files under `…/frontend/web/src/`) and is the
+surface for frontend work on this branch. The `frontend/` inside the git-ignored sibling checkout
+`Jarvis-super-intelligence-/` is a **non-authoritative dev copy** (contains `.next` builds) — do
+**not** edit or merge from it; prefer the `_tier1` canonical copy. The top-level
+`./frontend/web/.tmp-jarvis-transformation/` scratch dir is empty (nothing to preserve).
+
+Before editing the frontend, every agent must:
+
+- **Read** `docs/frontend/FRONTEND_REALITY_AUDIT.md`, `FRONTEND_PRESERVATION_REGISTER.md`, and
+  `FRONTEND_TRANSFORMATION_PLAN.md`. They record what is real (live) vs. simulated and the
+  do-not-destroy surface (auth, chat SSE streams, voice, dashboard polling, the JARVIS holographic
+  theme).
+- **Run the local toolchain, not `npx`-resolved binaries.** In this sandbox `npx eslint .` resolves
+  to a stray EOL ESLint 10 (no config) and fails. Always use the project-local binaries:
+  ```bash
+  cd _tier1/canonical_repo/platform/frontend/web
+  node_modules/.bin/tsc --noEmit        # type-check — must stay exit 0
+  node_modules/.bin/eslint <file>       # lint a touched file (NOT `eslint .` for a baseline)
+  ```
+- **Lint baseline is large and pre-existing** (`eslint .` → 937 problems; 450 errors / 487
+  warnings, dominated by `@typescript-eslint/no-explicit-any`). Do **not** mass-`--fix` or add
+  strict new rules — it would churn unrelated code. Keep each **touched file** clean relative to
+  its prior state; the enforced green gate is `tsc --noEmit` (exit 0) plus zero **new** lint on
+  changed lines.
+- **No frontend test runner is configured** (`package.json` has no `test` script; no Jest/Vitest).
+  Adding one (vitest) + a regression guard + a `frontend.yml` CI gate is in-scope for this branch
+  (see `docs/frontend/FRONTEND_CHANGELOG.md`). A lockfile change is acceptable **only** if a new
+  dev-dependency is genuinely required for a regression test, and it must be justified in the PR
+  description.
+- **The backend is not runnable here.** `next dev`/`next build` expect `jarvis_backend` at
+  `http://127.0.0.1:8000` (git-ignored; needs Postgres + provider keys; no GPU/creds in this
+  sandbox). Therefore **do not claim live behavior without owner runtime verification**, and do
+  **not** fabricate provider/brain results or voice responses.
+- **Preserve the JARVIS identity.** The holographic cyan/teal theme in `src/lib/design-tokens.ts`
+  + `src/app/globals.css` is intentional and live — this is **not** a ChatGPT clone. Pages that
+  deviate from it (e.g. `app/login/page.tsx`, which uses raw `gray-{}`/`purple-{}` Tailwind
+  utilities + an inline blob animation) are migration targets, not rewrites.
+- **Do not** touch git-ignored duplicate frontends, the `_worktrees/` submodule gitlink, root
+  `package-lock.json` (81-byte stub), or any `package-lock.json` unless a real dependency change
+  is required.
