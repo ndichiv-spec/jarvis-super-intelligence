@@ -21,8 +21,6 @@ import math
 from pathlib import Path
 from typing import Any
 
-import torch
-
 from silverwing_runtime.evaluation.results import PerplexityResult
 
 log = logging.getLogger("silverwing_runtime.evaluation.perplexity")
@@ -61,6 +59,11 @@ def compute_perplexity(
         ``val_loss``, ``val_perplexity``, token/window counts, and the SHA-256
         of the validation text.
     """
+    # Imported lazily: torch is only required when a real model is actually
+    # evaluated.  Modules that merely import this helper (or run the harness
+    # against a non-torch backend) must not require torch.
+    import torch
+
     if isinstance(val_text, Path):
         if not val_text.exists():
             raise FileNotFoundError(f"validation file not found: {val_text}")

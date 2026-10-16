@@ -36,12 +36,6 @@ def ctx_around(needle, radius=4):
     return "\n".join(lines)
 
 print(f"\n{'='*70}\n### a2a_spec_v1.txt sampling  ({len(L)} lines)\n{'='*70}")
-for term in [""\"name\": \"AgentCard\"", "capabilities", "StreamingAgentCapabilities",
-             "TaskState", "inputRequired", "working", "completed", "TaskSendParams",
-             "message:send", "tasks.get", "tasks.cancel", "arts:", "protocol":",
-             "mimeTypes", "supportsMessageSend"]:
-    # search for term as substring
-    pass
 
 # simpler: print sections by heading
 print("\n-- AgentCard schema (first occurrence) --")

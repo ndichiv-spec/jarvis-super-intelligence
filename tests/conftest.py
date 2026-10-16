@@ -14,14 +14,21 @@ import pytest
 from httpx import AsyncClient
 
 WORKSPACE_ROOT = Path(__file__).resolve().parent.parent
-if str(WORKSPACE_ROOT) not in sys.path:
-    sys.path.insert(0, str(WORKSPACE_ROOT))
-
-# The platform repository is needed for gateway fallback/catalog integration
-# tests.
 PLATFORM_REPO = WORKSPACE_ROOT / "Jarvis-super-intelligence-"
-if str(PLATFORM_REPO) not in sys.path:
-    sys.path.insert(0, str(PLATFORM_REPO))
+
+# Several roots in this workspace carry divergent copies of the top-level
+# ``providers`` and ``backend`` packages (the workspace root, the platform
+# checkout, ``_tier1/canonical_repo``).  Insert the platform repo first and
+# the workspace root last so the workspace copies win, then pin them in
+# ``sys.modules`` before any test can prepend another root (some tests insert
+# ``_tier1/canonical_repo/platform`` at import time, which would otherwise
+# shadow ``providers``/``backend`` depending on collection order).
+for _root in (PLATFORM_REPO, WORKSPACE_ROOT):
+    if str(_root) not in sys.path:
+        sys.path.insert(0, str(_root))
+
+import backend  # noqa: E402,F401
+import providers  # noqa: E402,F401
 
 # Default Silverwing runtime env for tests (the runtime serves real weights on
 # port 8010 with TorchBackend).  Individual tests may override.
@@ -39,6 +46,11 @@ async def client() -> AsyncClient:
     """
     # Import the app and suppress startup events for testing
     from jarvis_backend.main import app
-    
-    async with AsyncClient(app=app, base_url="http://testserver") as ac:
+
+    # httpx >= 0.28 removed the ``app=`` shortcut; use ASGITransport so the
+    # suite works on both old and new httpx versions.
+    from httpx import ASGITransport
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
         yield ac
