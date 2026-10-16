@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import { getWsBaseUrl } from './api';
 
@@ -32,7 +32,7 @@ export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
   const ws = useRef<WebSocket | null>(null);
   const reconnectCount = useRef(0);
   const reconnectTimer = useRef<NodeJS.Timeout | null>(null);
-  const isConnected = useRef(false);
+  const [isConnected, setIsConnected] = useState(false);
 
   const connect = useCallback(() => {
     try {
@@ -53,7 +53,7 @@ export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
 
       socket.onopen = () => {
         console.log('WebSocket connected');
-        isConnected.current = true;
+        setIsConnected(true);
         reconnectCount.current = 0;
         onConnect?.();
         toast.success('Real-time updates connected', {
@@ -72,7 +72,7 @@ export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
 
       socket.onclose = (event) => {
         console.log('WebSocket disconnected', event.code, event.reason);
-        isConnected.current = false;
+        setIsConnected(false);
         onDisconnect?.();
 
         // Auto-reconnect
@@ -109,8 +109,8 @@ export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
       ws.current.close();
       ws.current = null;
     }
-    
-    isConnected.current = false;
+
+    setIsConnected(false);
   }, []);
 
   const send = useCallback((data: any) => {
@@ -130,7 +130,7 @@ export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
   }, [connect, disconnect]);
 
   return {
-    isConnected: isConnected.current,
+    isConnected: isConnected,
     send,
     disconnect,
     reconnect: connect,
