@@ -82,6 +82,17 @@ def start_frontend():
     subprocess.run(["npm", "run", "dev"], cwd=str(web_dir))
 
 def main():
+    print("[DEPRECATED] This is a STUB generator, NOT the real backend.")
+    print("  It writes a synthetic unified_backend.py defining GET / and")
+    print("  GET /api/v1/status (plus /components, /metrics, /control/{action},")
+    print("  /drive/status, /ai/status, /monitoring/dashboard). Those paths")
+    print("  COLLIDE with the canonical jarvis_backend.main:app on / and")
+    print("  /api/v1/status and serve none of chat/auth/voice.")
+    print("  Use the canonical backend instead (see docs/backend/STARTUP.md):")
+    print("    PYTHONPATH=_tier1/canonical_repo/platform \\")
+    print("      python -m uvicorn jarvis_backend.main:app --host 127.0.0.1 --port 8000")
+    print("  This banner is informational only; behavior is unchanged.")
+    print()
     print("JARVIS Unified System Launcher")
     print("=" * 40)
     

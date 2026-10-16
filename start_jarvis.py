@@ -19,6 +19,7 @@ are owned by system.py module-level helpers, NOT by any startup hook here.
 from __future__ import annotations
 
 import os
+import stat
 import sys
 
 # --- environment (set BEFORE importing jarvis_backend) --------------------- #
@@ -29,10 +30,36 @@ REPO_ROOT = r"F:\AI\Jarvis-super-intelligence-"
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))  # F:/AI
 
 # Make `jarvis_backend` importable regardless of cwd, and chdir to the repo
-# root so relative data paths (jarvis_data/) land inside the repo.
+# root so relative data paths (jarvis_data/) land inside the repo. The chdir
+# is guarded so that *importing* this module (e.g. from tests or CI) does not
+# raise when the git-ignored operational checkout (REPO_ROOT) is absent; the
+# operational boot path is unchanged when that tree is present.
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
-os.chdir(REPO_ROOT)
+if os.path.isdir(REPO_ROOT):
+    os.chdir(REPO_ROOT)
+
+
+def _write_token_file(path: str, token: str) -> None:
+    """Persist an admin bearer token to *path* with mode 0600 (owner-only).
+
+    The token is written via ``os.open`` with mode ``0o600`` and re-chmoded so
+    it is not world-readable regardless of umask. The token *value* is never
+    logged by this helper or by its callers. ``_token.txt`` is covered by
+    ``.gitignore`` (``/_*.txt``) and must never be committed.
+    """
+    # O_WRONLY|O_CREAT|O_TRUNC, mode 0600.
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        os.write(fd, token.encode("utf-8"))
+    finally:
+        os.close(fd)
+    # Belt-and-suspenders: enforce 0600 even if the open mode was ignored
+    # (permissive umask or Windows, which lacks POSIX mode bits). Best-effort.
+    try:
+        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)  # 0o600
+    except OSError:
+        pass
 
 
 def _seed_and_mint_token() -> str:
@@ -73,8 +100,7 @@ def _seed_and_mint_token() -> str:
 
     token = create_token({"sub": admin_id})
     token_path = os.path.join(PROJECT_DIR, "_token.txt")
-    with open(token_path, "w") as fh:
-        fh.write(token)
+    _write_token_file(token_path, token)
     print(f"[start_jarvis] admin JWT written to {token_path} (len={len(token)}, NOT echoed).")
     print(f"[start_jarvis] admin seeded uid={admin_id} email=admin@jarvis.local is_admin=True")
     return token

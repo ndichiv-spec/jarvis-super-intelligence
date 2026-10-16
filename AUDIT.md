@@ -29,14 +29,14 @@ test or check confirms the fix.**
 | P1-1 | P1 | Hardcoded default admin password in `.env.example` | ✅ FIXED | `git diff`; `.env.example` line 44 now commented placeholder |
 | P1-2 | P1 | Auth/session weaknesses (HS256 JWT, no rotation/reuse-detection, localStorage bearer, sessions `ip/user_agent=NULL` no expiry, `get_current_user` ignores session/refresh/status, no PKCE, no HttpOnly cookies, no OIDC id_token verification) | 📄 DOCUMENTED | `jarvis_backend/routers/auth.py`, `jarvis_backend/core.py`; owner-only model in platform recovery (82 auth tests) |
 | P1-3 | P1 | Fragmented plaintext secrets (extensions OAuth plaintext in KV, plaintext `developer.py` keys, dead `VaultFileBackend`, no key rotation) | 📄 DOCUMENTED | `infrastructure/vault/manager.py`, `connectors/crypto.py`, `routers/extensions.py` |
-| P1-4 | P1 | `research_engine` import gap — backend imports an untracked sibling workspace package; clean-clone reproduction unverified | ⚠️ OPEN | `tests/conftest.py` sys.path pin; collection works only with sibling present |
+| P1-4 | P1 | `research_engine` import gap - backend imports an untracked sibling workspace package; clean-clone reproduction unverified | ✅ FIXED | Tracked at _tier1/canonical_repo/research_engine/ (13 pkg files) + root research_engine/; jarvis_backend.main imports in clean venv -> 53 routes, identity integrated, research_engine resolved from _tier1; pytest collection 0 import errors with argon2-cffi+greenlet |
 | P1-5 | P1 | Code duplication — divergent copies of `backend/` & `providers/` across root, `_tier1/canonical_repo`, and `Jarvis-super-intelligence-/` | ⚠️ OPEN | `JARVIS_CODE_DUPLICATION_AND_CONSOLIDATION.md` |
 | P1-6 | P1 | Entry-point ambiguity — multiple launchers for the JARVIS app | 📄 DOCUMENTED | `jarvis_api:app` canonical; `unified_jarvis_api:app` compat; dashboards |
 | P2-1 | P2 | `diag_harvest.py` syntax error (malformed escaped-quote `for` loop) | ✅ FIXED | `py_compile` passes; `test_diag_harvest_compiles` |
 | P2-2 | P2 | Eager heavy imports blocked collection without torch (`silverwing_runtime` backends/perplexity/harness/inference) | ✅ FIXED | `test_silverwing_backends_import_without_torch`; 868 collected, exit 0 |
 | P2-3 | P2 | No pinned root requirements / lockfile (`pyproject.toml`/requirements absent at repo root) | ⚠️ OPEN | `.github/workflows/audit-guard.yml` installs ad-hoc deps |
 | P2-4 | P2 | Dependency constraint drift (`pip check` conflicts) | ⚠️ OPEN | openai 3.23 vs langchain/litellm<3; opentelemetry 0.65 vs 0.66; pydantic-ai vs slim; sqlmodel vs SQLAlchemy 2.1.2 |
-| P2-5 | P2 | Vulnerable dependencies (pip-audit: 68 vulns / 15 pkgs; 573 Dependabot) | ⚠️ OPEN | pip-audit exit 1, env-level, no lockfile; pyjwt/gitpython/litellm/oauthlib/mcp/etc — no broad upgrade attempted |
+| P2-5 | P2 | Vulnerable dependencies (pip-audit: 68 vulns / 15 pkgs; 573 Dependabot) | ⚠️ OPEN | 6 directly-pinned pkgs hardened (gitpython 3.1.60, urllib3 2.8.0, PyJWT 2.15.0, mcp 2.2.0, pip>=26.2, multidict>=6.9.1) w/ isolated pip-audit before->after proof (advisories CLEARED for those 6; ecdsa PYSEC-2026-1325 persists - no upstream fix; oauthlib/python-jose/pydantic-ai/litellm majors still OPEN, env/transitive, not in repo manifest); see docs/backend/DEPENDENCY_SECURITY.md |
 | P2-6 | P2 | Lint / line-ending hygiene | 📄 DOCUMENTED | ruff 0.16.1 not configured at root; 54 findings on changed files (pre-existing legacy debt, not enforced by CI); pre-existing CRLF on tracked Python files retained — no mass normalization |
 | P3-1 | P3 | Secret scanning | ✅ COMPLETED (no real secrets) | One AWS-pattern in red-team fixture = documented example key; `.env*`/`.mcp.json` gitignored |
 | P3-2 | P3 | Env/config hygiene (`.env.bak`, `.env.bak2`, `.mcp.json.tmp`) | 📄 DOCUMENTED | gitignored or benign; no secrets committed |
@@ -45,7 +45,7 @@ test or check confirms the fix.**
 | FRONTEND-3 | P2 | `useWebSocket` (`src/lib/websocket.ts`) returned `isConnected.current` (a ref read during render), flagged `react-hooks/refs` ("Cannot access refs during render"); affected `useHealthWebSocket`/`useAgentWebSocket` consumers (monitoring/voice real-time). | ✅ FIXED | `tsc --noEmit` → exit 0; `eslint src/lib/websocket.ts` → refs error removed (6→5 problems); public return shape unchanged |
 | BACKEND-1 | P1 | Two divergent `jarvis_backend` packages: canonical tracked (`_tier1/canonical_repo/platform/jarvis_backend/`) vs git-ignored operational superset (`Jarvis-super-intelligence-/jarvis_backend/`); `start_jarvis.py` imports the git-ignored copy, so the live backend cannot be reproduced from a clean checkout. | 📄 DOCUMENTED | `docs/backend/BACKEND_RECONCILIATION.md`; `diff -rq` -> 49 differ, 12 tracked-only, 37 op-only |
 | BACKEND-2 | P1 | Stub launcher route collision: `start_jarvis_unified.py` & `start_unified_jarvis.py` both write a synthetic `unified_backend.py` defining `GET /` and `GET /api/v1/status`, colliding with real `jarvis_backend/main.py:unified_status`. | 📄 DOCUMENTED | `docs/backend/BACKEND_RECONCILIATION.md` sec.4; stubs serve none of chat/auth/voice |
-| BACKEND-3 | P2 | No backend CI gate: only `.github/workflows/audit-guard.yml` (Python pytest); no backend unit/integration/CI, no frontend CI. | ⚠️ OPEN | exactly one CI workflow at `.github/workflows/` |
+| BACKEND-3 | P2 | No backend CI gate: only `.github/workflows/audit-guard.yml` (Python pytest); no backend unit/integration/CI, no frontend CI. | ✅ FIXED | Added `.github/workflows/backend-ci.yml` (compile + canonical import smoke + audit guard + startup safety + 9-file backend gate = 254 passed / 4 skipped in clean venv; non-gating collection integrity + pip-audit) |
 | BACKEND-4 | P2 | Backup artifacts: committed `jarvis_backend/gateway.py.before-silverwing-http-fix` + corrupted `routers/system.py.corrupted-backup-20261001_133146` (op copy). | 📄 DOCUMENTED | `docs/backend/BACKEND_RECONCILIATION.md` sec.7; cleanup deferred (non-destructive pass) |
 
 Legend: ✅ = fixed & verified · 📄 = documented / partial · ⚠️ = open · ❓ = not verified here.
@@ -113,17 +113,30 @@ Legend: ✅ = fixed & verified · 📄 = documented / partial · ⚠️ = open �
   `docs/audits/JARVIS_BLOCKER_RESOLUTION_AND_VERIFICATION.md` ("Dependency
   blocker"); `docs/audits/JARVIS_CODE_DUPLICATION_AND_CONSOLIDATION.md`
   ("Inventory method and limits").
-- **Root cause:** `jarvis_backend` modules import `research_engine`, but no
-  `research_engine` package is tracked in this checkout; it resolves from the
-  untracked sibling `F:\AI/research_engine` workspace. A clean clone is
-  therefore **not demonstrably self-contained** and is a release/CI blocker.
-- **Mitigation in this tree:** `tests/conftest.py` pins `backend`/`providers`
-  to the workspace copy and imports them explicitly so collection does not
-  depend on `_tier1/canonical_repo`. This is a *working-tree* workaround, not a
-  fix.
-- **Status:** ⚠️ OPEN. **Do not** create an empty substitute package or claim
-  the catalog is complete. Resolve by versioning `research_engine` or
-  obtaining authorization to migrate it.
+- **Resolution:** `research_engine` IS tracked in this tree - at
+  `_tier1/canonical_repo/research_engine/` (13 package files: `__init__.py`,
+  `agent.py`, `capability_contract.py`, `capability_tools.py`, `data_tools.py`,
+  `document_tools.py`, `geography_math.py`, `geography_tools.py`, `models.py`,
+  `project_tools.py`, `research_engine.py`, `tool_registry.py`, `verification.py`)
+  and at the root `research_engine/` (same set). `jarvis_backend/__init__.py`
+  calls `jarvis_runtime.bootstrap_runtime()` -> `ensure_import_paths()`, which
+  inserts `_tier1/canonical_repo/platform` and `_tier1/canonical_repo` onto
+  `sys.path`, so the tracked `research_engine` resolves from the canonical tree
+  (NOT from the untracked `F:\AI/research_engine` sibling). The
+  `tests/conftest.py` sys.path pin remains as defense in depth.
+- **Evidence (this session, isolated venv WITHOUT torch/langchain/openai,
+  cwd a temp dir, `PYTHONPATH=_tier1/canonical_repo/platform`, no
+  `research_engine` preinstalled):** `python -c "import jarvis_backend.main"
+  as m"` prints `IMPORT_OK`, app type `FastAPI`, 53 routes, logs the
+  identity-router integration line, and `research_engine in sys.modules` is
+  True resolving to `.../_tier1/canonical_repo/research_engine/__init__.py`.
+  With `argon2-cffi` added, `pytest --collect-only -q -m "not integration"`
+  reports 0 import errors. No empty substitute package was created; the real
+  catalog is tracked.
+- **Status:** ✅ FIXED. The prior "untracked sibling" root cause is resolved by
+  canonical-tree tracking + `ensure_import_paths()`; clean-clone import of
+  `jarvis_backend.main` is verified. Operators MAY consolidate the duplicate
+  root `research_engine/` copy, but it is no longer a clean-clone / P1-4 blocker.
 
 ### P1-5 Code duplication / divergent copies
 - **Source:** `docs/audits/JARVIS_CODE_DUPLICATION_AND_CONSOLIDATION.md`.
@@ -277,7 +290,7 @@ Legend: ✅ = fixed & verified · 📄 = documented / partial · ⚠️ = open �
 - Platform-layer authn/authz/PKCE/JWT hardening (P1-2/P1-3): lives in the
   gitignored platform checkout, out of scope to refactor from this tree;
   documented and preserved instead.
-- `research_engine` packaging (P1-4): requires cross-repo decisions; documented.
+- `research_engine` packaging (P1-4): RESOLVED this pass (tracked at _tier1/canonical_repo/research_engine/ + root copy; ensure_import_paths() makes it import cleanly). Consolidating the duplicate root copy is optional owner hygiene, not a blocker.
 - Dependency lockfile / vulnerable-upgrade sweep (P2-3/P2-4/P2-5): broad change
   needing per-alert review; documented and scoped, not attempted.
 - Full offline backend suite (2,572 tests) cited by the recovery report: that
@@ -410,3 +423,44 @@ alone.
 - **Status:** 📄 DOCUMENTED. Backend merge is deferred: the backend is not runnable in this sandbox
   (no Postgres/provider keys/GPU/network; `start_jarvis.py` not authorized this pass) and the operational
   copy is git-ignored with local secrets that must be scrubbed before any import.
+
+
+---
+
+## Phase 6 - backend reconciliation evidence (this session)
+
+Working commit `d7f7e5cf95` on `unify/backend-reconciliation`. All results below
+are reproducible from a clean checkout of this repo. `start_jarvis.py` was NEVER
+executed; no token value was printed, logged, or committed (asserted by
+`tests/test_startup_safety.py`).
+
+| Gate | Command (isolated venv / system python, Python 3.13.14) | Result |
+|------|-----------------------------------------------------------|--------|
+| Canonical backend import | `PYTHONPATH=_tier1/canonical_repo/platform JARVIS_TEST_MODE=1 python -c "import jarvis_backend.main as m; print(len(m.app.routes))"` | `IMPORT_OK`; app=FastAPI; **routes=53**; identity router integrated; `research_engine` resolves from `_tier1/canonical_repo` (P1-4) |
+| py_compile (touched .py) | `python -W error::SyntaxWarning -m py_compile start_jarvis.py tests/test_startup_safety.py start_jarvis_unified.py start_unified_jarvis.py` | exit 0, no SyntaxWarning |
+| Audit regression guard | `python -m pytest tests/test_audit_guard.py -q` (system py) | **10 passed** |
+| Startup safety regression | `python -m pytest tests/test_startup_safety.py -q` (system py) | **7 passed** |
+| Silverwing import safety (P2-2) | `tests/test_silverwing_backends_import_without_torch` | passed |
+| Clean-CI gated backend | `PYTHONPATH=platform pytest <9 files> -q -m 'not integration'` (clean venv + argon2-cffi + greenlet, no torch) | **254 passed, 4 skipped, 1 deselected, 0 failed** |
+| Collection integrity | `PYTHONPATH=platform pytest --collect-only -q -m 'not integration' --continue-on-collection-errors` | **868 collected, 0 import errors** |
+| PR #6 | `gh pr view 6` | NOT verifiable - `net/http: TLS handshake timeout`; api.github.com unreachable from this sandbox |
+
+### Phase 4 dependency remediation - pip-audit before/after proof
+
+Isolated audit venv (`C:\tmp\jarvis_audit_venv`), pip-audit from PyPI. Installed
+ONLY the 6 in-scope packages (no ML runtime), then ran `pip-audit`:
+- **Before** (`gitpython==3.1.50`, `urllib3==2.7.0`, `PyJWT==2.13.0`,
+  `mcp==2.1.1`, `multidict==6.7.1`, `pip==26.1.2`): advisories reported by
+  pip-audit for gitpython (PYSEC-2026-3783..3984), urllib3 (PYSEC-2026-4175/4176/4177),
+  PyJWT (PYSEC-2026-4140..4183), mcp (CVE-2026-59951), multidict (PYSEC-2026-4244),
+  pip (PYSEC-2026-3721).
+- **After** (`gitpython==3.1.60`, `urllib3==2.8.0`, `PyJWT==2.15.0`, `mcp==2.2.0`,
+  `multidict==6.9.1`, `pip==26.2.1`): `pip_audit` reports ONLY
+  `ecdsa 0.19.2 PYSEC-2026-1325` (no fix version exists; `ecdsa==0.21.5` does
+  NOT exist on PyPI - 0.19.2 is current latest). **All six hardened-package
+  advisories are CLEARED.**
+- `ecdsa` therefore pinned to `>=0.19.2` (latest). PYSEC-2026-1325 stays OPEN
+  (no upstream fix). `oauthlib` 3->4 (major, deferred), `python-jose`,
+  pydantic-ai, litellm, langgraph-sdk, pymongo majors remain OPEN under P2-5 -
+  none are in this repo manifest directly. Full per-finding table:
+  `docs/backend/DEPENDENCY_SECURITY.md`.
