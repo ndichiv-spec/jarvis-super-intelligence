@@ -23,7 +23,7 @@ multidict>=6.9.1
 # --- Web / API (canonical jarvis_backend + silverwing ASGI) ---
 fastapi>=0.115,<1
 uvicorn[standard]>=0.32,<1
-python-multipart==0.0.20
+python-multipart>=0.0.32,<1
 websockets>=13.1,<16
 
 # --- Database / cache ---
