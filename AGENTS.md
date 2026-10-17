@@ -167,11 +167,12 @@ Before editing the frontend, every agent must:
   strict new rules — it would churn unrelated code. Keep each **touched file** clean relative to
   its prior state; the enforced green gate is `tsc --noEmit` (exit 0) plus zero **new** lint on
   changed lines.
-- **No frontend test runner is configured** (`package.json` has no `test` script; no Jest/Vitest).
-  Adding one (vitest) + a regression guard + a `frontend.yml` CI gate is in-scope for this branch
-  (see `docs/frontend/FRONTEND_CHANGELOG.md`). A lockfile change is acceptable **only** if a new
-  dev-dependency is genuinely required for a regression test, and it must be justified in the PR
-  description.
+- **Frontend test runner added this branch.** `package.json` now has a `test` script and `vitest
+  ^1.6.1` devDep (see `docs/frontend/FRONTEND_CHANGELOG.md` and `AUDIT.md` FRONTEND-2 ✅ FIXED).
+  Regression guard: `sse.test.ts` (SSE parsing) + `api.test.ts` (API-contract shape) = 12 tests,
+  `tsc --noEmit` exit 0, `eslint` on touched files = 0 problems. A lockfile change is acceptable
+  here because a new dev-dependency is genuinely required for the regression test, justified in the
+  PR description.
 - **The backend is not runnable here.** `next dev`/`next build` expect `jarvis_backend` at
   `http://127.0.0.1:8000` (git-ignored; needs Postgres + provider keys; no GPU/creds in this
   sandbox). Therefore **do not claim live behavior without owner runtime verification**, and do
@@ -183,3 +184,42 @@ Before editing the frontend, every agent must:
 - **Do not** touch git-ignored duplicate frontends, the `_worktrees/` submodule gitlink, root
   `package-lock.json` (81-byte stub), or any `package-lock.json` unless a real dependency change
   is required.
+
+
+## 10. Backend area
+
+The canonical, **Git-trackable** backend for this project is the FastAPI package at:
+
+```
+_tier1/canonical_repo/platform/jarvis_backend/
+```
+
+(`main.py` wires 44 routers, including `routers/legacy.py`, which serves the Next.js chat SSE
+contract: `/api/v1/chat/stream`, `/api/chat/sessions`, `/api/chat/history/{id}`, `/api/chat/switch`,
+plus `auth`, `ai`, `voice`, `monitoring`, and `status`). This is the only `jarvis_backend` copy in git.
+
+The git-ignored sibling `Jarvis-super-intelligence-/jarvis_backend/` is a richer LOCAL superset
+(celery/grpc/a2a/temporal/langsmith/phoenix/openai_compat + `secret_config.py` + `data/`). It is
+**not** reproducible from a clean checkout and is **not** committed; `start_jarvis.py` imports it.
+Treat it as **merge-from** (secret-scrubbed, file-by-file), never a wholesale copy.
+
+Before backend work, every agent must:
+- **Read** `docs/backend/BACKEND_RECONCILIATION.md` first. It is the evidence + reconciliation matrix
+  and records, for `core.py`/`main.py`/`gateway.py`/`chat_service.py`/`db.py`/`identity/`, the Silverwing
+  + MCP + A2A surfaces, `openai_compat`, and the approval/audit services, which are tracked-only,
+  op-only, or differ — with a recommended migration action per conflict.
+- **Boot path:** authoritative dev boot = `python start_jarvis.py` (seeds `admin@jarvis.local`, writes
+  JWT to `_token.txt` — never printed, `uvicorn jarvis_backend.main:app @127.0.0.1:8000`,
+  `JARVIS_TEST_MODE=1`/`JARVIS_ENV=dev`). `Jarvis-super-intelligence-/jarvis_api.py` is the equivalent
+  direct entry. **Do not run without owner approval** (writes a token file; needs Postgres + provider
+  keys). See `docs/backend/CANONICAL_BACKEND.md`.
+- **Stub launchers:** `start_jarvis_unified.py` / `start_unified_jarvis.py` generate a synthetic
+  `unified_backend.py` (routes `/` and `/api/v1/status`) that COLLIDES with the real app and serves
+  none of chat/auth/voice. Preserve (do not delete) but do **not** route real traffic through them.
+- **No mass-merge:** do **not** replace the tracked backend with the git-ignored superset. Reconcile
+  only documented unique capabilities (e.g. `openai_compat`, `notifications`, `runtime_events`) and
+  clean up committed backup artifacts (`gateway.py.before-silverwing-http-fix`,
+  `routers/system.py.corrupted-backup-...`) — each change gated by `py_compile` + tests.
+- **Secrets:** never commit `secret_config.py`, `data/`, `.env`, `.venv`, `*.corrupted-backup`, or
+  `*.pyc`. The operational copy may contain live credentials — scrub before importing.
+

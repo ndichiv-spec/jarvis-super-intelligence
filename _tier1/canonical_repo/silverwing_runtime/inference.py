@@ -17,7 +17,7 @@ import logging
 import time
 from typing import Any
 
-from silverwing_runtime.backends import EchoBackend, InferenceBackend, TorchBackend
+from silverwing_runtime.backends import EchoBackend, InferenceBackend
 from silverwing_runtime.config import RuntimeConfig
 from silverwing_runtime.generation import (
     ChatMessage,
@@ -81,6 +81,10 @@ class InferenceService:
         if self.config.backend.lower() == "echo":
             log.info("SILVERWING_BACKEND=echo -> EchoBackend (dev/test only)")
             return EchoBackend(marker="sw-echo")
+        # Imported lazily: torch is only required when the torch backend is
+        # actually selected (missing torch fails loudly, no silent fallback).
+        from silverwing_runtime.backends.torch_backend import TorchBackend
+
         log.info("SILVERWING_BACKEND default -> TorchBackend for %s", loaded.full_id)
         return TorchBackend(loaded, self.config)
 

@@ -46,6 +46,21 @@ def test_silverwing_backends_import_without_torch():
     assert proc.returncode == 0, proc.stderr
 
 
+def test_canonical_silverwing_backends_import_without_torch():
+    proc = _run_py(
+        "import sys;"
+        "sys.modules['torch'] = None;"
+        "sys.path.insert(0, '_tier1/canonical_repo');"
+        "import silverwing_runtime.backends as b;"
+        "assert 'canonical_repo' in (b.__file__ or ''), b.__file__;"
+        "assert b.EchoBackend is not None;"
+        "assert sys.modules.get('torch') is None, 'torch imported eagerly from mirror';"
+        "import silverwing_runtime.evaluation.benchmarks;"
+        "print('ok')"
+    )
+    assert proc.returncode == 0, proc.stderr
+
+
 def test_backend_package_resolves_to_workspace():
     proc = _run_py(
         "import importlib.util;"
@@ -62,6 +77,21 @@ def test_rate_limiter_consume_contract():
     proc = _run_py(
         "from backend.control_plane.rate_limiter import RateLimiter;"
         "assert hasattr(RateLimiter, 'consume'), 'RateLimiter.consume missing';"
+        "print('ok')"
+    )
+    assert proc.returncode == 0, proc.stderr
+
+
+def test_control_plane_imports_without_requests():
+    proc = _run_py(
+        "import sys;"
+        "sys.modules['requests'] = None;"
+        "from backend.control_plane.rate_limiter import RateLimiter;"
+        "assert hasattr(RateLimiter, 'consume');"
+        "from backend.control_plane.observer import observer, HealthStatus, ServiceHealth;"
+        "h = observer.check_provider_health('nonexistent');"
+        "assert isinstance(h, ServiceHealth), h;"
+        "assert h.health is HealthStatus.UNKNOWN, h;"
         "print('ok')"
     )
     assert proc.returncode == 0, proc.stderr

@@ -152,6 +152,7 @@ _kaggle_silverwing_r2/*
 /kaggle_output/
 /.jarvis_uploads/
 /brain_training/artifacts/
+/jarvis_test.db
 
 # ------------------------------------------------------------------------------
 # 7. GENERATED CORPORA / TRAINING DATASETS

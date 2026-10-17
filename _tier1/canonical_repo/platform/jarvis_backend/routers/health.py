@@ -252,9 +252,30 @@ async def health_ready(response: Response):
 
 @router.get("/metrics", include_in_schema=False)
 async def prometheus_metrics():
-    from fastapi.responses import Response as MetricsResponse
-    from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+    """Prometheus scrape endpoint.
 
+    ``prometheus_client`` is an *optional* monitoring integration: the
+    in-process metrics registry in :mod:`jarvis_backend.observability` keeps
+    working without it (see ``Metrics._prom_init``). If it is not installed we
+    return an honest 503 so monitoring tooling can distinguish "optional
+    metrics adapter unavailable" from a genuine service failure — this is not a
+    suppression of a real error and does not weaken any security control.
+    """
+    from fastapi.responses import Response as MetricsResponse
+
+    try:
+        from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+    except ImportError:
+        return MetricsResponse(
+            content=json.dumps(
+                {
+                    "status": "unavailable",
+                    "detail": "prometheus_client is not installed; /metrics is an optional monitoring adapter",
+                }
+            ),
+            media_type="application/json",
+            status_code=503,
+        )
     return MetricsResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 

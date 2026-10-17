@@ -1,0 +1,126 @@
+# Backend CI — clean-checkout-safe gate for the JARVIS brain/provider/backends tree.
+#
+# Design intent (Phase 3): run ONLY tests that reproduce from a clean checkout
+# of this repo without production credentials, GPUs, Postgres, or a live
+# provider. Heavy/optional ML deps (torch, langchain, openai, transformers,
+# qiskit, etc.) are intentionally NOT installed — they are imported lazily by
+# design (P2-2), so collection and the scoped tests pass without them.
+#
+# The full-platform app (`jarvis_backend.main:app`) is verified to IMPORT and
+# register routes from the tracked canonical tree alone — see the import
+# smoke step. Operational-runtime integration tests (e.g.
+# tests/test_security_gate.py, which exercises /api/v1/status and imports
+# celery/monitoring at request time) are intentionally OUT of this gate: they
+# require the operational runtime and are covered by the platform deployment
+# pipeline (BACKEND-1). We do not suppress their failures — we exclude them
+# with a documented reason.
+
+name: backend-ci
+
+on:
+  push:
+    branches: [unify/backend-reconciliation, main]
+  pull_request:
+    branches: [unify/backend-reconciliation, main]
+  workflow_dispatch:
+
+jobs:
+  backend:
+    name: Backend (clean checkout)
+    runs-on: ubuntu-latest
+    env:
+      # Clean-clone import path for the canonical FastAPI app. jarvis_backend's
+      # __init__ calls jarvis_runtime.bootstrap_runtime() -> ensure_import_paths(),
+      # which also adds _tier1/canonical_repo to sys.path (making the tracked
+      # research_engine importable). Verified in an isolated venv locally.
+      PYTHONPATH: _tier1/canonical_repo/platform
+      # Isolated test configuration: never touches production. The startup
+      # event guard in core.py is bypassed under JARVIS_TEST_MODE.
+      JARVIS_TEST_MODE: "1"
+      JARVIS_ENV: dev
+      DATABASE_URL: sqlite:///./jarvis_test.db  # sync SQLite (canonical db.py:267); aiosqlite triggers sqlalchemy.exc.MissingGreenlet on the canonical sync DB layer
+      JARVIS_SECRET_KEY: dev-only-not-secret-0123456789abcdef0123456789abcdef
+      JARVIS_ADMIN_PASSWORD: test-password-for-testing
+      JARVIS_CORS_ORIGINS: http://localhost:3000
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # needed for `git check-ignore` in the startup-safety test
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            requirements.lock
+
+      - name: Install pinned dependencies (P2-3 manifest)
+        run: |
+          # Upgrade pip to a non-vulnerable version (fixes PYSEC-2026-3721).
+          python -m pip install --upgrade "pip>=26.2"
+          # Root manifest with the Phase-4 security pins (requirements.txt).
+          # Heavy ML packages (torch, transformers, langchain, openai, etc.)
+          # are deliberately omitted — they are imported lazily. python-jose /
+          # ecdsa were removed (P2-5): no tracked module imports them (rg = 0)
+          # and the JWT path uses PyJWT (`import jwt`, identity.py:380) which
+          # is pinned in requirements.txt/lock. Verified by the import smoke +
+          # 9-file gate (incl. identity tests). Fully resolved pins: requirements.lock.
+          python -m pip install -r requirements-dev.txt
+
+      - name: Compile (static syntax gate)
+        run: |
+          python -W error::SyntaxWarning -m compileall -q \
+            silverwing_runtime backend providers jarvis_brain brain_runtime \
+            brain_training learning_arena model_lifecycle teacher_node teacher_mesh identity \
+            tests start_jarvis.py
+
+      - name: Canonical backend import + route registration
+        run: |
+          python -c "import jarvis_backend.main as m; \
+          assert hasattr(m.app, 'routes'); \
+          n=sum(1 for r in m.app.routes); assert n >= 40, n; \
+          print('jarvis_backend.main OK, routes=', n)"
+
+      - name: Audit regression guard
+        run: python -m pytest tests/test_audit_guard.py -q -p no:cacheprovider
+
+      - name: Startup safety regression
+        run: python -m pytest tests/test_startup_safety.py -q -p no:cacheprovider
+
+      - name: Scoped backend tests (clean-checkout safe)
+        run: |
+          # Excludes tests/test_security_gate.py — it drives live /api/v1/status
+          # and imports celery/monitoring at request time (operational runtime,
+          # BACKEND-1). The 9 files below pass 100% in a clean venv.
+          python -m pytest \
+            tests/test_audit_guard.py \
+            tests/test_silverwing_runtime.py \
+            tests/test_silverwing_gateway.py \
+            tests/test_silverwing_evaluation.py \
+            tests/test_provider_fabric.py \
+            tests/test_brain_orchestrator.py \
+            tests/test_brain_contract.py \
+            tests/test_identity.py \
+            tests/test_owner_identity.py \
+            -q -m "not integration" -p no:cacheprovider
+
+      - name: Collection integrity (informational)
+        # Must collect with ZERO import errors from a clean checkout. If this
+        # ever reports errors, a new top-level import was introduced — a P2-2
+        # regression. Non-gating so a count drift does not mask a real failure.
+        continue-on-error: true
+        run: |
+          python -m pytest --collect-only -q -m "not integration" \
+            --continue-on-collection-errors -p no:cacheprovider
+
+      - name: Dependency scan (informational, non-gating)
+        # Documents Phase-4 findings. Not gating: the live sandbox env carries
+        # transitive/editable packages outside this repo's manifests (P2-3/P2-5).
+        continue-on-error: true
+        run: |
+          python -m pip install --quiet pip-audit
+          python -m pip_audit

@@ -12,7 +12,6 @@ from enum import Enum
 import time
 import threading
 import logging
-import requests
 
 from .service_registry import ServiceRegistry, ServiceState, ServiceEntry
 from .observed_state import (
@@ -151,6 +150,15 @@ class Observer:
                 health=HealthStatus.NOT_CONFIGURED,
                 message="No endpoint configured",
             )
+
+        try:
+            import requests
+        except ImportError:
+            return ServiceHealth(
+                service_id=service.service_id,
+                health=HealthStatus.UNKNOWN,
+                message="HTTP health check unavailable: 'requests' is not installed",
+            )
         
         try:
             url = f"{service.endpoint}{service.health_endpoint}"
@@ -226,6 +234,15 @@ class Observer:
     
     def check_provider_health(self, provider_name: str) -> ServiceHealth:
         """Check health of an external provider"""
+        try:
+            import requests
+        except ImportError:
+            return ServiceHealth(
+                service_id=f"provider_{provider_name}",
+                health=HealthStatus.UNKNOWN,
+                message="Provider health check unavailable: 'requests' is not installed",
+            )
+
         # Use the provider API endpoint
         try:
             r = requests.get(f"http://127.0.0.1:8000/api/providers", timeout=10)

@@ -99,7 +99,7 @@ class TestSpec:
 
 @dataclass
 class ChangeSet:
-    """
+    r"""
     A ChangeSet represents an intentional, testable, and reversible
     description of a system mutation.
     

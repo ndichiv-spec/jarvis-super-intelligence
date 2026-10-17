@@ -22,6 +22,13 @@ import threading
 from pathlib import Path
 from typing import Dict, List, Optional
 
+print(
+    "DEPRECATED (BACKEND-2): this launcher generates a synthetic unified_backend.py "
+    "whose GET / and GET /api/v1/status COLLIDE with the real jarvis_backend app. "
+    "Use `python start_jarvis.py` instead. Preserved for reference only.",
+    file=sys.stderr,
+)
+
 # Add current directory to Python path
 current_dir = Path(__file__).parent
 sys.path.insert(0, str(current_dir))
@@ -372,6 +379,16 @@ if __name__ == "__main__":
 
 def main():
     """Main entry point"""
+    print("[DEPRECATED] This is a STUB generator, NOT the real backend.")
+    print("  It writes a synthetic unified_backend.py (GET /, GET /api/v1/status,")
+    print("  /components, /metrics, /control/{action}, /drive/status, /ai/status,")
+    print("  /monitoring/dashboard) that COLLIDES with canonical jarvis_backend.main:app")
+    print("  on / and /api/v1/status and serves none of chat/auth/voice.")
+    print("  Use the canonical backend instead (see docs/backend/STARTUP.md):")
+    print("    PYTHONPATH=_tier1/canonical_repo/platform \\")
+    print("      python -m uvicorn jarvis_backend.main:app --host 127.0.0.1 --port 8000")
+    print("  This banner is informational only; behavior is unchanged.")
+    print()
     launcher = UnifiedJarvisLauncher()
     launcher.run()
 

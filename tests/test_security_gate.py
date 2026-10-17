@@ -14,8 +14,17 @@ These tests verify the boundary between PUBLIC and AUTHENTICATED endpoints.
 """
 from __future__ import annotations
 
+import importlib.util
 import pytest
 from httpx import AsyncClient
+
+# test_security_gate runs against the operational platform backend (op-B)
+# injected by tests/conftest.py. /health/ready and /api/status delegate to
+# op-B runtime_status.build_canonical_runtime_status which imports celery_app
+# (jarvis_backend/celery_app.py:8). Canonical A is celery-free, so skip those
+# two tests under clean-CI (celery absent) instead of fabricating celery.
+# See docs/backend/DEPENDENCY_SECURITY.md ("Clean-CI gate").
+_HAS_CELERY = importlib.util.find_spec("celery") is not None
 
 
 # --------------------------------------------------------------------------- #
@@ -40,6 +49,7 @@ async def test_health_live_no_auth(client: AsyncClient):
     assert response.json().get("status") == "alive"
 
 
+@pytest.mark.skipif(not _HAS_CELERY, reason="op-B /health/ready imports celery_app (jarvis_backend/celery_app.py:8); canonical backend is celery-free")
 @pytest.mark.asyncio
 async def test_health_ready_public(client: AsyncClient):
     """GET /health/ready may be public but should reportBrainz health honestly."""
@@ -55,6 +65,7 @@ async def test_health_basic_no_auth(client: AsyncClient):
     assert response.status_code == 200
 
 
+@pytest.mark.skipif(not _HAS_CELERY, reason="op-B /api/status imports celery_app (jarvis_backend/celery_app.py:8); canonical backend is celery-free")
 @pytest.mark.asyncio
 async def test_api_status_no_auth(client: AsyncClient):
     """GET /api/status should be public."""
@@ -85,10 +96,10 @@ async def test_openapi_docs_no_auth(client: AsyncClient):
     """OpenAPI/Swagger documentation should be public."""
     response = await client.get("/openapi.json")
     assert response.status_code == 200
-    
+
     response = await client.get("/docs")
     assert response.status_code == 200
-    
+
     response = await client.get("/redoc")
     assert response.status_code == 200
 
@@ -245,7 +256,7 @@ async def test_system_provider_settings_requires_admin(client: AsyncClient):
     """GET/PUT /api/v1/system/provider-settings should require admin."""
     response = await client.get("/api/v1/system/provider-settings")
     assert response.status_code in (401, 403)
-    
+
     response = await client.put("/api/v1/system/provider-settings", json={})
     assert response.status_code in (401, 403)
 
@@ -302,7 +313,7 @@ async def test_structured_service_manifest(client: AsyncClient):
     response = await client.get("/")
     assert response.status_code == 200
     data = response.json()
-    
+
     # Verify the manifest structure matches spec Part A
     assert "service" in data
     assert "component" in data
@@ -311,7 +322,7 @@ async def test_structured_service_manifest(client: AsyncClient):
     assert "brain" in data
     assert "providers" in data
     assert "documentation" in data
-    
+
     # Verify documentation endpoints
     docs = data["documentation"]
     assert "/docs" in docs.get("swagger", "") or docs.get("swagger") == "/docs"
