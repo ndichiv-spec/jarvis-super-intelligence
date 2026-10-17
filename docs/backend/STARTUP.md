@@ -10,7 +10,7 @@ can no longer shadow the real application.
 
 | Name | Location | Tracked? | Notes |
 |------|----------|----------|-------|
-| **Canonical FastAPI app** | `_tier1/canonical_repo/platform/jarvis_backend/main.py` → `app = build_app()` | ✅ Git-tracked | Authoritative, reproducible backend. Imports `jarvis_backend.core` (production-startup guard), mounts Silverwing, includes ~44 routers. |
+| **Canonical FastAPI app** | `_tier1/canonical_repo/platform/jarvis_backend/main.py` → `app = build_app()` | ✅ Git-tracked | Authoritative, reproducible backend. Imports `jarvis_backend.core` (production-startup guard), mounts Silverwing, includes 43 routers (41 in the `setup_routers` loop tuple + `identity_internal` + the external `identity` router; 53 route entries in `app.routes`). |
 | Operational superset | `Jarvis-super-intelligence-/jarvis_backend/` (git-ignored) | ❌ Git-ignored | Richer (celery/grpc/a2a/temporal/langsmith + `secret_config.py` + `data/`). Import target is **migration-from**, not canonical. |
 
 - **ASGI target:** `jarvis_backend.main:app`.
@@ -27,7 +27,7 @@ can no longer shadow the real application.
 > **Do not run `start_jarvis.py` for the canonical clean-clone boot.** The root
 > `start_jarvis.py` is the *authoritative operational* launcher, but it
 > hard-codes `REPO_ROOT = F:\AI\Jarvis-super-intelligence-` (the git-ignored
-> operational superset) on `sys.path` (line 28) and seeds an admin user +
+> operational superset) via `sys.path.insert(0, REPO_ROOT)` (lines 37-38), with a guarded `os.chdir` (lines 39-40), and seeds an admin user +
 > writes a JWT to `_token.txt`. It is **not** clean-checkout-reproducible and is
 > **not authorized to execute in this sandbox** (Phase 5). Use the canonical
 > boot below to obtain a reproducible import + route registration from the
@@ -37,9 +37,9 @@ can no longer shadow the real application.
 
 ```dotenv
 # All of these are OPTIONAL in dev/test; no production secrets required.
-JARVIS_TEST_MODE=1            # disables the production startup guard (P1-2/P1-3 path)
+JARVIS_TEST_MODE=1            # dev/test: is_production() is False (JARVIS_ENV not 'production'), so _jarvis_startup skips the SECRET_KEY/ADMIN_PASSWORD/DATABASE_URL/CORS production checks; db falls back to in-memory sqlite://
 JARVIS_ENV=dev
-DATABASE_URL=sqlite+aiosqlite:///./.test_jarvis.db   # isolated SQLite, file in CWD
+DATABASE_URL=sqlite:///./.test_jarvis.db   # sync SQLite (core uses a SYNC engine; sqlite+aiosqlite:// triggers sqlalchemy.exc.MissingGreenlet)
 JARVIS_SECRET_KEY=dev-only-not-secret-0123456789abcdef0123456789abcdef  # 64 chars (dev only)
 JARVIS_ADMIN_PASSWORD=test-password-for-testing   # 16+ chars (dev only)
 JARVIS_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
@@ -47,11 +47,15 @@ JARVIS_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 # out-of-service; results are never fabricated.
 ```
 
-These map directly onto the guard block in `jarvis_backend/core.py`
-(`build_app` / the `startup` event): in `JARVIS_TEST_MODE=1` the
-≥32-char `JARVIS_SECRET_KEY` / ≥16-char `JARVIS_ADMIN_PASSWORD` /
-`DATABASE_URL` / `CORS_ORIGINS` checks are bypassed for dev; outside test mode
-the guard enforces all four. See `core.py` `require_production_env()`.
+These map onto the production guard `is_production()` (`jarvis_backend/core.py:178`),
+invoked from the `startup` event `_jarvis_startup` (`jarvis_backend/main.py:458`):
+in `JARVIS_TEST_MODE=1` the environment is `dev`/test (not `production`), so
+`is_production()` returns False and `_jarvis_startup` skips the
+32-char `JARVIS_SECRET_KEY` / 16-char `JARVIS_ADMIN_PASSWORD` / `postgresql://`
+`DATABASE_URL` / `JDBC_ORIGINS`-style CORS checks; when `JARVIS_ENV` is
+`production`/`prod`, `is_production()` is True and `_jarvis_startup` enforces all
+four. There is **no** `require_production_env()` in the tracked source - the guard
+is `is_production()` plus `_jarvis_startup` (main.py:458-476).
 
 ### Clean-checkout boot command
 
@@ -63,7 +67,7 @@ on the import path:
 $env:PYTHONPATH = 'F:\AI\_tier1\canonical_repo\platform'
 $env:JARVIS_TEST_MODE = '1'
 $env:JARVIS_ENV = 'dev'
-$env:DATABASE_URL = 'sqlite+aiosqlite:///C:/Windows/Temp/jarvis_clean.db'
+$env:DATABASE_URL = 'sqlite:///C:/Windows/Temp/jarvis_clean.db'   # sync SQLite (NOT +aiosqlite - core.py/db.py use a SYNC engine)
 $env:JARVIS_SECRET_KEY = 'dev-only-not-secret-0123456789abcdef0123456789abcdef'
 $env:JARVIS_ADMIN_PASSWORD = 'test-password-for-testing'
 $env:JARVIS_CORS_ORIGINS = 'http://localhost:3000'
@@ -86,7 +90,7 @@ python -c "import jarvis_backend.main as m; \
 print('routes', len([r for r in m.app.routes]))"
 # Expected: a FastAPI app prints, then "routes 53" (canonical route count
 # including mounts /api/status /api/v1/status /api/runtime/status /silverwing
-# /mcp + the 42 routers' endpoints aggregated under mounts).
+# /mcp + the 43 routers' endpoints aggregated under mounts).
 ```
 
 **Verified this session** in an isolated venv

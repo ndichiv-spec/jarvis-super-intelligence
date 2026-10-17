@@ -2,7 +2,7 @@
 
 **Scope.** This report covers the Phase-4 dependency-security inspection for the
 `jarvis-super-intelligence` repository (branch `unify/backend-reconciliation`,
-commit `d7f7e5cf95`). It records (a) the vulnerable-dependency findings, (b) the
+commit `4026357a3ee2055e8a809547d267c727940922b1` (local HEAD; remote origin `d7f7e5cf95` -- push blocked; PR #6 unverifiable: api.github.com unreachable, no egress). It records (a) the vulnerable-dependency findings, (b) the
 targeted remediation applied to `_tier1/canonical_repo/platform/requirements.txt`,
 and (c) an isolated `pip-audit` before/after proof.
 
@@ -40,15 +40,14 @@ auth-critical runtime packages; only within-major bumps to fixed releases.
   and `mcp.types`; it is consumed by `jarvis_backend/routers/health.py`
   (`mcp_status`) and `jarvis_backend/runtime_status.py`. The CVE-2026-59951
   remediation (2.1.1 -> 2.2.0) therefore closes a **high-priority** surface on a
-  live MCP server path. Regression coverage: `tests/test_mcp_runtime.py`.
+  live MCP server path. Regression coverage: canonical-import clean-venv gate (`import jarvis_backend.main`, 53 routes, MCP/runtime integrated); `tests/test_mcp_runtime.py` is **not present** in this checkout.
 - **`gitpython`** — declared in `requirements.txt`'s `SECURITY FIXES` block, but
   **not imported by the audited F:\AI tree modules** (no `import git` / `from git`
   in tracked source). It is consumed by build/workspace tooling that is not part
   of this checkout's runtime import graph. Still hardened because the manifest
   pins it.
-- **`PyJWT` / `ecdsa`** — declared in `requirements.txt` (AUTHENTICATION block);
-  the tracked source uses `python-jose[cryptography]` for JWT, with `ecdsa` as a
-  transitive cryptography backend. Hardened where a fixed version exists.
+- **`PyJWT` / `ecdsa` / `python-jose`** — declared in `requirements.txt` (AUTHENTICATION block);
+  the tracked source does **NOT** use `python-jose`. `jarvis_backend/core.py` implements the JWT layer directly with the Python standard library (`create_token`/`decode_token`, HMAC-SHA256, HS256 algorithm) - grep confirms no `import jose` / `from jose` under `_tier1/canonical_repo/platform`. `python-jose[cryptography]>=3.3.0` and `ecdsa>=0.19.2` are declared in `requirements.txt` but are **not** on the production JWT code path.
 - **`urllib3` / `multidict`** — transitive (via `requests`/`aiohttp`/`pip`); not
   imported directly by tracked source. Hardened at the manifest level to close
   the advisories for dependents.
@@ -92,8 +91,8 @@ env/transitive only and are **not** pinned in this repo's manifest.
 
 | Package | Installed | Advisory | Severity (PyPI) | In repo manifest? | Action |
 |---------|-----------|----------|-----------------|-------------------|--------|
-| `ecdsa` | 0.19.2 | PYSEC-2026-1325 | medium | yes (`ecdsa>=0.19.2`, transitive via jose) | ⚠️ OPEN — no upstream fix; pin to latest, monitor |
-| `python-jose` | 3.5.0 | PYSEC-2026-4298 | — | yes (`python-jose[cryptography]>=3.3.0`) | ⚠️ OPEN — no upstream fix reported; track |
+| `ecdsa` | 0.19.2 | PYSEC-2026-1325 | medium | yes (`ecdsa>=0.19.2` direct in AUTHENTICATION block; not on JWT path - stdlib HS256) | ⚠️ OPEN — no upstream fix; pin to latest, monitor |
+| `python-jose` | 3.5.0 | PYSEC-2026-4298 | medium | yes (`python-jose[cryptography]>=3.3.0` direct; **not imported** by JWT path - stdlib HS256) | ⚠️ OPEN — no upstream fix; not on JWT path (stdlib HS256); medium, low residual |
 | `oauthlib` | 3.3.1 | PYSEC-2026-4257 (and others) | high | no — env/transitive only | ⚠️ OPEN — major bump 3->4 deferred (P2 risk) |
 | `litellm` | 1.95.0 | (Dependabot, multiple) | — | no — env/transitive only | ⚠️ OPEN — requires major/ecosystem review |
 | `pydantic-ai` | 2.32.1 | (Dependabot) | — | no — env/transitive only | ⚠️ OPEN |
@@ -127,11 +126,11 @@ from a clean-checkout venv with **no** `torch`/`langchain`/`openai`:
 |-------|---------|--------|
 | Compile (touched files) | `python -W error::SyntaxWarning -m py_compile .../backend-ci.yml` (touched .py) | exit 0 |
 | Canonical backend import (clean venv) | `PYTHONPATH=platform JARVIS_TEST_MODE=1 python -c "import jarvis_backend.main"` | `IMPORT_OK`, FastAPI, **53 routes**, identity + MCP runtime integrated; `research_engine` from `_tier1` |
-| Clean-CI gated backend suite | `PYTHONPATH=platform pytest <9 files> -q -m "not integration"` (clean venv + argon2-cffi + greenlet) | **254 passed, 4 skipped, 1 deselected, 0 failed** |
-| Collection integrity (full) | `PYTHONPATH=platform pytest --collect-only -q -m "not integration" --continue-on-collection-errors` | **868 collected, 0 import errors** |
+| Clean-CI gated backend suite | `PYTHONPATH=platform pytest tests/test_audit_guard.py tests/test_silverwing_runtime.py tests/test_silverwing_gateway.py tests/test_silverwing_evaluation.py tests/test_provider_fabric.py -q -m "not integration"` (clean venv, no torch/langchain/openai) | **125 passed, 4 skipped, 0 deselected, 0 failed** (129 items; 4 skipped = torch-perplexity in silverwing_evaluation) |
+| Collection integrity (full) | `PYTHONPATH=platform pytest --collect-only -q -m "not integration" --continue-on-collection-errors` | **886 collected (875 selected, 11 deselected), 0 import errors** |
 | Audit regression guard | `python -m pytest tests/test_audit_guard.py -q` | 10 passed |
 | Startup safety regression | `python -m pytest tests/test_startup_safety.py -q` | 7 passed |
-| MCP import safety | `tests/test_mcp_runtime.py` (exercised in the 9-file gate) | passed |
+| MCP import safety | `mcp_runtime.py` import-safe in clean venv (mcp 2.2.0); `tests/test_mcp_runtime.py` is **not present** in this checkout (no MCP unit test exercised; covered by canonical-import gate + runtime `mcp_status`) | passed (import gate) |
 
 `tests/test_security_gate.py` is **excluded** from the clean-checkout gate: its
 `/api/v1/status` / `/health` / `/ready` routes import `celery` and call into
