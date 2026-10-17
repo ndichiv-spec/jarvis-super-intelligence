@@ -556,7 +556,7 @@ they can be closed as superseded.
 | 9-file backend gate | `pytest tests/test_audit_guard.py tests/test_silverwing_runtime.py tests/test_silverwing_gateway.py tests/test_silverwing_evaluation.py tests/test_provider_fabric.py tests/test_brain_orchestrator.py tests/test_brain_contract.py tests/test_identity.py tests/test_owner_identity.py -q -m "not integration"` (manifest venv) | **all passed**, exit 0 |
 | Collection integrity | `pytest --collect-only -q -m "not integration" --continue-on-collection-errors` (manifest venv) | 0 import errors, exit 0 |
 | Lock generation | `pip install --dry-run --ignore-installed --report <json> -r requirements-dev.txt` → `requirements.lock` | 107 pins; `pywin32` carries `sys_platform == "win32"` marker |
-| Vuln scan (CI-equivalent) | first CI run of the manifest flagged `python-multipart==0.0.20` (12 advisories, fix ≤0.0.31) → bumped to `>=0.0.32,<1` in all 4 manifests; `pip-audit` inside the manifest venv | **No known vulnerabilities found** (local proof; CI informational scan re-verified on push) |
+| Vuln scan (CI-equivalent) | first CI run of the manifest flagged `python-multipart==0.0.20` (12 advisories, fix ≤0.0.31) → bumped to `>=0.0.32,<1` in all 4 manifests; `pip-audit` inside the manifest venv | **No known vulnerabilities found** (local proof; CI re-verified — run 39051644402) |
 | Env-key audit | extract env names read by tracked code (210) vs `.env.example` | Added missing credential entries: `GEMINI_API_KEY`, `GOOGLE_APPLICATION_CREDENTIALS`, `HUGGING_FACE_HUB_TOKEN`, `NVIDIA_API_TOKEN`/`NIM_API_KEY` aliases, AWS env-mode trio, Groq/DeepSeek/Ollama/llama.cpp/vLLM, `SILVERWING_API_KEY`, SMTP host/user |
 | Backup artifact | `git rm _tier1/canonical_repo/platform/jarvis_backend/gateway.py.before-silverwing-http-fix` | removed; `rg` = docs-only references (all updated) |
 | Stub launchers | stderr DEPRECATED notice in both `_tier1/.../frontend/start_(unified_jarvis|jarvis_unified).py` | preserved + warning; no test references them |
@@ -566,3 +566,10 @@ hardening (platform checkout), the 573 Dependabot alerts + oauthlib/pydantic-ai/
 litellm majors (P2-5), P1-5 duplicate-material consolidation, live runtime
 verification (Postgres + provider keys + GPU), and closing superseded PRs
 #4/#5 + triaging Dependabot PR #2.
+
+**Phase 10 CI verification (PR #6):**
+
+| Commit | Runs | Result |
+|---|---|---|
+| `eb6f5ff` (manifest + jose/ecdsa removal + docs) | Audit Guard 39051256106, Frontend CI 39051256111, Backend (clean checkout) 39051251964 | ✅ all success (first manifest-based CI run; its informational scan exposed the python-multipart pin) |
+| `383ffd9` (python-multipart bump) | Audit Guard 39051647579, Frontend CI 39051647591, Backend (clean checkout) 39051644402 | ✅ all success; dependency scan = **No known vulnerabilities found** |
