@@ -8,6 +8,20 @@
 
 from silverwing_runtime.backends.base import InferenceBackend
 from silverwing_runtime.backends.echo import EchoBackend
-from silverwing_runtime.backends.torch_backend import TorchBackend
 
 __all__ = ["InferenceBackend", "EchoBackend", "TorchBackend"]
+
+
+def __getattr__(name: str):
+    """Import ``TorchBackend`` lazily.
+
+    Importing this package (and therefore ``backends.base``, ``backends.echo``
+    or ``backends.architecture``) must not require ``torch`` — the dependency
+    only applies when the torch backend is actually constructed.  Requesting
+    ``TorchBackend`` without torch installed still fails loudly.
+    """
+    if name == "TorchBackend":
+        from silverwing_runtime.backends.torch_backend import TorchBackend
+
+        return TorchBackend
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
