@@ -25,7 +25,6 @@ requests>=2.33.0
 urllib3==2.8.0  # was 2.7.0; fixes PYSEC-2026-4175/4176/4177
 multidict>=6.9.1  # fixes PYSEC-2026-4244 (transitive via aiohttp)
 banks==2.4.2
-ecdsa>=0.19.2  # 0.19.2 is current PyPI latest (0.21.5 does not exist). PYSEC-2026-1325 has no upstream fixed version; advisory stays OPEN. Good-practice pin to latest.
 pyasn1==0.6.3
 uv==0.11.6
 
@@ -180,7 +179,9 @@ rich>=13.9.0
 click>=8.1.7
 
 # ==================== AUTHENTICATION ====================
-python-jose[cryptography]>=3.3.0
+# python-jose/ecdsa removed (P2-5): no tracked module imports them (rg: 0 hits);
+# the canonical JWT path is stdlib HS256 and OIDC id_token parsing uses PyJWT
+# (jarvis_backend/routers/identity.py). Re-add only with a coded consumer.
 passlib[bcrypt]>=1.7.4
 PyJWT>=2.15.0  # was >=2.9.0; fixes PYSEC-2026-4140/4145/4146/4149/4183 (auth-relevant, P1-2)
 email-validator>=2.2.0

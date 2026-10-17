@@ -1,0 +1,73 @@
+# JARVIS brain/provider/backends tree - clean-checkout runtime manifest (AUDIT.md P2-3).
+#
+# This is the pinned source of truth for the packages verified by
+# .github/workflows/backend-ci.yml from a clean checkout. Heavy ML dependencies
+# (torch, transformers, langchain, openai, celery, ...) are intentionally NOT
+# listed: they are imported lazily by design (P2-2) and are not needed to run
+# the scoped test gate or to import the canonical FastAPI app.
+#
+# Install (dev/test, includes pytest):
+#     python -m pip install -r requirements-dev.txt
+#
+# Fully resolved transitive pins live in requirements.lock (generated via
+# `pip install --dry-run --report`; regenerate when this file changes).
+
+# --- Security pins (Phase 4 hardening, P2-5; clear the recorded advisories) ---
+pip>=26.2
+gitpython==3.1.60
+urllib3==2.8.0
+PyJWT>=2.15.0
+mcp>=2.2.0,<3
+multidict>=6.9.1
+
+# --- Web / API (canonical jarvis_backend + silverwing ASGI) ---
+fastapi>=0.115,<1
+uvicorn[standard]>=0.32,<1
+python-multipart==0.0.20
+websockets>=13.1,<16
+
+# --- Database / cache ---
+sqlalchemy>=2.0.36,<3
+aiosqlite>=0.20,<1
+asyncpg>=0.30,<1
+psycopg2-binary>=2.9.10,<3
+alembic>=1.14,<2
+redis>=5.2,<7
+hiredis>=2.4,<4
+
+# --- HTTP / IO ---
+httpx>=0.28,<1
+requests>=2.32,<3
+aiohttp>=3.11,<4
+aiofiles>=24.1,<26
+python-dotenv>=1.0.1,<2
+pyyaml>=6.0.2,<7
+psutil>=5.9,<8
+
+# --- Auth / security (JWT path uses PyJWT; python-jose removed as unused, P2-5) ---
+passlib[bcrypt]>=1.7.4,<2
+bcrypt>=4.2,<6
+argon2-cffi>=23.1,<26
+greenlet>=3.1,<4
+authlib>=1.6,<2
+email-validator>=2.2,<3
+slowapi>=0.1.9,<1
+
+# --- Tooling used by the provider fabric / brain runtime ---
+structlog>=24.4,<26
+typer>=0.12,<1
+rich>=13.9,<15
+click>=8.1,<9
+importlib-metadata>=7,<9
+pluggy>=1.4,<2
+
+# --- Scraping / documents ---
+beautifulsoup4>=4.12,<5
+lxml>=5.3,<7
+pypdf>=6.10,<7
+pygments>=2.20,<3
+markdown>=3.7,<4
+jinja2>=3.1.4,<4
+openpyxl>=3.1.5,<4
+numpy>=1.26,<3
+pandas>=2.2.3,<3

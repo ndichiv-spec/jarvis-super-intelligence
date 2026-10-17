@@ -53,21 +53,23 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-          cache-dependency-path: _tier1/canonical_repo/platform/requirements.txt
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            requirements.lock
 
-      - name: Install minimal, non-ML dependencies + Phase-4 security pins
+      - name: Install pinned dependencies (P2-3 manifest)
         run: |
           # Upgrade pip to a non-vulnerable version (fixes PYSEC-2026-3721).
           python -m pip install --upgrade "pip>=26.2"
-          # Curated subset of the platform requirements (requirements.txt) and
-          # the within-major security bumps from Phase 4. Heavy ML packages
-          # (torch, transformers, langchain, openai, etc.) are deliberately
-          # omitted — they are imported lazily.
-          python -m pip install \
-            "gitpython==3.1.60" "urllib3==2.8.0" "PyJWT>=2.15.0" "mcp>=2.2.0,<3" \
-            "ecdsa>=0.19.2" "multidict>=6.9.1" \
-            fastapi "uvicorn[standard]" python-multipart psutil sqlalchemy aiosqlite asyncpg psycopg2-binary alembic redis hiredis httpx requests python-dotenv pyyaml aiofiles email-validator "python-jose[cryptography]" "passlib[bcrypt]" argon2-cffi greenlet bcrypt authlib slowapi structlog websockets typer rich click importlib-metadata pluggy aiohttp beautifulsoup4 lxml pypdf pygments markdown jinja2 numpy pandas openpyxl \
-            pytest pytest-asyncio pytest-mock
+          # Root manifest with the Phase-4 security pins (requirements.txt).
+          # Heavy ML packages (torch, transformers, langchain, openai, etc.)
+          # are deliberately omitted — they are imported lazily. python-jose /
+          # ecdsa were removed (P2-5): no tracked module imports them (rg = 0)
+          # and the JWT path uses PyJWT (`import jwt`, identity.py:380) which
+          # is pinned in requirements.txt/lock. Verified by the import smoke +
+          # 9-file gate (incl. identity tests). Fully resolved pins: requirements.lock.
+          python -m pip install -r requirements-dev.txt
 
       - name: Compile (static syntax gate)
         run: |

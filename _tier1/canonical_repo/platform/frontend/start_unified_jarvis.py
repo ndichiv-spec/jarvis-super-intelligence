@@ -22,6 +22,13 @@ import threading
 from pathlib import Path
 from typing import Dict, List, Optional
 
+print(
+    "DEPRECATED (BACKEND-2): this launcher generates a synthetic unified_backend.py "
+    "whose GET / and GET /api/v1/status COLLIDE with the real jarvis_backend app. "
+    "Use `python start_jarvis.py` instead. Preserved for reference only.",
+    file=sys.stderr,
+)
+
 # Add current directory to Python path
 current_dir = Path(__file__).parent
 sys.path.insert(0, str(current_dir))

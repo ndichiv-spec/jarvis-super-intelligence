@@ -12,6 +12,13 @@ import time
 import signal
 from pathlib import Path
 
+print(
+    "DEPRECATED (BACKEND-2): this launcher generates a synthetic unified_backend.py "
+    "whose GET / and GET /api/v1/status COLLIDE with the real jarvis_backend app. "
+    "Use `python start_jarvis.py` instead. Preserved for reference only.",
+    file=sys.stderr,
+)
+
 def start_backend():
     """Start the unified backend"""
     print("Starting unified backend...")

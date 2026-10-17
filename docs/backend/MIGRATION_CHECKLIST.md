@@ -68,7 +68,8 @@ jarvis_backend/connectors/github.py
 jarvis_backend/connectors/_inspect_tests.py
 jarvis_backend/connectors/_read_conf_mid.py
 jarvis_backend/routers/endpoints.py
-jarvis_backend/gateway.py.before-silverwing-http-fix   # JUNK: committed backup artifact (see §"Backup artifacts")
+# (jarvis_backend/gateway.py.before-silverwing-http-fix was removed in Phase 9,
+#  BACKEND-4 — tracked-only list below is historical.)
 ```
 
 Classification:
@@ -81,7 +82,7 @@ Classification:
 - `connectors/github.py` (+ `_inspect_tests.py`, `_read_conf_mid.py`) —
   canonical GitHub connector.
 - `gateway.py.before-silverwing-http-fix` — **backup artifact**, not code.
-  Must be `git rm --cached` (BACKEND-4 action).
+  REMOVED in Phase 9 (`git rm`, BACKEND-4 ✅).
 
 ## The 37 operational-only (op-only) files — capability imports, classified
 
@@ -146,18 +147,18 @@ These exist in both A and B with content differences. Treatment per group:
 | `jarvis_backend/__init__.py` | **A wins** | A already calls `jarvis_runtime.bootstrap_runtime()`; B is the legacy no-op. Keep A. |
 | `jarvis_backend/core.py` | **Merge** | A has the production-startup guard block (JARVIS_SECRET_KEY/DATABASE_URL checks); B likely has richer runtime. Port B's runtime bits into A, KEEP A's guards. |
 | `jarvis_backend/main.py` | **A wins** | A is verified to build (53 routes, identity integrated) in a clean venv; B may wire the same routers but the canonical `setup_routers` is the tracked source. Port any router addition from B's main into A's `setup_routers` list. |
-| `jarvis_backend/gateway.py` | **A wins** (already fixed) | `gateway.py.before-silverwing-http-fix` is the stale backup; current A is the Silverwing-HTTP-fix. Do not regress. |
+| `jarvis_backend/gateway.py` | **A wins** (already fixed) | The stale `.before-silverwing-http-fix` backup was removed (Phase 9, BACKEND-4); current A is the Silverwing-HTTP-fix. Do not regress. |
 | `jarvis_backend/observability.py` | **Merge (audit-safe)** | Preserve A's structure; port any extra metrics from B. Keep logging secret-free. |
 | `jarvis_backend/db.py` / `brain_fabric.py` / `chat_service.py` | **Merge** | Port B's richer impl into A, keep A's connection guards. |
 | `jarvis_backend/runtime_status.py` | **Merge** | B may expose more status fields; add to A. |
 | `jarvis_backend/self_improvement.py` / `browser_engine.py` / `execution_fabric.py` | **Merge** | Port B enhancements into A; keep A's entry points. |
 | `routers/*.py` (all 28 differing routers) | **Merge per-router** | For each of the 28 routers present in both, diff B against A, port new endpoints into A, keep A's auth/owner-gate. Register any brand-new B router in A's `setup_routers`. |
 
-## Backup artifacts (BACKEND-4) — must be removed
+## Backup artifacts (BACKEND-4) — ✅ RESOLVED (Phase 9)
 
-- `jarvis_backend/gateway.py.before-silverwing-http-fix` (canonical, tracked) —
-  stale backup of the pre-Silverwing-HTTP fix. `git rm --cached` + disk delete
-  as the BACKEND-4 action. Gate: `py_compile` still passes.
+- `jarvis_backend/gateway.py.before-silverwing-http-fix` (was canonical,
+  tracked) — REMOVED in Phase 9 via `git rm`; no tracked module referenced it
+  (`rg` 0 hits outside docs). The current `gateway.py` is the source of truth.
 - `routers/system.py.corrupted-backup-20261001_133146` — lives only in op copy B;
   it is JUNK. Exclude it from any scrubbed staging. Not in git (B is ignored),
   so no `git rm` needed — just don't port it.
@@ -216,7 +217,7 @@ Each step is gated by `python -m py_compile` + the relevant test, and a git
    new endpoints into A, keep A's owner-gate + rate limiting. Register new B
    routers (`openai_compat`, `notifications`, `runtime_events`, `bio_growth`)
    in A's `setup_routers` list.
-5. **Backup artifacts.** `git rm --cached jarvis_backend/gateway.py.before-silverwing-http-fix`.
+5. **Backup artifacts.** ✅ DONE (Phase 9): `gateway.py.before-silverwing-http-fix` removed via `git rm`.
 6. **Re-lock.** After merge, regenerate the pinned manifest and re-run
    `pip-audit` (Phase 4) + full backend tests.
 7. **Flip the launcher.** After merge is verified, `start_jarvis.py` should
