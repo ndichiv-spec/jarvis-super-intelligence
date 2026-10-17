@@ -67,6 +67,21 @@ def test_rate_limiter_consume_contract():
     assert proc.returncode == 0, proc.stderr
 
 
+def test_control_plane_imports_without_requests():
+    proc = _run_py(
+        "import sys;"
+        "sys.modules['requests'] = None;"
+        "from backend.control_plane.rate_limiter import RateLimiter;"
+        "assert hasattr(RateLimiter, 'consume');"
+        "from backend.control_plane.observer import observer, HealthStatus, ServiceHealth;"
+        "h = observer.check_provider_health('nonexistent');"
+        "assert isinstance(h, ServiceHealth), h;"
+        "assert h.health is HealthStatus.UNKNOWN, h;"
+        "print('ok')"
+    )
+    assert proc.returncode == 0, proc.stderr
+
+
 def test_diag_harvest_compiles():
     import py_compile
 

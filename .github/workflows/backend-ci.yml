@@ -118,7 +118,7 @@ jobs:
       - name: Dependency scan (informational, non-gating)
         # Documents Phase-4 findings. Not gating: the live sandbox env carries
         # transitive/editable packages outside this repo's manifests (P2-3/P2-5).
-        continue-on-check-failure: true
+        continue-on-error: true
         run: |
           python -m pip install --quiet pip-audit
           python -m pip_audit

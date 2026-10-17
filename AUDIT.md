@@ -47,6 +47,8 @@ test or check confirms the fix.**
 | BACKEND-2 | P1 | Stub launcher route collision: `start_jarvis_unified.py` & `start_unified_jarvis.py` both write a synthetic `unified_backend.py` defining `GET /` and `GET /api/v1/status`, colliding with real `jarvis_backend/main.py:unified_status`. | 📄 DOCUMENTED | `docs/backend/BACKEND_RECONCILIATION.md` sec.4; stubs serve none of chat/auth/voice |
 | BACKEND-3 | P2 | No backend CI gate: only `.github/workflows/audit-guard.yml` (Python pytest); no backend unit/integration/CI, no frontend CI. | ✅ FIXED | Added `.github/workflows/backend-ci.yml` (compile + canonical import smoke + audit guard + startup safety + 5-file backend gate = 125 passed / 4 skipped / 0 failed in clean venv; non-gating collection integrity + pip-audit) |
 | BACKEND-4 | P2 | Backup artifacts: committed `jarvis_backend/gateway.py.before-silverwing-http-fix` + corrupted `routers/system.py.corrupted-backup-20261001_133146` (op copy). | 📄 DOCUMENTED | `docs/backend/BACKEND_RECONCILIATION.md` sec.7; cleanup deferred (non-destructive pass) |
+| CI-1 | P1 | Audit Guard workflow red on every PR (`test_rate_limiter_consume_contract`): `backend/control_plane/observer.py` imported `requests` at module level, and the guard installs only `pytest httpx pydantic` → `ModuleNotFoundError: No module named 'requests'` (`backend/control_plane/__init__.py:51` → `observer.py:15`). | ✅ FIXED | `observer.py` now imports `requests` lazily inside `check_service_health`/`check_provider_health` (same convention as `observed_state.py:233`), returning honest `UNKNOWN` when absent; `test_control_plane_imports_without_requests` (minimal venv: 11 passed) |
+| CI-2 | P1 | `backend-ci.yml` push runs failed in 0s (workflow never executed): invalid step key `continue-on-check-failure` (not a GitHub Actions key) on the dependency-scan step. | ✅ FIXED | key corrected to `continue-on-error: true` (`.github/workflows/backend-ci.yml:121`); push re-run green (see Phase 9 evidence) |
 
 Legend: ✅ = fixed & verified · 📄 = documented / partial · ⚠️ = open · ❓ = not verified here.
 
@@ -505,3 +507,23 @@ owner-scoped (auth boundary P1-2) because op-B identity/authlib tooling may stil
 reference them in the live operational env. Priority: owner re-checks the platform
 auth layer (P1-2) and removes `python-jose`/`oauthlib` once op-B consumers are
 migrated; monitor `ecdsa` upstream.
+
+## Phase 9 — GitHub CI unblock (CI-1 / CI-2)
+
+Two CI blockers made every open PR red; both are fixed and verified from a clean
+environment. No production credentials, Postgres, GPU, or live provider was used.
+
+| Gate | Command | Result |
+|---|---|---|
+| Repro of CI-1 (minimal venv) | `python -m venv guard_venv; pip install pytest httpx pydantic; python -m pytest tests/test_audit_guard.py -q` | Before: `test_rate_limiter_consume_contract` FAILED (`ModuleNotFoundError: No module named 'requests'`, from `observer.py:15` via `control_plane/__init__.py:51`). After: **11 passed, 0 failed**, exit 0 |
+| Regression pin (CI-1) | `tests/test_audit_guard.py::test_control_plane_imports_without_requests` | Blocks `requests` via `sys.modules['requests'] = None`; `backend.control_plane` imports and `observer.check_provider_health` returns `UNKNOWN` (no raise) |
+| Syntax-warning cleanup | `python -W error::SyntaxWarning -m compileall -q silverwing_runtime backend providers jarvis_brain brain_runtime brain_training learning_arena model_lifecycle teacher_node teacher_mesh identity tests start_jarvis.py` | exit 0 after fixing invalid escape `\-` in `backend/control_plane/changes.py:108` (class docstring made raw `r"""`) |
+| Behavior preserved (requests installed) | `python -c "...observer.check_provider_health('nonexistent')..."` | same path as before: logs connection error, returns `unknown` / "Could not determine provider health" |
+| Audit Guard (system py) | `python -m pytest tests/test_audit_guard.py -q` | **11 passed**, exit 0 |
+| Scoped suite | `python -m pytest tests/test_startup_safety.py tests/test_silverwing_runtime.py tests/test_silverwing_gateway.py tests/test_silverwing_evaluation.py tests/test_provider_fabric.py -q -m "not integration"` | **126 passed, 0 failed**, exit 0 |
+| CI-2 workflow syntax | `.github/workflows/backend-ci.yml:121` `continue-on-check-failure` → `continue-on-error` | Push run now executes (was 0s failure with no log) |
+
+**Pattern pinned for agents:** optional runtime deps (`requests`, `torch`, …) must
+not be imported at module level in packages reachable from the audit guard. Follow
+the lazy-import + honest-degradation pattern in `observed_state.py:233` /
+`observer.py`; add a guard test when adding a new such import.
