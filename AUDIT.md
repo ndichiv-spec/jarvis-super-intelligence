@@ -528,4 +528,20 @@ environment. No production credentials, Postgres, GPU, or live provider was used
 **Pattern pinned for agents:** optional runtime deps (`requests`, `torch`, …) must
 not be imported at module level in packages reachable from the audit guard. Follow
 the lazy-import + honest-degradation pattern in `observed_state.py:233` /
-`observer.py`; add a guard test when adding a new such import.
+`observer.py`; add a guard test when adding a new such import. Because CI resolves
+`silverwing_runtime` from the `_tier1/canonical_repo` mirror (via
+`ensure_import_paths()`), import-safety fixes must be applied to **both** copies.
+
+**Verified CI runs (GitHub Actions, this branch):**
+
+| Run | Commit | Result |
+|---|---|---|
+| `backend-ci` push 39047208349 | `6edcbd0` | Workflow executed for the first time (was 0s failure); **14/14 steps pass**; collection integrity exposed CI-3 (mirror `torch` ImportError) |
+| `backend-ci` push 39048034256 | `ca86ecd` | **Green**; collection integrity reports **0 import errors**; only non-gating `pip-audit` exits 1 (`ecdsa` PYSEC-2026-1325 ×2 + `python-jose` PYSEC-2026-4298, both documented under P2-5, owner-scoped) |
+| `Audit Guard` PR #6 39048038077 | `ca86ecd` | **pass** (was failing on every PR since the P2-2 work) |
+| `Frontend CI` PR #6 39048038095 | `ca86ecd` | **pass** |
+
+Superseded PRs: `docs/jarvis-audit-integration` (PR #4) and
+`feat/frontend-modernization` (PR #5) are ancestors of
+`unify/backend-reconciliation` — their content is fully contained in PR #6 and
+they can be closed as superseded.
