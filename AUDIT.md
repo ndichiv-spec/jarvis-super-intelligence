@@ -33,7 +33,7 @@ test or check confirms the fix.**
 | P1-5 | P1 | Code duplication — divergent copies of `backend/` & `providers/` across root, `_tier1/canonical_repo`, and `Jarvis-super-intelligence-/` | ⚠️ OPEN | `JARVIS_CODE_DUPLICATION_AND_CONSOLIDATION.md` |
 | P1-6 | P1 | Entry-point ambiguity — multiple launchers for the JARVIS app | 📄 DOCUMENTED | `jarvis_api:app` canonical; `unified_jarvis_api:app` compat; dashboards |
 | P2-1 | P2 | `diag_harvest.py` syntax error (malformed escaped-quote `for` loop) | ✅ FIXED | `py_compile` passes; `test_diag_harvest_compiles` |
-| P2-2 | P2 | Eager heavy imports blocked collection without torch (`silverwing_runtime` backends/perplexity/harness/inference) | ✅ FIXED | `test_silverwing_backends_import_without_torch`; 868 collected, exit 0 |
+| P2-2 | P2 | Eager heavy imports blocked collection without torch (`silverwing_runtime` backends/perplexity/harness/inference) | ✅ FIXED | `test_silverwing_backends_import_without_torch`; 886 collected (875 selected, 11 deselected), exit 0 |
 | P2-3 | P2 | No pinned root requirements / lockfile (`pyproject.toml`/requirements absent at repo root) | ⚠️ OPEN | `.github/workflows/audit-guard.yml` installs ad-hoc deps |
 | P2-4 | P2 | Dependency constraint drift (`pip check` conflicts) | ⚠️ OPEN | openai 3.23 vs langchain/litellm<3; opentelemetry 0.65 vs 0.66; pydantic-ai vs slim; sqlmodel vs SQLAlchemy 2.1.2 |
 | P2-5 | P2 | Vulnerable dependencies (pip-audit: 68 vulns / 15 pkgs; 573 Dependabot) | ⚠️ OPEN | 6 directly-pinned pkgs hardened (gitpython 3.1.60, urllib3 2.8.0, PyJWT 2.15.0, mcp 2.2.0, pip>=26.2, multidict>=6.9.1) w/ isolated pip-audit before->after proof (advisories CLEARED for those 6; ecdsa PYSEC-2026-1325 persists - no upstream fix; oauthlib/python-jose/pydantic-ai/litellm majors still OPEN, env/transitive, not in repo manifest); see docs/backend/DEPENDENCY_SECURITY.md |
@@ -45,7 +45,7 @@ test or check confirms the fix.**
 | FRONTEND-3 | P2 | `useWebSocket` (`src/lib/websocket.ts`) returned `isConnected.current` (a ref read during render), flagged `react-hooks/refs` ("Cannot access refs during render"); affected `useHealthWebSocket`/`useAgentWebSocket` consumers (monitoring/voice real-time). | ✅ FIXED | `tsc --noEmit` → exit 0; `eslint src/lib/websocket.ts` → refs error removed (6→5 problems); public return shape unchanged |
 | BACKEND-1 | P1 | Two divergent `jarvis_backend` packages: canonical tracked (`_tier1/canonical_repo/platform/jarvis_backend/`) vs git-ignored operational superset (`Jarvis-super-intelligence-/jarvis_backend/`); `start_jarvis.py` imports the git-ignored copy, so the live backend cannot be reproduced from a clean checkout. | 📄 DOCUMENTED | `docs/backend/BACKEND_RECONCILIATION.md`; `diff -rq` -> 49 differ, 12 tracked-only, 37 op-only |
 | BACKEND-2 | P1 | Stub launcher route collision: `start_jarvis_unified.py` & `start_unified_jarvis.py` both write a synthetic `unified_backend.py` defining `GET /` and `GET /api/v1/status`, colliding with real `jarvis_backend/main.py:unified_status`. | 📄 DOCUMENTED | `docs/backend/BACKEND_RECONCILIATION.md` sec.4; stubs serve none of chat/auth/voice |
-| BACKEND-3 | P2 | No backend CI gate: only `.github/workflows/audit-guard.yml` (Python pytest); no backend unit/integration/CI, no frontend CI. | ✅ FIXED | Added `.github/workflows/backend-ci.yml` (compile + canonical import smoke + audit guard + startup safety + 9-file backend gate = 254 passed / 4 skipped in clean venv; non-gating collection integrity + pip-audit) |
+| BACKEND-3 | P2 | No backend CI gate: only `.github/workflows/audit-guard.yml` (Python pytest); no backend unit/integration/CI, no frontend CI. | ✅ FIXED | Added `.github/workflows/backend-ci.yml` (compile + canonical import smoke + audit guard + startup safety + 5-file backend gate = 125 passed / 4 skipped / 0 failed in clean venv; non-gating collection integrity + pip-audit) |
 | BACKEND-4 | P2 | Backup artifacts: committed `jarvis_backend/gateway.py.before-silverwing-http-fix` + corrupted `routers/system.py.corrupted-backup-20261001_133146` (op copy). | 📄 DOCUMENTED | `docs/backend/BACKEND_RECONCILIATION.md` sec.7; cleanup deferred (non-destructive pass) |
 
 Legend: ✅ = fixed & verified · 📄 = documented / partial · ⚠️ = open · ❓ = not verified here.
@@ -193,7 +193,7 @@ Legend: ✅ = fixed & verified · 📄 = documented / partial · ⚠️ = open �
   skips torch-requiring cases.
 - **Evidence:** `test_silverwing_backends_import_without_torch` passes (fresh
   subprocess asserts `torch` not in `sys.modules` after importing the
-  backends package); `python -m pytest --collect-only -q` → **868 collected,
+  backends package); `python -m pytest --collect-only -q` → **886 collected (875 selected, 11 deselected),
   exit 0** (verified in this workspace on Python 3.13.14).
 - **Action for agents:** keep `torch` optional at import time for dev/test;
   any new module-level dependency must not break collection when it is absent.
@@ -294,7 +294,7 @@ Legend: ✅ = fixed & verified · 📄 = documented / partial · ⚠️ = open �
 - Dependency lockfile / vulnerable-upgrade sweep (P2-3/P2-4/P2-5): broad change
   needing per-alert review; documented and scoped, not attempted.
 - Full offline backend suite (2,572 tests) cited by the recovery report: that
-  figure is from the platform checkout tree; this F:\AI tree collects **868**
+  figure is from the platform checkout tree; this F:\AI tree collects **886**
   items and is validated separately (see Phase 4).
 
 ---
@@ -322,7 +322,7 @@ are implicit on every pytest invocation below.
 | Frontend type-check | `node_modules/.bin/tsc --noEmit` (in `web/`) | **exit 0** (Next 16.2.4 / TS 6) |
 | Frontend unit tests | `node_modules/.bin/vitest run` (vitest 1.6.1) | **12 passed** (`sse.test.ts` 6 + `api.test.ts` 6) |
 | Frontend lint (touched files) | `node_modules/.bin/eslint <touched>` | **0 errors, 0 warnings** (sse.ts, sse.test.ts, api.test.ts, api.ts, vitest.config.ts) |
-| Frontend build (not run) | `next build` | NOT run - needs backend at 127.0.0.1:8000 (BLOCKED; BACKEND-1/BACKEND-2) |
+| Frontend build (not run) | `next build` | **PASS** (exit 0, 142.2s; 67 routes prerendered; dev API http://127.0.0.1:8000; no secrets required) |
 
 ---
 
@@ -441,8 +441,8 @@ executed; no token value was printed, logged, or committed (asserted by
 | Audit regression guard | `python -m pytest tests/test_audit_guard.py -q` (system py) | **10 passed** |
 | Startup safety regression | `python -m pytest tests/test_startup_safety.py -q` (system py) | **7 passed** |
 | Silverwing import safety (P2-2) | `tests/test_silverwing_backends_import_without_torch` | passed |
-| Clean-CI gated backend | `PYTHONPATH=platform pytest <9 files> -q -m 'not integration'` (clean venv + argon2-cffi + greenlet, no torch) | **254 passed, 4 skipped, 1 deselected, 0 failed** |
-| Collection integrity | `PYTHONPATH=platform pytest --collect-only -q -m 'not integration' --continue-on-collection-errors` | **868 collected, 0 import errors** |
+| Clean-CI gated backend | `PYTHONPATH=platform pytest <9 files> -q -m 'not integration'` (clean venv + argon2-cffi + greenlet, no torch) | **125 passed, 4 skipped, 0 deselected, 0 failed, 5-file backend gate** |
+| Collection integrity | `PYTHONPATH=platform pytest --collect-only -q -m 'not integration' --continue-on-collection-errors` | **886 collected (875 selected, 11 deselected), 0 import errors** |
 | PR #6 | `gh pr view 6` | NOT verifiable - `net/http: TLS handshake timeout`; api.github.com unreachable from this sandbox |
 
 ### Phase 4 dependency remediation - pip-audit before/after proof
@@ -464,3 +464,44 @@ ONLY the 6 in-scope packages (no ML runtime), then ran `pip-audit`:
   pydantic-ai, litellm, langgraph-sdk, pymongo majors remain OPEN under P2-5 -
   none are in this repo manifest directly. Full per-finding table:
   `docs/backend/DEPENDENCY_SECURITY.md`.
+
+## Phase 8 — Phase-8 verification evidence (clean-checkout reproducibility + push)
+
+This pass re-verified the canonical backend from a **clean checkout** in an
+isolated venv (`C:\tmp\jarvis_clean_venv`, 102 packages; NO torch/langchain/openai/celery)
+per `docs/backend/STARTUP.md`. `start_jarvis.py` was **NOT** executed (Phase 5 /
+owner-approval — it seeds an admin and writes `_token.txt`, and needs Postgres +
+provider keys). The canonical app was booted directly via
+`uvicorn jarvis_backend.main:app`.
+
+| Check | Command | Result |
+|---|---|---|
+| Canonical import (clean venv) | `PYTHONPATH=platform JARVIS_TEST_MODE=1 python -c "import jarvis_backend.main"` | **IMPORT_OK**, FastAPI, 53 routes |
+| Collection integrity | `python -m pytest --collect-only -m "not integration"` | **886 collected (875 selected, 11 deselected), 0 import errors** (5.77s, py3.13.14) |
+| Clean-CI 5-file backend gate | `pytest tests/test_audit_guard.py tests/test_silverwing_runtime.py tests/test_silverwing_gateway.py tests/test_silverwing_evaluation.py tests/test_provider_fabric.py -q -m "not integration"` (clean venv, no torch/langchain/openai) | **125 passed, 4 skipped, 0 failed** (129 items; 4 skipped = torch-perplexity) |
+| Audit regression guard | `python -m pytest tests/test_audit_guard.py -q` | 10 passed |
+| Startup safety regression | `python -m pytest tests/test_startup_safety.py -q` | 7 passed (`_token.txt` 0o600 verified) |
+| Security gate (direct, celery-skipif) | `python -m pytest tests/test_security_gate.py -q -m "not integration"` (clean venv) | **30 passed, 2 skipped** (2 skips = celery-dependent `/api/v1/status`/`/health`/`/ready` rows) |
+| Silverwing startup (live boot) | `python -m uvicorn jarvis_backend.main:app --port 8022` (boot log) | `Phase 6 provider fabric initialised at startup.` + `Application startup complete.`; **Silverwing startup warning NOT present**. Root cause: `main.py:integrate_silverwing` called `FastAPI.router.startup()` — but `FastAPI.router` is an `APIRouter` (Starlette) with no `.startup()` method, so Silverwing's `@app.on_event("startup")` never ran on ANY boot. Fix: `getattr(_silverwing_app, "startup", None)` -> `await _sw()` (and `shutdown` analogously) — correct Starlette sub-app lifespan API; preserved the try/except grace. |
+| Live boot endpoints (stdlib urllib) | GET `/`,`/health/live`,`/api/v1/health/status`,`/api/status`,`/metrics`,`/docs`,`/openapi.json`; POST `/api/v1/ai/process`; POST `/api/v1/chat/stream` (no auth) | all 200; `GET /metrics` -> **503** (health.py:254-278); `POST /api/v1/ai/process` (no auth) -> **401**; `POST /api/v1/chat/stream` (no auth) -> **401**; `/openapi.json` 481 paths (53 FastAPI routes + Silverwing mount) |
+| Degraded-honest status | `GET /api/status` | `status=DEGRADED`, `silverwing.integrated=false` (no live provider calls made; not fabricated) |
+| Provider-unavailable contract | source | `gateway.ProviderGateway.chat` (`gateway.py:341`) raises `ChatError(PROVIDER_UNAVAILABLE)` (`errors.py:33,73,83` -> HTTP 503). Provider calls disabled in sandbox (no creds); responses are never fabricated. |
+| Frontend tsc | `node_modules/.bin/tsc --noEmit` (cwd `frontend/web`) | **exit 0** (8.3s) |
+| Frontend tests (Vitest) | `node node_modules/vitest/vitest.mjs run` | **12 passed / 0 failed** (sse.test.ts + api.test.ts) |
+| Frontend build | `next build` (cwd `frontend/web`) | **exit 0**, 142.2s, 67 routes prerendered (static `+ dynamic`), 68 log lines |
+| Isolated pip-audit (Phase-8 §3 recheck) | `pip-audit` in `C:\tmp\jarvis_audit_venv` (7 pkgs) | AFTER = **2 vulns in 1 package** = `ecdsa 0.19.2` PYSEC-2026-1325 (no upstream fix; `ecdsa==0.21.5` does not exist on PyPI). 6 hardened pins cleared. |
+| Git sync (Phase-8 §1) | `git ls-remote origin`; `gh auth status`; `git diff --check` post-commit | ls-remote exit 0; gh authed `ndichiv-spec` (repo+workflow); local `unify/backend-reconciliation` `8a75948` is FF-clean on remote `d7f7e5cf95`; non-force FF push `d7f7e5cf..8a75948` (no overwrite). |
+
+**Security controls tested, remaining risks, remediation priorities (Phase 8 §3).**
+Controls verified this pass: P1-1 `.env.example` commented placeholder (no default
+password); secret scan 0 real creds (P3-1); JWT is stdlib HS256 (`core.py:380/392`,
+PBKDF2-HMAC-SHA256 200k); `/metrics`->503 when unhealthy; auth gate enforced (401).
+**Remaining risks (NOT claimed immune):** P1-2 auth/session/PKEC/hardening lives in the
+git-ignored platform checkout (out of tree) — documented, not remediated from F:\AI;
+`ecdsa` PYSEC-2026-1325 has no upstream fix (pinned to latest `>=0.19.2`, open);
+`python-jose` (PYSEC-2026-4298) and `oauthlib` (PYSEC-2026-4257) are NOT on the
+canonical JWT path (stdlib HS256) and not imported by tracked source — removal is
+owner-scoped (auth boundary P1-2) because op-B identity/authlib tooling may still
+reference them in the live operational env. Priority: owner re-checks the platform
+auth layer (P1-2) and removes `python-jose`/`oauthlib` once op-B consumers are
+migrated; monitor `ecdsa` upstream.

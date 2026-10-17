@@ -132,7 +132,7 @@ from a clean-checkout venv with **no** `torch`/`langchain`/`openai`:
 | Startup safety regression | `python -m pytest tests/test_startup_safety.py -q` | 7 passed |
 | MCP import safety | `mcp_runtime.py` import-safe in clean venv (mcp 2.2.0); `tests/test_mcp_runtime.py` is **not present** in this checkout (no MCP unit test exercised; covered by canonical-import gate + runtime `mcp_status`) | passed (import gate) |
 
-`tests/test_security_gate.py` is **excluded** from the clean-checkout gate: its
+`tests/test_security_gate.py` now **runs under the celery-skipif guard** when invoked directly (**30 passed / 2 skipped** in the clean venv; the 2 skips are the celery-dependent `test_health_ready_public` / `test_api_status_no_auth` status rows). It remains **excluded from the 5-file backend-CI gate** - its `/api/v1/status` / `/health` / `/ready` assertions exercise the **operational** runtime (`Jarvis-super-intelligence-/jarvis_backend/runtime_status.py:700` -> `celery_app.py:8` -> `ModuleNotFoundError: No module named celery`), which the canonical clean-clone backend does not ship; that is op-B-only, not a dependency-version failure.
 `/api/v1/status` / `/health` / `/ready` routes import `celery` and call into
 monitoring aggregation at request time (BACKEND-1 / operational runtime). It is
 not a dependency-version failure and is documented as out-of-clean-CI-scope.

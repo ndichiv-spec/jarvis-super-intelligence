@@ -138,3 +138,60 @@ The repo root also carries `start_backend.py`, `start_backend2.py`, and
 No root launcher is removed or renamed without a verified grep of its callers;
 the canonical full-platform boot is the `uvicorn jarvis_backend.main:app`
 invocation in §2.
+
+
+## 5. Phase-8 live-boot verification (clean-checkout; `start_jarvis.py` NOT run)
+
+`start_jarvis.py` was **NOT** run this pass (Phase 5; it seeds an admin user and
+writes a JWT to `_token.txt`, and needs PostgreSQL + provider keys - out of
+sandbox scope, owner-approved per STARTUP §2). Instead, the canonical app was
+booted directly from the **tracked** tree in an isolated venv
+(`C:\tmp\jarvis_clean_venv`, 102 packages; NO torch/langchain/openai/celery) via
+`uvicorn jarvis_backend.main:app`:
+
+```powershell
+# PowerShell; ';' separators (no '&&')
+$env:PYTHONPATH  = 'F:\AI\_tier1\canonical_repo\platform'
+$env:JARVIS_TEST_MODE    = '1'
+$env:JARVIS_ENV          = 'dev'
+$env:DATABASE_URL        = 'sqlite:///C:/Windows/Temp/jarvis_clean.db'   # sync SQLite (NOT +aiosqlite - triggers sqlalchemy.exc.MissingGreenlet)
+$env:JARVIS_SECRET_KEY   = 'dev-only-not-secret-0123456789abcdef0123456789abcdef'
+$env:JARVIS_ADMIN_PASSWORD = 'test-password-for-testing'
+$env:JARVIS_CORS_ORIGINS = 'http://localhost:3000'
+$CV = 'C:\tmp\jarvis_clean_venv\Scripts\python.exe'
+& $CV -m uvicorn jarvis_backend.main:app --host 127.0.0.1 --port 8022 --log-level info
+```
+
+**Boot log (isolated clean venv, port 8022, cwd=`C:\Windows\Temp`):**
+`Phase 6 provider fabric initialised at startup.` then `Application startup complete.`
+- the **Silverwing startup warning is GONE**. Previously every boot (any env)
+  logged `Silverwing startup error: 'APIRouter' object has no attribute 'startup'`
+  because `integrate_silverwing()` in `jarvis_backend/main.py` called
+  `_silverwing_app.router.startup()` - but `FastAPI.router` is an `APIRouter`
+  (Starlette) with **no** `.startup()` method, so Silverwing's
+  `@app.on_event("startup")` handlers never executed. **Fix:** drive the correct
+  Starlette sub-app lifespan (`main.py:integrate_silverwing`):
+  `getattr(_silverwing_app, "startup", None)` -> `await _sw()` (and the `shutdown`
+  analogue) - a callable is invoked only when present, otherwise a no-op; the
+  try/except grace is preserved.
+- `import jarvis_backend.main` from the same venv -> `IMPORT_OK FastAPI routes=53`.
+
+**Live endpoint probes (stdlib `urllib`):**
+
+| Route | Method | Result |
+|---|---|---|
+| `/` | GET | 200 `status=degraded` |
+| `/health/live` | GET | 200 `status=alive` (uptime) |
+| `/api/v1/health/status` | GET | 200 `status=healthy` |
+| `/api/status` | GET | 200 `status=DEGRADED` (`silverwing.integrated=false`) |
+| `/metrics` | GET | **503** (`health.py:254-278`, healthy=false) |
+| `/docs` | GET | 200 |
+| `/openapi.json` | GET | 200 (481 paths; 53 FastAPI routes + Silverwing mount) |
+| `/api/v1/ai/process` | POST (no auth) | **401** |
+| `/api/v1/chat/stream` | POST (no auth) | **401** |
+
+**Provider-unavailable contract (no live provider calls were made):**
+`gateway.ProviderGateway.chat` (`jarvis_backend/gateway.py:341`) raises
+`ChatError(PROVIDER_UNAVAILABLE)` (`jarvis_backend/errors.py:33,73,83` -> HTTP
+503). Answers are never fabricated (`fabricated_answer=False`); unconfigured
+providers report out-of-service rather than fake results.

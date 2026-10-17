@@ -200,14 +200,22 @@ def integrate_silverwing() -> None:
     @app.on_event("startup")
     async def _silverwing_startup():
         try:
-            await _silverwing_app.router.startup()
+            # Drive the Silverwing sub-app lifespan via the Starlette API
+            # (startup()/shutdown()). The prior _silverwing_app.router.startup()
+            # targeted FastAPI.router (an APIRouter), which has no .startup()
+            # and raised AttributeError on every boot (graceful, but noisy).
+            _sw = getattr(_silverwing_app, "startup", None)
+            if callable(_sw):
+                await _sw()
         except Exception as _e:  # noqa: BLE001
             logging.warning("Silverwing startup error: %s", _e)
 
     @app.on_event("shutdown")
     async def _silverwing_shutdown():
         try:
-            await _silverwing_app.router.shutdown()
+            _sw = getattr(_silverwing_app, "shutdown", None)
+            if callable(_sw):
+                await _sw()
         except Exception as _e:  # noqa: BLE001
             logging.warning("Silverwing shutdown error: %s", _e)
 
