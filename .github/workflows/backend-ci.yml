@@ -38,7 +38,7 @@ jobs:
       # event guard in core.py is bypassed under JARVIS_TEST_MODE.
       JARVIS_TEST_MODE: "1"
       JARVIS_ENV: dev
-      DATABASE_URL: sqlite+aiosqlite:///./jarvis_test.db
+      DATABASE_URL: sqlite:///./jarvis_test.db  # sync SQLite (canonical db.py:267); aiosqlite triggers sqlalchemy.exc.MissingGreenlet on the canonical sync DB layer
       JARVIS_SECRET_KEY: dev-only-not-secret-0123456789abcdef0123456789abcdef
       JARVIS_ADMIN_PASSWORD: test-password-for-testing
       JARVIS_CORS_ORIGINS: http://localhost:3000
